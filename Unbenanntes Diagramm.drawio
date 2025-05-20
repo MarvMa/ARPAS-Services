@@ -7,8 +7,22 @@
         <mxCell id="pYhCz_OLACclpXRN_d7E-1" value="Storage-Service" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="340" y="670" width="120" height="60" as="geometry" />
         </mxCell>
+        <mxCell id="ONmiQpBlXR7nflwjCwtw-16" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;startSize=8;endSize=8;" edge="1" parent="1" source="pYhCz_OLACclpXRN_d7E-2" target="pYhCz_OLACclpXRN_d7E-3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="pYhCz_OLACclpXRN_d7E-2" value="Frontend" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="340" y="370" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ONmiQpBlXR7nflwjCwtw-14" style="edgeStyle=none;curved=0;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=12;startSize=8;endSize=8;" edge="1" parent="1" source="pYhCz_OLACclpXRN_d7E-3" target="ONmiQpBlXR7nflwjCwtw-2">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="620" />
+              <mxPoint x="760" y="620" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ONmiQpBlXR7nflwjCwtw-15" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;startSize=8;endSize=8;" edge="1" parent="1" source="pYhCz_OLACclpXRN_d7E-3" target="pYhCz_OLACclpXRN_d7E-1">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="pYhCz_OLACclpXRN_d7E-3" value="API-Gateway" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="340" y="520" width="120" height="60" as="geometry" />
@@ -35,13 +49,21 @@
           <mxGeometry x="600" y="790" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="ONmiQpBlXR7nflwjCwtw-10" value="SonarQube" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="750" y="710" width="120" height="60" as="geometry" />
+          <mxGeometry x="760" y="710" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="ONmiQpBlXR7nflwjCwtw-11" value="Cache-Service" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="-40" y="720" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="ONmiQpBlXR7nflwjCwtw-12" value="Prediction-Service" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
           <mxGeometry x="100" y="720" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ONmiQpBlXR7nflwjCwtw-13" style="edgeStyle=none;curved=0;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.475;entryY=-0.007;entryDx=0;entryDy=0;entryPerimeter=0;fontSize=12;startSize=8;endSize=8;" edge="1" parent="1" source="pYhCz_OLACclpXRN_d7E-3" target="ONmiQpBlXR7nflwjCwtw-1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="620" />
+              <mxPoint x="83" y="620" />
+            </Array>
+          </mxGeometry>
         </mxCell>
       </root>
     </mxGraphModel>
