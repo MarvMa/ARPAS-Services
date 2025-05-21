@@ -1,0 +1,131 @@
+networks:
+  backend-net:
+    driver: bridge
+  monitoring-net:
+    driver: bridge
+
+volumes:
+  pgdata:            # PostgreSQL Database
+  minio-data:        # MinIO Object-Storage
+  sonarqube_data:    # SonarQube Database (embedded H2)
+  sonarqube_logs:    # SonarQube Logs
+  sonarqube_ext:     # SonarQube Extensions/Plugins
+
+services:
+
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "8080:80"
+    networks:
+      - backend-net
+      - monitoring-net
+    depends_on:
+      storage-service:
+        condition: service_healthy
+      cache-service:
+        condition: service_healthy
+
+
+  cache-service:
+    build: ./cache-service
+    networks:
+      - backend-net
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+  prediction-service:
+    build: ./prediction-service
+    networks:
+      - backend-net
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+  storage-service:
+    build: ./storage-service
+    networks:
+      - backend-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: xrdb
+      DB_USER: xr_user
+      DB_PASSWORD: xr_pass
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: miniosecret
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - backend-net
+    volumes:
+      - type: volume
+        source: redis-data
+        target: /data
+    healthcheck:
+      test: [ "CMD-SHELL", "redis-cli ping | grep PONG" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: postgres:15-alpine
+    networks:
+      - backend-net
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: xr_user
+      POSTGRES_PASSWORD: xr_pass
+      POSTGRES_DB: xrdb
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "xr_user" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  minio:
+    image: minio/minio:latest
+    networks:
+      - backend-net
+    ports:
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: miniosecret
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  sonarqube:
+    image: sonarqube:9.9-community
+    networks:
+      - monitoring-net
+    ports:
+      - "9000:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_logs:/opt/sonarqube/logs
+      - sonarqube_ext:/opt/sonarqube/extensions
