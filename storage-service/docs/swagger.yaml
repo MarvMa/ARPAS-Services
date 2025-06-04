@@ -17,7 +17,7 @@ definitions:
 info:
   contact: {}
 paths:
-  /api/v1/objects:
+  /api/storage/objects:
     get:
       consumes:
       - application/json

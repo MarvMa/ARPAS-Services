@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"storage-service/internal/config"
 	"storage-service/internal/handlers"
 	"storage-service/internal/models"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/swagger"
 	"github.com/minio/minio-go/v7"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -28,6 +30,13 @@ func main() {
 
 	app := fiber.New()
 
+	// Logger Middleware - loggt alle eingehenden Requests
+	app.Use(logger.New(logger.Config{
+		Format:     "[${time}] ${status} - ${method} ${path} ${query} - ${ip} - ${latency}\n",
+		TimeFormat: "2006-01-02 15:04:05",
+		Output:     os.Stdout,
+	}))
+
 	//Register Prometheus metrics endpoint
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
@@ -41,10 +50,10 @@ func main() {
 	api.Delete("/objects/:id", h.DeleteObject)
 	api.Get("/objects/:id/download", h.DownloadObject)
 
-	api.Get("/swagger/*", swagger.HandlerDefault)
+	app.Get("/swagger/*", swagger.HandlerDefault)
 
 	// Add Health check endpoint
-	api.Get("/health", func(c *fiber.Ctx) error {
+	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
