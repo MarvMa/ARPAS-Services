@@ -33,7 +33,7 @@ func main() {
 
 	// Set up routes for 3D object CRUD operations
 	h := handlers.NewObjectHandler(objectService)
-	api := app.Group("/api/v1")
+	api := app.Group("/api/storage")
 	api.Get("/objects", h.ListObjects)
 	api.Get("/objects/:id", h.GetObject)
 	api.Post("/objects", h.CreateObject)
@@ -41,10 +41,10 @@ func main() {
 	api.Delete("/objects/:id", h.DeleteObject)
 	api.Get("/objects/:id/download", h.DownloadObject)
 
-	app.Get("/swagger/*", swagger.HandlerDefault)
+	api.Get("/swagger/*", swagger.HandlerDefault)
 
 	// Add Health check endpoint
-	app.Get("/health", func(c *fiber.Ctx) error {
+	api.Get("/health", func(c *fiber.Ctx) error {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
