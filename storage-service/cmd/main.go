@@ -1,12 +1,6 @@
 package main
 
 import (
-	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/adaptor"
-	"github.com/joho/godotenv"
-	"github.com/minio/minio-go/v7"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"gorm.io/gorm"
 	"log"
 	"storage-service/internal/config"
 	"storage-service/internal/handlers"
@@ -14,10 +8,16 @@ import (
 	"storage-service/internal/repository"
 	"storage-service/internal/services"
 	"storage-service/internal/storage"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
+	"github.com/gofiber/swagger"
+	"github.com/minio/minio-go/v7"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gorm.io/gorm"
 )
 
 func main() {
-	loadDotenv()
 	cfg := InitConfig()
 	db := ConnectDatabase(cfg)
 	MigrateDatabase(db)
@@ -41,20 +41,27 @@ func main() {
 	api.Delete("/objects/:id", h.DeleteObject)
 	api.Get("/objects/:id/download", h.DownloadObject)
 
+	app.Get("/swagger/*", swagger.HandlerDefault)
+
+	// Add Health check endpoint
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.SendStatus(fiber.StatusOK)
+	})
+
+	routes := app.GetRoutes()
+	log.Println("Registered routes:")
+	for _, r := range routes {
+		log.Printf("  %s %s\n", r.Method, r.Path)
+	}
+
 	// Start the Fiber server
 	port := cfg.AppPort
 	if port == "" {
 		port = "8080"
+		log.Printf("Defaulting to port %s", port)
 	}
 	log.Printf("Server listening on port %s", port)
 	log.Fatal(app.Listen(":" + port))
-}
-
-func loadDotenv() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
 }
 
 func InitConfig() *config.Config {

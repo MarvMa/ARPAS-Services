@@ -2,9 +2,9 @@ package storage
 
 import (
 	"context"
-	"log"
-
+	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"log"
 
 	"storage-service/internal/config"
 )
