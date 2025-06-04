@@ -5,8 +5,8 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
+	"github.com/minio/minio-go/v7"
 	"gorm.io/gorm"
-
 	"storage-service/internal/services"
 )
 
@@ -20,7 +20,14 @@ func NewObjectHandler(service *services.ObjectService) *ObjectHandler {
 	return &ObjectHandler{Service: service}
 }
 
-// ListObjects handles GET /objects to retrieve all 3D objects metadata.
+// ListObjects handles GET /objects to retrieve a list of all 3D objects.
+// @Summary List all 3D objects
+// @Description Gets all 3D objects stored in the system.
+// @Tags objects
+// @Accept json
+// @Produce json
+// @Success 200 {array} models.Object
+// @Router /api/v1/objects [get]
 func (h *ObjectHandler) ListObjects(c *fiber.Ctx) error {
 	objects, err := h.Service.ListObjects()
 	if err != nil {

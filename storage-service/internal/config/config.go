@@ -35,7 +35,7 @@ func LoadConfig() (*Config, error) {
 		minioSSL = val
 	}
 	cfg := &Config{
-		AppPort:        os.Getenv("APP_PORT"),
+		AppPort:        os.Getenv("STORAGE_PORT"),
 		DBHost:         os.Getenv("DB_HOST"),
 		DBPort:         os.Getenv("DB_PORT"),
 		DBUser:         os.Getenv("DB_USER"),
