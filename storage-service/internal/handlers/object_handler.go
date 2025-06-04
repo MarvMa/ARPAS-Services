@@ -27,7 +27,7 @@ func NewObjectHandler(service *services.ObjectService) *ObjectHandler {
 // @Accept json
 // @Produce json
 // @Success 200 {array} models.Object
-// @Router /api/v1/objects [get]
+// @Router /api/storage/objects [get]
 func (h *ObjectHandler) ListObjects(c *fiber.Ctx) error {
 	objects, err := h.Service.ListObjects()
 	if err != nil {

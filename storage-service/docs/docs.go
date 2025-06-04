@@ -15,7 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/v1/objects": {
+        "/api/storage/objects": {
             "get": {
                 "description": "Gets all 3D objects stored in the system.",
                 "consumes": [
@@ -71,12 +71,12 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "",
-	Host:             "",
-	BasePath:         "",
+	Version:          "0.1.0",
+	Host:             "localhost:8080",
+	BasePath:         "api/storage",
 	Schemes:          []string{},
-	Title:            "",
-	Description:      "",
+	Title:            "Storage Service API",
+	Description:      "Service for managing 3D objects storage and retrieval",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",
