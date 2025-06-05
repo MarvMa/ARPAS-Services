@@ -3,13 +3,11 @@ module storage-service
 go 1.24.2
 
 require (
-	github.com/arsmn/fiber-swagger/v2 v2.31.1
 	github.com/gofiber/fiber/v2 v2.52.8
+	github.com/gofiber/swagger v1.1.1
 	github.com/google/uuid v1.6.0
 	github.com/minio/minio-go/v7 v7.0.92
 	github.com/prometheus/client_golang v1.22.0
-	github.com/swaggo/files v1.0.1
-	github.com/swaggo/swag v1.16.4
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.30.0
 )
@@ -28,7 +26,6 @@ require (
 	github.com/go-openapi/spec v0.20.4 // indirect
 	github.com/go-openapi/swag v0.19.15 // indirect
 	github.com/goccy/go-json v0.10.5 // indirect
-	github.com/gofiber/swagger v1.1.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.7.5 // indirect
@@ -52,6 +49,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/swaggo/files/v2 v2.0.2 // indirect
+	github.com/swaggo/swag v1.16.4 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.62.0 // indirect
