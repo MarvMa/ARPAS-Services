@@ -21,9 +21,9 @@ services:
     networks:
       - backend-net
       - monitoring-net
-#    depends_on:
-  #      storage-service:
-  #        condition: service_healthy
+    depends_on:
+      storage-service:
+        condition: service_healthy
   #      cache-service:
   #        condition: service_healthy
 
@@ -70,8 +70,14 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
-    ports:
-      - "${STORAGE_PORT}:${STORAGE_PORT}"
+    expose:
+      - "${STORAGE_PORT}"
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://storage-service:${STORAGE_PORT}/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   redis:
     image: redis:7-alpine
