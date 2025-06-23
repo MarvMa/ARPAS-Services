@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"gorm.io/gorm"
-	_ "storage-service/internal/models"
+
+	"storage-service/internal/models"
 	"storage-service/internal/services"
 )
 
@@ -47,7 +49,7 @@ func (h *ObjectHandler) ListObjects(c *fiber.Ctx) error {
 // @Accept json
 // @Produce json
 // @Param id path string true "Object ID"
-// @Success 200 {object} models.Object "Object Found"
+// @Success 200 {object} models.Object "Object found"
 // @Failure 400 {object} map[string]interface{} "Invalid UUID"
 // @Failure 404 {object} map[string]interface{} "Object not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
@@ -74,30 +76,86 @@ func (h *ObjectHandler) GetObject(c *fiber.Ctx) error {
 	return c.JSON(object)
 }
 
-// CreateObject handles POST /objects to upload a new 3D object.
+// UploadObject handles POST /objects/upload to upload a new 3D object (single file or files with resources).
 // @Summary Upload a new 3D object
-// @Description Upload a new 3D object file
+// @Description Upload one or more 3D model files (formats: .fbx, .obj, .dae, .stl, .gltf). Multiple files can be provided for a model with external resources (e.g. textures).
 // @Tags objects
 // @Accept multipart/form-data
 // @Produce json
-// @Param file formData file true "3D object file"
+// @Param file formData file true "3D model file(s)"
 // @Success 201 {object} models.Object "Object successfully created"
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /objects [post]
-func (h *ObjectHandler) CreateObject(c *fiber.Ctx) error {
-	// Parse incoming file
+// @Router /objects/upload [post]
+func (h *ObjectHandler) UploadObject(c *fiber.Ctx) error {
+	form, err := c.MultipartForm()
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": true, "message": "failed to read form data: " + err.Error(),
+		})
+	}
+	files := form.File["file"] // all files under field "file"
+	if len(files) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": true, "message": "no files provided",
+		})
+	}
+
+	// Determine if single or multiple files
+	var object *models.Object
+	if len(files) == 1 {
+		fileHeader := files[0]
+		object, err = h.Service.CreateObject(fileHeader)
+	} else {
+		object, err = h.Service.CreateObjectFromFiles(files)
+	}
+	if err != nil {
+		// Return 400 for client errors (unsupported format, multiple model files, etc.), else 500
+		status := fiber.StatusInternalServerError
+		msg := err.Error()
+		if strings.Contains(msg, "unsupported file format") ||
+			strings.Contains(msg, "unsupported archive format") ||
+			strings.Contains(msg, "multiple model files provided") ||
+			strings.Contains(msg, "no primary 3d model file found") {
+			status = fiber.StatusBadRequest
+		}
+		return c.Status(status).JSON(fiber.Map{
+			"error": true, "message": msg,
+		})
+	}
+	return c.Status(fiber.StatusCreated).JSON(object)
+}
+
+// UploadArchive handles POST /objects/upload-archive to upload a 3D object from an archive.
+// @Summary Upload a new 3D object via archive
+// @Description Upload a .zip or .rar archive containing a 3D model and its resources. The archive will be extracted and the model converted to GLB.
+// @Tags objects
+// @Accept multipart/form-data
+// @Produce json
+// @Param file formData file true "Archive file (.zip or .rar) containing the model"
+// @Success 201 {object} models.Object "Object successfully created"
+// @Failure 400 {object} map[string]interface{} "Bad request"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /objects/upload-archive [post]
+func (h *ObjectHandler) UploadArchive(c *fiber.Ctx) error {
 	fileHeader, err := c.FormFile("file")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": true, "message": "failed to read file: " + err.Error(),
+			"error": true, "message": "failed to read archive file: " + err.Error(),
 		})
 	}
-	// Delegate to service to handle conversion and storage
-	object, err := h.Service.CreateObject(fileHeader)
+	object, err := h.Service.CreateObjectFromArchive(fileHeader)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": true, "message": err.Error(),
+		status := fiber.StatusInternalServerError
+		msg := err.Error()
+		if strings.Contains(msg, "unsupported archive format") ||
+			strings.Contains(msg, "unsupported file format") ||
+			strings.Contains(msg, "multiple model files provided") ||
+			strings.Contains(msg, "no 3d model file found") {
+			status = fiber.StatusBadRequest
+		}
+		return c.Status(status).JSON(fiber.Map{
+			"error": true, "message": msg,
 		})
 	}
 	return c.Status(fiber.StatusCreated).JSON(object)
@@ -105,12 +163,13 @@ func (h *ObjectHandler) CreateObject(c *fiber.Ctx) error {
 
 // UpdateObject handles PUT /objects/:id to update an existing object's file.
 // @Summary Update a 3D object
-// @Description Replace an existing 3D object file
+// @Description Replace an existing 3D object file with a new upload
 // @Tags objects
 // @Accept multipart/form-data
 // @Produce json
 // @Param id path string true "Object ID"
-// @Param file formData file true "3D object file"
+// @Param file formData file true "New 3D model file"
+// @Success 200 {object} models.Object "Updated object metadata"
 // @Failure 400 {object} map[string]interface{} "Bad request"
 // @Failure 404 {object} map[string]interface{} "Object not found"
 // @Failure 500 {object} map[string]interface{} "Internal server error"
@@ -145,7 +204,7 @@ func (h *ObjectHandler) UpdateObject(c *fiber.Ctx) error {
 
 // DeleteObject handles DELETE /objects/:id to remove an object.
 // @Summary Delete a 3D object
-// @Description Delete a 3D object by ID
+// @Description Delete a 3D object by ID (removes both the stored file and the metadata record)
 // @Tags objects
 // @Accept json
 // @Produce json
@@ -197,6 +256,7 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			"error": true, "message": "invalid UUID",
 		})
 	}
+	// Get object metadata (to retrieve storage key and content type)
 	obj, err := h.Service.GetObject(objectID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -208,7 +268,7 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			"error": true, "message": err.Error(),
 		})
 	}
-	// Fetch object from MinIO storage
+	// Fetch the file from MinIO storage
 	object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -221,9 +281,9 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			"error": true, "message": "file not found in storage",
 		})
 	}
-	// Set headers for download
+	// Set response headers for file download
 	c.Set(fiber.HeaderContentType, obj.ContentType)
 	c.Set(fiber.HeaderContentDisposition, "attachment; filename=\""+obj.ID.String()+".glb\"")
-	// Stream the content
+	// Stream the content to the response
 	return c.Status(fiber.StatusOK).SendStream(object, int(stat.Size))
 }

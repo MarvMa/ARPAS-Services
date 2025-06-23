@@ -9,10 +9,10 @@ import (
 // Object represents a 3D object stored in the system
 // @Description 3D object information
 type Object struct {
-	ID               uuid.UUID `json:"id" gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	OriginalFilename string    `json:"original_filename"`
-	ContentType      string    `json:"content_type"`
-	Size             int64     `json:"size"`
-	StorageKey       string    `json:"storage_key" gorm:"unique"`
-	UploadedAt       time.Time `json:"uploaded_at" gorm:"autoCreateTime"`
+	ID               uuid.UUID `gorm:"type:uuid;primaryKey"` // Unique identifier (UUID)
+	OriginalFilename string    `gorm:"type:text"`            // Original uploaded file name
+	ContentType      string    `gorm:"type:text"`            // MIME type (model/gltf-binary for GLB)
+	Size             int64     `gorm:"type:bigint"`          // File size in bytes
+	StorageKey       string    `gorm:"type:text"`            // Key or name used in object storage (MinIO)
+	UploadedAt       time.Time `gorm:"autoCreateTime"`       // Timestamp of upload
 }

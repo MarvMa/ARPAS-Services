@@ -10,6 +10,7 @@ import (
 	"storage-service/internal/repository"
 	"storage-service/internal/services"
 	"storage-service/internal/storage"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
@@ -41,7 +42,13 @@ func main() {
 	docs.SwaggerInfo.Host = "localhost:8080"
 	docs.SwaggerInfo.BasePath = "/api/storage"
 
-	app := fiber.New()
+	app := fiber.New(fiber.Config{
+		BodyLimit:        500 * 1024 * 1024, // 500 MB
+		ReadTimeout:      5 * time.Minute,
+		WriteTimeout:     5 * time.Minute,
+		ServerHeader:     "Storage Service",
+		DisableKeepalive: false,
+	})
 
 	// Logger Middleware
 	app.Use(logger.New(logger.Config{
@@ -59,16 +66,16 @@ func main() {
 	})
 
 	// API routes
-	h := handlers.NewObjectHandler(objectService)
+	objHandler := handlers.NewObjectHandler(objectService)
 	api := app.Group("/api/storage")
 
-	// Object CRUD operations
-	api.Get("/objects", h.ListObjects)
-	api.Get("/objects/:id", h.GetObject)
-	api.Post("/objects", h.CreateObject)
-	api.Put("/objects/:id", h.UpdateObject)
-	api.Delete("/objects/:id", h.DeleteObject)
-	api.Get("/objects/:id/download", h.DownloadObject)
+	api.Get("/objects", objHandler.ListObjects)
+	api.Get("/objects/:id", objHandler.GetObject)
+	api.Post("/objects/upload", objHandler.UploadObject)
+	api.Post("/objects/upload-archive", objHandler.UploadArchive)
+	api.Put("/objects/:id", objHandler.UpdateObject)
+	api.Delete("/objects/:id", objHandler.DeleteObject)
+	api.Get("/objects/:id/download", objHandler.DownloadObject)
 
 	// Swagger documentation
 	// Configure swagger to serve the pre-generated docs

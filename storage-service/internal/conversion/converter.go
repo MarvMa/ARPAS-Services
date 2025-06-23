@@ -1,33 +1,23 @@
 package conversion
 
 import (
-	"io"
-	"os"
+	"os/exec"
 	"path/filepath"
 )
 
-// ConvertToGLB converts a 3D model file to GLB format.
-// It returns the file path of the converted .glb file.
+// ConvertToGLB converts a 3D model file to GLB format and returns the path to the new file.
 func ConvertToGLB(inputPath string) (string, error) {
-	// Determine output path by replacing/extending extension to .glb
-	outputPath := inputPath + ".glb"
-	if filepath.Ext(inputPath) != "" {
-		outputPath = inputPath[0:len(inputPath)-len(filepath.Ext(inputPath))] + ".glb"
+	// Determine the output file path with .glb extension
+	ext := filepath.Ext(inputPath)
+	var outputPath string
+	if ext == "" {
+		outputPath = inputPath + ".glb"
+	} else {
+		outputPath = inputPath[:len(inputPath)-len(ext)] + ".glb"
 	}
-	// In a real implementation, call a conversion library or external tool here.
-	// For demonstration, we simply copy the input file to the output path.
-	inFile, err := os.Open(inputPath)
-	if err != nil {
-		return "", err
-	}
-	defer inFile.Close()
-	outFile, err := os.Create(outputPath)
-	if err != nil {
-		return "", err
-	}
-	defer outFile.Close()
-	_, err = io.Copy(outFile, inFile)
-	if err != nil {
+	// Run Assimp CLI to convert the file to GLB (glTF 2.0 binary), embedding textures if possible.
+	cmd := exec.Command("assimp", "export", inputPath, outputPath, "-fglb2", "-embtex")
+	if err := cmd.Run(); err != nil {
 		return "", err
 	}
 	return outputPath, nil

@@ -72,6 +72,16 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
     expose:
       - "${STORAGE_PORT}"
+    # Explicitly set memory limits for the storage service to prevent OOM errors
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    # Use tmpfs for /tmp to avoid disk I/O issues
+    tmpfs:
+      - /tmp:size=2G,noexec,nosuid
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://storage-service:${STORAGE_PORT}/health" ]
       interval: 30s

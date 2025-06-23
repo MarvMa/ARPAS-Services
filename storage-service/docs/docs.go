@@ -48,7 +48,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Upload a new 3D object file",
+                "description": "Upload one or more 3D model files (formats: .fbx, .obj, .dae, .stl, .gltf). Multiple files can be provided for a model with external resources (e.g. textures).",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -62,7 +62,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "3D object file",
+                        "description": "3D model file(s)",
                         "name": "file",
                         "in": "formData",
                         "required": true

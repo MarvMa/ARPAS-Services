@@ -48,9 +48,11 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: Upload a new 3D object file
+      description: 'Upload one or more 3D model files (formats: .fbx, .obj, .dae,
+        .stl, .gltf). Multiple files can be provided for a model with external resources
+        (e.g. textures).'
       parameters:
-      - description: 3D object file
+      - description: 3D model file(s)
         in: formData
         name: file
         required: true
