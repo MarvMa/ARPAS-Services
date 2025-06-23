@@ -10,5 +10,6 @@
 /dataSources.local.xml
 .env
 *.DS_Store
-/storage-service/example_files
+storage-service/example_files/
 */.idea/*
+.idea/*

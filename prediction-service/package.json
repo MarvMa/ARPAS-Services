@@ -1,0 +1,12 @@
+{
+  "name": "prediction-service",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Marvin Meitzner",
+  "license": "ISC",
+  "description": "This is prediction service which is used to predict a trajectory based on a given trajectory and a set of parameters."
+}
