@@ -1,8 +1,0 @@
-Model Information:
-* title:	Steampunk bench 1
-* source:	https://sketchfab.com/3d-models/steampunk-bench-1-397e387f8f1c41979656f594eaf4ea56
-* author:	assetfactory (https://sketchfab.com/assetfactory)
-
-Model License:
-* license type:	SKETCHFAB Standard (https://sketchfab.com/licenses)
-* requirements:	Under basic restrictions, use worldwide, on all types of media, commercially or not, and in all types of derivative works
