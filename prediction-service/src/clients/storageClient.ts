@@ -28,7 +28,7 @@ export class StorageClient {
     async getPredictedModels(query: PredictionQuery): Promise<number[]> {
         try {
             const response = await axios.post(
-                `${this.baseUrl}/predict`,
+                `${this.baseUrl}/api/storage/predict`,
                 query);
             return response.data as number[];
         } catch (error) {

@@ -484,6 +484,18 @@ func (s *ObjectService) GetObject(id uuid.UUID) (*models.Object, error) {
 	return s.Repo.GetByID(id)
 }
 
+// GetPredictedModels returns a list of object IDs that are predicted to be visible based on the given prediction request.
+func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]int, error) {
+	// TODO: Implement logic to predict visible models
+	// Beispiel-Implementation:
+	// 1. Konvertieren Sie die Koordinaten in ein passendes Format
+	// 2. Berechnen Sie den Sichtbereich basierend auf Position und Frustum
+	// 3. Fragen Sie die Datenbank nach Objekten in diesem Bereich ab
+
+	// Dummy-Implementation für den Anfang:
+	return []int{}, nil
+}
+
 // ListObjects returns all stored object metadata.
 func (s *ObjectService) ListObjects() ([]models.Object, error) {
 	return s.Repo.List()

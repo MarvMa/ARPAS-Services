@@ -65,12 +65,22 @@ func main() {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	// API routes
+	app.Use(logger.New(logger.Config{
+		Format:     "[${time}] ${status} - ${method} ${path} ${query} - ${ip} - ${latency} - ${error}\n",
+		TimeFormat: "2006-01-02 15:04:05",
+		Output:     os.Stdout,
+	}))
+	
+	// initialize handlers
 	objHandler := handlers.NewObjectHandler(objectService)
+	predictionHandler := handlers.NewPredictionHandler(objectService)
+
+	// API routes
 	api := app.Group("/api/storage")
 
 	api.Get("/objects", objHandler.ListObjects)
 	api.Get("/objects/:id", objHandler.GetObject)
+	api.Post("/predict", predictionHandler.GetPredictedModels)
 	api.Post("/objects/upload", objHandler.UploadObject)
 	api.Post("/objects/upload-archive", objHandler.UploadArchive)
 	api.Put("/objects/:id", objHandler.UpdateObject)
