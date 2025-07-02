@@ -38,17 +38,32 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: ${REDIS_PORT}
+    healthcheck: # TODO: replace placeholder with actual health check
+      test: ["CMD-SHELL", "exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   prediction-service:
-    build: ./prediction-service
     networks:
       - backend-net
+    build:
+      context: ./prediction-service
+      args:
+        PORT: ${PREDICTION_PORT}
     depends_on:
-      redis:
+      storage-service:
         condition: service_healthy
+      cache-service:
+        condition: service_healthy
+    
     environment:
-      REDIS_HOST: redis
+      PREDICTION_PORT: ${PREDICTION_PORT}
+      REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
+      STORAGE_URL: ${STORAGE_URL}
+      CACHE_URL: ${CACHE_URL}
 
   storage-service:
     build: ./storage-service
