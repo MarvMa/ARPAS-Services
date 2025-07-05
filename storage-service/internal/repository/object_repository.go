@@ -1,59 +1,79 @@
+// internal/repository/object_repository.go (update existing file)
 package repository
 
 import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-
 	"storage-service/internal/models"
 )
 
-// ObjectRepository defines the database operations for Object metadata.
+// ObjectRepositoryImpl interface defines methods for object storage operations
 type ObjectRepository interface {
-	Create(obj *models.Object) error
+	CreateObject(object *models.Object) error
+	GetObject(id uuid.UUID) (*models.Object, error)
+	ListObjects() ([]models.Object, error)
+	UpdateObject(object *models.Object) error
+	DeleteObject(id uuid.UUID) error
+
+	// Add alias methods to match what the service is calling
+	Create(object *models.Object) error
 	GetByID(id uuid.UUID) (*models.Object, error)
 	List() ([]models.Object, error)
-	Update(obj *models.Object) error
+	Update(object *models.Object) error
 	Delete(id uuid.UUID) error
 }
 
-// PostgresObjectRepository is a concrete repository using GORM with PostgreSQL.
-type PostgresObjectRepository struct {
-	DB *gorm.DB
+// ObjectRepositoryImpl provides methods to interact with the Object model in the database.
+type ObjectRepositoryImpl struct {
+	db *gorm.DB
 }
 
-// NewObjectRepository constructs a PostgresObjectRepository.
-func NewObjectRepository(db *gorm.DB) *PostgresObjectRepository {
-	return &PostgresObjectRepository{DB: db}
+// NewObjectRepository creates a new ObjectRepositoryImpl instance with the provided GORM database connection.
+func NewObjectRepository(db *gorm.DB) *ObjectRepositoryImpl {
+	return &ObjectRepositoryImpl{db: db}
 }
 
-// Create inserts a new Object record into the database.
-func (r *PostgresObjectRepository) Create(obj *models.Object) error {
-	return r.DB.Create(obj).Error
+// CreateObject creates a new Object in the database.
+func (r *ObjectRepositoryImpl) CreateObject(object *models.Object) error {
+	return r.db.Create(object).Error
 }
 
-// GetByID finds an Object by its UUID. Returns an error if not found.
-func (r *PostgresObjectRepository) GetByID(id uuid.UUID) (*models.Object, error) {
+// GetObject retrieves an Object by its ID from the database.
+func (r *ObjectRepositoryImpl) GetObject(id uuid.UUID) (*models.Object, error) {
 	var object models.Object
-	result := r.DB.First(&object, "id = ?", id)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &object, nil
+	err := r.db.First(&object, "id = ?", id).Error
+	return &object, err
 }
 
-// List retrieves all Object records from the database.
-func (r *PostgresObjectRepository) List() ([]models.Object, error) {
+// UpdateObject updates an existing Object in the database.
+func (r *ObjectRepositoryImpl) UpdateObject(object *models.Object) error {
+	return r.db.Save(object).Error
+}
+
+// DeleteObject deletes an Object by its ID from the database.
+func (r *ObjectRepositoryImpl) DeleteObject(id uuid.UUID) error {
+	return r.db.Delete(&models.Object{}, "id = ?", id).Error
+}
+
+// ListObjects retrieves all Objects from the database.
+func (r *ObjectRepositoryImpl) ListObjects() ([]models.Object, error) {
 	var objects []models.Object
-	result := r.DB.Find(&objects)
-	return objects, result.Error
+	err := r.db.Find(&objects).Error
+	return objects, err
 }
 
-// Update saves changes to an existing Object record.
-func (r *PostgresObjectRepository) Update(obj *models.Object) error {
-	return r.DB.Save(obj).Error
-}
+// GetObjectsByLocation retrieves Objects within a specified radius from a given latitude and longitude using the Haversine formula.
+func (r *ObjectRepositoryImpl) GetObjectsByLocation(lat, lon float64, radiusKm float64) ([]models.Object, error) {
+	var objects []models.Object
 
-// Delete removes an Object record by ID.
-func (r *PostgresObjectRepository) Delete(id uuid.UUID) error {
-	return r.DB.Delete(&models.Object{}, "id = ?", id).Error
+	// Haversine formula for calculating distance
+	query := `
+		SELECT * FROM objects 
+		WHERE (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * 
+			cos(radians(longitude) - radians(?)) + 
+			sin(radians(?)) * sin(radians(latitude)))) < ?
+	`
+
+	err := r.db.Raw(query, lat, lon, lat, radiusKm).Scan(&objects).Error
+	return objects, err
 }

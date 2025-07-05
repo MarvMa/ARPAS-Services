@@ -30,10 +30,17 @@ func main() {
 	cfg := InitConfig()
 	db := ConnectDatabase(cfg)
 	MigrateDatabase(db)
+
 	minioClient := InitMinIOClient(cfg)
 
 	objectRepo := repository.NewObjectRepository(db)
+	projectRepo := repository.NewProjectRepository(db)
+
 	objectService := services.NewObjectService(objectRepo, minioClient, cfg.MinioBucket)
+	projectService := services.NewProjectService(projectRepo, objectService)
+
+	projectHandler := handlers.NewProjectHandler(projectService, objectService)
+	predictionHandler := handlers.NewPredictionHandler(objectService)
 
 	// Configure Swagger metadata
 	docs.SwaggerInfo.Title = "Storage Service API"
@@ -70,17 +77,24 @@ func main() {
 		TimeFormat: "2006-01-02 15:04:05",
 		Output:     os.Stdout,
 	}))
-	
+
 	// initialize handlers
 	objHandler := handlers.NewObjectHandler(objectService)
-	predictionHandler := handlers.NewPredictionHandler(objectService)
 
 	// API routes
 	api := app.Group("/api/storage")
 
+	api.Post("/projects", projectHandler.CreateProject)
+	api.Get("/projects/:id", projectHandler.GetProject)
+	api.Get("/projects/:id/objects", projectHandler.GetProjectWithObjects)
+	api.Put("/projects/:id", projectHandler.UpdateProject)
+	api.Delete("/projects/:id", projectHandler.DeleteProject)
+	api.Get("/projects", projectHandler.ListProjects)
+
+	api.Post("/predict", predictionHandler.GetPredictedModels)
+
 	api.Get("/objects", objHandler.ListObjects)
 	api.Get("/objects/:id", objHandler.GetObject)
-	api.Post("/predict", predictionHandler.GetPredictedModels)
 	api.Post("/objects/upload", objHandler.UploadObject)
 	api.Post("/objects/upload-archive", objHandler.UploadArchive)
 	api.Put("/objects/:id", objHandler.UpdateObject)

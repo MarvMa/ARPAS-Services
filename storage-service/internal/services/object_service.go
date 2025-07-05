@@ -22,13 +22,13 @@ import (
 
 // ObjectService provides methods for managing 3D objects in storage.
 type ObjectService struct {
-	Repo       repository.ObjectRepository
+	Repo       *repository.ObjectRepositoryImpl
 	Minio      *minio.Client
 	BucketName string
 }
 
 // NewObjectService creates a new ObjectService with the given repository and storage client.
-func NewObjectService(repo repository.ObjectRepository, minioClient *minio.Client, bucketName string) *ObjectService {
+func NewObjectService(repo *repository.ObjectRepositoryImpl, minioClient *minio.Client, bucketName string) *ObjectService {
 	return &ObjectService{
 		Repo:       repo,
 		Minio:      minioClient,
@@ -178,7 +178,7 @@ func (s *ObjectService) CreateObject(fileHeader *multipart.FileHeader) (*models.
 		StorageKey:       objectKey,
 		UploadedAt:       time.Now(),
 	}
-	if err := s.Repo.Create(obj); err != nil {
+	if err := s.Repo.CreateObject(obj); err != nil {
 		// If DB save fails, remove the object from storage to avoid orphan file
 		s.Minio.RemoveObject(context.Background(), s.BucketName, objectKey, minio.RemoveObjectOptions{})
 		return nil, errors.Wrap(err, "failed to save metadata to database")
@@ -306,7 +306,7 @@ func (s *ObjectService) CreateObjectFromFiles(fileHeaders []*multipart.FileHeade
 		StorageKey:       objectKey,
 		UploadedAt:       time.Now(),
 	}
-	if err := s.Repo.Create(obj); err != nil {
+	if err := s.Repo.CreateObject(obj); err != nil {
 		s.Minio.RemoveObject(context.Background(), s.BucketName, objectKey, minio.RemoveObjectOptions{})
 		return nil, errors.Wrap(err, "failed to save metadata to database")
 	}
@@ -471,7 +471,7 @@ func (s *ObjectService) CreateObjectFromArchive(fileHeader *multipart.FileHeader
 		StorageKey:       objectKey,
 		UploadedAt:       time.Now(),
 	}
-	if err := s.Repo.Create(obj); err != nil {
+	if err := s.Repo.CreateObject(obj); err != nil {
 		// Remove the file from storage if DB save fails
 		s.Minio.RemoveObject(context.Background(), s.BucketName, objectKey, minio.RemoveObjectOptions{})
 		return nil, errors.Wrap(err, "failed to save metadata to database")
@@ -481,7 +481,7 @@ func (s *ObjectService) CreateObjectFromArchive(fileHeader *multipart.FileHeader
 
 // GetObject retrieves an object's metadata by ID.
 func (s *ObjectService) GetObject(id uuid.UUID) (*models.Object, error) {
-	return s.Repo.GetByID(id)
+	return s.Repo.GetObject(id)
 }
 
 // GetPredictedModels returns a list of object IDs that are predicted to be visible based on the given prediction request.
@@ -498,12 +498,12 @@ func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]int,
 
 // ListObjects returns all stored object metadata.
 func (s *ObjectService) ListObjects() ([]models.Object, error) {
-	return s.Repo.List()
+	return s.Repo.ListObjects()
 }
 
 // UpdateObject replaces an existing object's file (and updates metadata).
 func (s *ObjectService) UpdateObject(id uuid.UUID, fileHeader *multipart.FileHeader) (*models.Object, error) {
-	obj, err := s.Repo.GetByID(id)
+	obj, err := s.Repo.GetObject(id)
 	if err != nil {
 		return nil, err
 	}
@@ -560,7 +560,7 @@ func (s *ObjectService) UpdateObject(id uuid.UUID, fileHeader *multipart.FileHea
 	obj.Size = stat.Size()
 	obj.UploadedAt = time.Now()
 	obj.StorageKey = objectKey
-	err = s.Repo.Update(obj)
+	err = s.Repo.UpdateObject(obj)
 	if err != nil {
 		s.Minio.RemoveObject(context.Background(), s.BucketName, objectKey, minio.RemoveObjectOptions{})
 		return nil, err
@@ -570,10 +570,10 @@ func (s *ObjectService) UpdateObject(id uuid.UUID, fileHeader *multipart.FileHea
 
 // DeleteObject removes an object and its file from storage.
 func (s *ObjectService) DeleteObject(id uuid.UUID) error {
-	obj, err := s.Repo.GetByID(id)
+	obj, err := s.Repo.GetObject(id)
 	if err != nil {
 		return err
 	}
 	_ = s.Minio.RemoveObject(context.Background(), s.BucketName, obj.StorageKey, minio.RemoveObjectOptions{})
-	return s.Repo.Delete(id)
+	return s.Repo.DeleteObject(id)
 }
