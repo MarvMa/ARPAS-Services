@@ -3,10 +3,23 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.fetchMetadata = fetchMetadata;
+exports.StorageClient = void 0;
 const config_1 = require("../config");
 const axios_1 = __importDefault(require("axios"));
-async function fetchMetadata(id) {
-    const response = await axios_1.default.get(`${config_1.config.storageUrl}:${config_1.config.storagePort}/objects/${id}`);
-    return response.data;
+class StorageClient {
+    baseUrl;
+    constructor() {
+        this.baseUrl = config_1.config.storageUrl;
+    }
+    async getPredictedModels(query) {
+        try {
+            const response = await axios_1.default.post(`${this.baseUrl}/api/storage/predict`, query);
+            return response.data;
+        }
+        catch (error) {
+            console.error('Error fetching prediction:', error);
+            return [];
+        }
+    }
 }
+exports.StorageClient = StorageClient;

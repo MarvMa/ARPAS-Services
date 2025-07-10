@@ -22,6 +22,8 @@ type ObjectRef struct {
 	ScaleY float64 `json:"scale_y" gorm:"type:decimal(10,6);default:1.0"`
 	ScaleZ float64 `json:"scale_z" gorm:"type:decimal(10,6);default:1.0"`
 
+	Location string `gorm:"type:geography(POINT,4326)" json:"-"`
+
 	Object  *Object  `json:"object,omitempty" gorm:"foreignKey:ObjectID"`
 	Project *Project `json:"project,omitempty" gorm:"foreignKey:ProjectID"`
 }

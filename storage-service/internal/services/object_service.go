@@ -486,14 +486,24 @@ func (s *ObjectService) GetObject(id uuid.UUID) (*models.Object, error) {
 
 // GetPredictedModels returns a list of object IDs that are predicted to be visible based on the given prediction request.
 func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]int, error) {
-	// TODO: Implement logic to predict visible models
-	// Beispiel-Implementation:
-	// 1. Konvertieren Sie die Koordinaten in ein passendes Format
-	// 2. Berechnen Sie den Sichtbereich basierend auf Position und Frustum
-	// 3. Fragen Sie die Datenbank nach Objekten in diesem Bereich ab
+	// Use 30 meter radius as specified
+	radiusMeters := 30.0
 
-	// Dummy-Implementation für den Anfang:
-	return []int{}, nil
+	objectRefs, err := s.ObjectRefRepo.FindObjectRefsWithinRadius(
+		req.Position.Latitude,
+		req.Position.Longitude,
+		radiusMeters,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var objectIDs []uuid.UUID
+	for _, objRef := range objectRefs {
+		objectIDs = append(objectIDs, objRef.ObjectID)
+	}
+
+	return objectIDs, nil
 }
 
 // ListObjects returns all stored object metadata.

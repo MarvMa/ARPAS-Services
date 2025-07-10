@@ -22,6 +22,10 @@ type Config struct {
 	MinioSecretKey string
 	MinioBucket    string
 	MinioSSL       bool
+
+	// Prediction settings
+	PredictionRadius     float64 // Default radius in meters for object prediction (default: 30)
+	UseDirectionalFilter bool    // Whether to apply directional/frustum filtering
 }
 
 // LoadConfig loads configuration from environment variables.
@@ -33,6 +37,20 @@ func LoadConfig() (*Config, error) {
 			return nil, fmt.Errorf("invalid MINIO_SSL value: %v", err)
 		}
 		minioSSL = val
+	}
+	predictionRadius := 30.0 // default value
+	if radiusEnv := os.Getenv("PREDICTION_RADIUS"); radiusEnv != "" {
+		val, err := strconv.ParseFloat(radiusEnv, 64)
+		if err == nil {
+			predictionRadius = val
+		}
+	}
+	useDirectionalFilter := false
+	if filterEnv := os.Getenv("USE_DIRECTIONAL_FILTER"); filterEnv != "" {
+		val, err := strconv.ParseBool(filterEnv)
+		if err == nil {
+			useDirectionalFilter = val
+		}
 	}
 	cfg := &Config{
 		AppPort:        os.Getenv("STORAGE_PORT"),
@@ -46,6 +64,10 @@ func LoadConfig() (*Config, error) {
 		MinioSecretKey: os.Getenv("MINIO_SECRET_KEY"),
 		MinioBucket:    os.Getenv("MINIO_BUCKET"),
 		MinioSSL:       minioSSL,
+
+		// Prediction settings
+		PredictionRadius:     predictionRadius,
+		UseDirectionalFilter: useDirectionalFilter,
 	}
 	// Basic validation for required fields
 	if cfg.DBHost == "" || cfg.DBUser == "" || cfg.DBName == "" {

@@ -24,9 +24,8 @@ services:
     depends_on:
       storage-service:
         condition: service_healthy
-  #      cache-service:
-  #        condition: service_healthy
-
+      cache-service:
+        condition: service_healthy
 
   cache-service:
     build: ./cache-service
@@ -36,10 +35,13 @@ services:
       redis:
         condition: service_healthy
     environment:
-      REDIS_HOST: redis
+      CACHE_PORT: ${CACHE_PORT}
+      REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
-    healthcheck: # TODO: replace placeholder with actual health check
-      test: ["CMD-SHELL", "exit 0"]
+      OBJECT_TTL: ${OBJECT_TTL}
+      STORAGE_URL: ${STORAGE_URL}
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://cache-service:${CACHE_PORT}/health" ]
       interval: 30s
       timeout: 10s
       retries: 3

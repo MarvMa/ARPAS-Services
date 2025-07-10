@@ -9,7 +9,6 @@ export class CacheClient {
     }
 
     async preload(ids: number[]): Promise<Boolean> {
-        return true;
         try {
             const response = await axios.post(`${this.baseUrl}/preload`, {ids});
             return response.status === 200;
