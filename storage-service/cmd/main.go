@@ -96,7 +96,6 @@ func main() {
 	api.Get("/objects", objHandler.ListObjects)
 	api.Get("/objects/:id", objHandler.GetObject)
 	api.Post("/objects/upload", objHandler.UploadObject)
-	api.Post("/objects/upload-archive", objHandler.UploadArchive)
 	api.Put("/objects/:id", objHandler.UpdateObject)
 	api.Delete("/objects/:id", objHandler.DeleteObject)
 	api.Get("/objects/:id/download", objHandler.DownloadObject)

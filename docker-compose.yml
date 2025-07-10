@@ -27,6 +27,19 @@ services:
       cache-service:
         condition: service_healthy
 
+  simulation-service:
+    build: ./simulation-service
+    networks:
+      - backend-net
+    depends_on:
+      storage-service:
+        condition: service_healthy
+    environment:
+      SIMULATION_PORT: ${SIMULATION_PORT}
+      STORAGE_URL: ${STORAGE_API_URL}
+    expose:
+      - ${SIMULATION_PORT}
+  
   cache-service:
     build: ./cache-service
     networks:

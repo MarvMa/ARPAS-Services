@@ -2,11 +2,9 @@
 package repository
 
 import (
-	"fmt"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"storage-service/internal/models"
-	"storage-service/internal/utils"
 )
 
 // ObjectRepositoryImpl interface defines methods for object storage operations
@@ -17,13 +15,6 @@ type ObjectRepository interface {
 	UpdateObject(object *models.Object) error
 	DeleteObject(id uuid.UUID) error
 	FindObjectRefsWithinRadius(lat, lng, radiusMeters float64) ([]models.ObjectRef, error)
-
-	// Add alias methods to match what the service is calling
-	Create(object *models.Object) error
-	GetByID(id uuid.UUID) (*models.Object, error)
-	List() ([]models.Object, error)
-	Update(object *models.Object) error
-	Delete(id uuid.UUID) error
 }
 
 // ObjectRepositoryImpl provides methods to interact with the Object model in the database.
@@ -79,83 +70,4 @@ func (r *ObjectRepositoryImpl) GetObjectsByLocation(lat, lon float64, radiusKm f
 
 	err := r.db.Raw(query, lat, lon, lat, radiusKm).Scan(&objects).Error
 	return objects, err
-}
-
-// FindObjectRefsWithinRadius finds object references within a specified radius
-func (r *ObjectRefRepositoryImpl) FindObjectRefsWithinRadius(lat, lng, radiusMeters float64) ([]models.ObjectRef, error) {
-	var objectRefs []models.ObjectRef
-
-	// Calculate bounding box for initial filtering
-	minLat, maxLat, minLng, maxLng := utils.CalculateBoundingBox(lat, lng, radiusMeters)
-
-	// Try PostGIS query first (more accurate)
-	sqlQuery := `
-        SELECT * FROM object_refs
-        WHERE pos_latitude IS NOT NULL
-        AND pos_longitude IS NOT NULL
-        AND pos_latitude BETWEEN ? AND ?
-        AND pos_longitude BETWEEN ? AND ?
-        AND ST_DWithin(
-            ST_SetSRID(ST_MakePoint(pos_longitude, pos_latitude), 4326)::geography,
-            ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography,
-            ?
-        )
-    `
-
-	err := r.db.Raw(sqlQuery,
-		minLat, maxLat, minLng, maxLng,
-		lng, lat, radiusMeters,
-	).Scan(&objectRefs).Error
-
-	if err != nil {
-		// Fallback to simple bounding box + Haversine calculation
-		return r.FindObjectRefsWithinRadiusSimple(lat, lng, radiusMeters)
-	}
-
-	return objectRefs, nil
-}
-
-// FindObjectRefsWithinRadiusSimple fallback method using Haversine calculation
-func (r *ObjectRefRepositoryImpl) FindObjectRefsWithinRadiusSimple(lat, lng, radiusMeters float64) ([]models.ObjectRef, error) {
-	var objectRefs []models.ObjectRef
-
-	// Calculate bounding box for initial filtering
-	minLat, maxLat, minLng, maxLng := utils.CalculateBoundingBox(lat, lng, radiusMeters)
-
-	// Get objects within bounding box first
-	err := r.db.Where("pos_latitude IS NOT NULL AND pos_longitude IS NOT NULL").
-		Where("pos_latitude BETWEEN ? AND ?", minLat, maxLat).
-		Where("pos_longitude BETWEEN ? AND ?", minLng, maxLng).
-		Find(&objectRefs).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	// Filter by exact distance using Haversine
-	var filteredObjectRefs []models.ObjectRef
-	for _, objRef := range objectRefs {
-		if objRef.Position != nil {
-			distance := utils.HaversineDistance(
-				lat, lng,
-				objRef.Position.Latitude, objRef.Position.Longitude,
-			)
-
-			if distance <= radiusMeters {
-				filteredObjectRefs = append(filteredObjectRefs, objRef)
-			}
-		}
-	}
-
-	return filteredObjectRefs, nil
-}
-
-// CreateObjectRef creates a new object reference and sets the PostGIS location
-func (r *ObjectRefRepositoryImpl) CreateObjectRef(objectRef *models.ObjectRef) error {
-	// Set location field for PostGIS if position is provided
-	if objectRef.Position != nil {
-		objectRef.Location = fmt.Sprintf("POINT(%f %f)",
-			objectRef.Position.Longitude, objectRef.Position.Latitude)
-	}
-	return r.db.Create(objectRef).Error
 }

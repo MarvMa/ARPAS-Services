@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8" />
+    <title>APAS Simulation Service</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<h1>ARPAS Beispielprojekt – Simulation Service</h1>
+
+<!-- Steuerungselemente -->
+<div id="controls">
+    <button id="addUserBtn">Add User</button>
+    <button id="startBtn">Start Simulation</button>
+    <button id="stopBtn" disabled>Stop Simulation</button>
+    <button id="resetBtn">Reset</button>
+</div>
+
+<div id="usersContainer"></div>
+
+<div id="objectsControl">
+    <h3>3D Objects</h3>
+    <input type="file" id="objFileInput" accept=".fbx,.obj,.dae,.stl,.gltf,.glb" />
+    <button id="addObjectBtn">Add Object</button>
+    <p>Select a 3D object file, then click "Add Object" and choose a location on the map.</p>
+    <ul id="objectsList"></ul>
+</div>
+
+<div id="map"></div>
+
+<div id="log"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
