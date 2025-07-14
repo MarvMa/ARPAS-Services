@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/minio/minio-go/v7"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -112,9 +113,29 @@ func (h *ObjectHandler) UploadObject(c *fiber.Ctx) error {
 		})
 	}
 
+	// Parse location parameters from form data
+	var latitude, longitude, altitude *float64
+
+	if latStr := c.FormValue("latitude"); latStr != "" {
+		if lat, err := strconv.ParseFloat(latStr, 64); err == nil {
+			latitude = &lat
+		}
+	}
+
+	if lngStr := c.FormValue("longitude"); lngStr != "" {
+		if lng, err := strconv.ParseFloat(lngStr, 64); err == nil {
+			longitude = &lng
+		}
+	}
+
+	if altStr := c.FormValue("altitude"); altStr != "" {
+		if alt, err := strconv.ParseFloat(altStr, 64); err == nil {
+			altitude = &alt
+		}
+	}
 	log.Printf("Processing GLB upload: %s (%d bytes)", fileHeader.Filename, fileHeader.Size)
 
-	object, err := h.Service.CreateObject(fileHeader)
+	object, err := h.Service.CreateObject(fileHeader, latitude, longitude, altitude)
 	if err != nil {
 		log.Printf("GLB upload failed: %v", err)
 		status := fiber.StatusInternalServerError

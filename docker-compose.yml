@@ -35,10 +35,25 @@ services:
       storage-service:
         condition: service_healthy
     environment:
-      SIMULATION_PORT: ${SIMULATION_PORT}
-      STORAGE_URL: ${STORAGE_API_URL}
+      PORT: ${SIMULATION_PORT}
+      STORAGE_API_URL: ${STORAGE_API_URL}
     expose:
       - ${SIMULATION_PORT}
+
+  simulation-frontend:
+    build: ./simulation-frontend
+    ports:
+      - ${SIMULATION_FRONTEND_PORT}
+    networks:
+      - backend-net
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    environment:
+      SIMULATION_PORT: ${SIMULATION_PORT}
   
   cache-service:
     build: ./cache-service

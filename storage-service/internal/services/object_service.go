@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,12 +18,13 @@ import (
 	"storage-service/internal/repository"
 )
 
+const DEFAULT_RADIUS = 30.0
+
 // ObjectService provides methods for managing 3D objects in storage.
 type ObjectService struct {
-	Repo          *repository.ObjectRepositoryImpl
-	ObjectRefRepo *repository.ObjectRefRepositoryImpl // Assuming this is defined in your repository packagepackage
-	Minio         *minio.Client
-	BucketName    string
+	Repo       *repository.ObjectRepositoryImpl
+	Minio      *minio.Client
+	BucketName string
 }
 
 // NewObjectService creates a new ObjectService with the given repository and storage client.
@@ -35,76 +37,62 @@ func NewObjectService(repo *repository.ObjectRepositoryImpl, minioClient *minio.
 }
 
 // CreateObject processes a single GLB file upload and stores it in MinIO.
-func (s *ObjectService) CreateObject(fileHeader *multipart.FileHeader) (*models.Object, error) {
-	origExt := filepath.Ext(fileHeader.Filename)
-	if origExt != ".glb" {
-		return nil, fmt.Errorf("only GLB files are supported, got: %s", origExt)
+func (s *ObjectService) CreateObject(fileHeader *multipart.FileHeader, latitude, longitude, altitude *float64) (*models.Object, error) {
+	if !strings.HasSuffix(strings.ToLower(fileHeader.Filename), ".glb") {
+		return nil, fmt.Errorf("only GLB files are supported")
 	}
 
-	srcFile, err := fileHeader.Open()
+	// Open the uploaded file
+	file, err := fileHeader.Open()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not open uploaded file")
+		return nil, errors.Wrap(err, "failed to open uploaded file")
 	}
-	defer srcFile.Close()
+	defer file.Close()
 
-	// Save the uploaded file to a temporary location
-	tempDir := os.TempDir()
-	tempInputFile, err := os.CreateTemp(tempDir, "upload-*.glb")
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create temporary file")
-	}
-	tempInputPath := tempInputFile.Name()
-	defer os.Remove(tempInputPath) // Clean up temp file
-
-	_, err = io.Copy(tempInputFile, srcFile)
-	tempInputFile.Close()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to write uploaded file")
-	}
-
-	// Prepare to upload the GLB to object storage
-	objectID := uuid.New()
-	objectKey := objectID.String() + ".glb"
-
-	glbFile, err := os.Open(tempInputPath)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not open GLB file")
-	}
-	defer glbFile.Close()
-
-	stat, err := glbFile.Stat()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not stat GLB file")
-	}
-
-	_, err = s.Minio.PutObject(
-		context.Background(),
-		s.BucketName,
-		objectKey,
-		glbFile,
-		stat.Size(),
-		minio.PutObjectOptions{ContentType: "model/gltf-binary"},
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to upload to MinIO")
-	}
-
-	// Create metadata record
-	obj := &models.Object{
-		ID:               objectID,
+	// Create a new object record
+	object := &models.Object{
+		ID:               uuid.New(),
 		OriginalFilename: fileHeader.Filename,
 		ContentType:      "model/gltf-binary",
-		Size:             stat.Size(),
-		StorageKey:       objectKey,
+		Size:             fileHeader.Size,
+		StorageKey:       uuid.New().String() + ".glb",
 		UploadedAt:       time.Now(),
-	}
-	if err := s.Repo.CreateObject(obj); err != nil {
-		// If DB save fails, remove the object from storage to avoid orphan file
-		s.Minio.RemoveObject(context.Background(), s.BucketName, objectKey, minio.RemoveObjectOptions{})
-		return nil, errors.Wrap(err, "failed to save metadata to database")
+		Latitude:         latitude,
+		Longitude:        longitude,
+		Altitude:         altitude,
 	}
 
-	return obj, nil
+	// Prepare metadata for MinIO
+	metadata := map[string]string{
+		"Filename":  object.OriginalFilename,
+		"Object-ID": object.ID.String(),
+	}
+
+	if latitude != nil {
+		metadata["Latitude"] = fmt.Sprintf("%f", *latitude)
+	}
+	if longitude != nil {
+		metadata["Longitude"] = fmt.Sprintf("%f", *longitude)
+	}
+	if altitude != nil {
+		metadata["Altitude"] = fmt.Sprintf("%f", *altitude)
+	}
+
+	_, err = s.Minio.PutObject(context.Background(), s.BucketName, object.StorageKey, file, fileHeader.Size, minio.PutObjectOptions{
+		ContentType:  object.ContentType,
+		UserMetadata: metadata,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to upload file to storage")
+	}
+
+	// Save object metadata to database
+	err = s.Repo.CreateObject(object)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to save object metadata")
+	}
+
+	return object, nil
 }
 
 // GetObject retrieves an object's metadata by ID.
@@ -114,21 +102,18 @@ func (s *ObjectService) GetObject(id uuid.UUID) (*models.Object, error) {
 
 // GetPredictedModels returns a list of object IDs that are predicted to be visible based on the given prediction request.
 func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]uuid.UUID, error) {
-	// Use 30 meter radius as specified
-	radiusMeters := 30.0
-
-	objectRefs, err := s.ObjectRefRepo.FindObjectRefsWithinRadius(
+	objects, err := s.Repo.GetObjectsByLocation(
 		req.Position.Latitude,
 		req.Position.Longitude,
-		radiusMeters,
+		DEFAULT_RADIUS,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	var objectIDs []uuid.UUID
-	for _, objRef := range objectRefs {
-		objectIDs = append(objectIDs, objRef.ObjectID)
+	for _, obj := range objects {
+		objectIDs = append(objectIDs, obj.ID)
 	}
 
 	return objectIDs, nil

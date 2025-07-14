@@ -1,4 +1,3 @@
-// internal/repository/object_repository.go (update existing file)
 package repository
 
 import (
@@ -7,14 +6,13 @@ import (
 	"storage-service/internal/models"
 )
 
-// ObjectRepositoryImpl interface defines methods for object storage operations
+// ObjectRepository defines the interface for interacting with the Object model in the database.
 type ObjectRepository interface {
 	CreateObject(object *models.Object) error
 	GetObject(id uuid.UUID) (*models.Object, error)
 	ListObjects() ([]models.Object, error)
 	UpdateObject(object *models.Object) error
 	DeleteObject(id uuid.UUID) error
-	FindObjectRefsWithinRadius(lat, lng, radiusMeters float64) ([]models.ObjectRef, error)
 }
 
 // ObjectRepositoryImpl provides methods to interact with the Object model in the database.
