@@ -116,14 +116,10 @@ const MapView: React.FC<MapViewProps> = ({profiles, visibleProfiles, focusProfil
     // Ref for MapContainer - MUST be defined before useEffect
     const mapRef = useRef<any>(null);
 
-    // NOTE: WebSocket connection is now handled by the Controls component when simulation starts
-    // This component only displays the simulation positions received from the Controls component
-
-    // Clean up old simulation positions
     useEffect(() => {
         const interval = setInterval(() => {
             const now = Date.now();
-            setSimulationPositions(prev => 
+            setSimulationPositions(prev =>
                 prev.filter(p => now - p.timestamp < 60000) // Keep positions for 1 minute
             );
         }, 5000);
@@ -158,10 +154,8 @@ const MapView: React.FC<MapViewProps> = ({profiles, visibleProfiles, focusProfil
                 parseFloat(pt.longitude as any)
             ]) as [number, number][];
             if (positions.length > 1 && mapRef.current) {
-                // Use the correct Leaflet map instance
                 const map = mapRef.current;
                 map.fitBounds(positions, {padding: [30, 30]});
-                // Entferne setTimeout(() => map.setZoom(19), 100);
             }
         }
     }, [focusProfileId, profiles]);
@@ -184,27 +178,31 @@ const MapView: React.FC<MapViewProps> = ({profiles, visibleProfiles, focusProfil
         style.innerHTML = `.blinking-dot { animation: blinker-dot 1s linear infinite; }
         @keyframes blinker-dot { 50% { opacity: 0.2; } }`;
         document.head.appendChild(style);
-        return () => { document.head.removeChild(style); };
+        return () => {
+            document.head.removeChild(style);
+        };
     }, []);
+
+    const MAPTILER_API_KEY = "DYMa1PKOd2TNvandRH4w";
 
     return (
         <MapContainer
             ref={mapRef}
             style={{height: '60vh', width: '100%', borderRadius: 8, margin: '16px 0', boxShadow: '0 2px 8px #0001'}}
             center={[52.52, 13.405]}
-            zoom={19}
+            zoom={22} // Start at max zoom
             scrollWheelZoom={true}
-            maxZoom={19}
+            maxZoom={22}
             minZoom={3}
             maxBounds={[[-85, -180], [85, 180]]}
         >
             <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution="&copy; OpenStreetMap contributors"
-                maxZoom={19}
+                url={`https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=${MAPTILER_API_KEY}`}
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a>'
+                maxZoom={22}
                 minZoom={3}
             />
-            {bounds && <FitBounds bounds={bounds}/>} 
+            {bounds && <FitBounds bounds={bounds}/>}
             <LocationPicker/>
             {profiles.filter(p => visibleProfiles.includes(p.id)).map(profile => (
                 <Polyline
