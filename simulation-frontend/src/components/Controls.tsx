@@ -1,6 +1,12 @@
 import React, {useState, useEffect, useRef} from 'react';
 import axios from 'axios';
 import {formatTime, calculateElapsedTime, calculateTotalDuration} from '../utils/timeUtils';
+import { 
+    createAnimationTimeline, 
+    AnimationTimeline, 
+    InterpolatedFrame,
+    Position 
+} from '../utils/interpolationUtils';
 
 interface SimulationStatus {
     running: boolean;
@@ -30,6 +36,10 @@ const Controls: React.FC<ControlsProps> = ({profileIds, onSimulationPosition, ro
     const wsRefs = useRef<{ [id: string]: WebSocket | null }>({});
     const intervalRefs = useRef<{ [id: string]: ReturnType<typeof setTimeout> | null }>({});
     const currentIndexRefs = useRef<{ [id: string]: number }>({});
+    
+    // Store animation timelines for each profile
+    const animationTimelines = useRef<{ [profileId: string]: AnimationTimeline }>({});
+    const animationFrameRefs = useRef<{ [profileId: string]: number }>({});
 
     // Get prediction service WebSocket URL from environment variables
     const getWebSocketURL = () => {
@@ -207,6 +217,120 @@ const Controls: React.FC<ControlsProps> = ({profileIds, onSimulationPosition, ro
         sendNext();
     };
 
+    /**
+     * Creates smooth interpolated animation for a profile using real GPS data timing
+     * Sends interpolated positions to WebSocket every 200ms for fluid movement
+     * @param profileId - Unique identifier for the simulation profile
+     */
+    const startInterpolatedAnimation = (profileId: string) => {
+        const ws = wsRefs.current[profileId];
+        const points = routePointsByProfile[profileId] || [];
+        
+        if (!ws || !profileId || points.length < 2) {
+            console.warn(`Cannot start interpolated animation for ${profileId}: insufficient data`);
+            return;
+        }
+
+        // Convert route points to Position format for interpolation
+        const positions: Position[] = points.map(point => ({
+            latitude: point.latitude,
+            longitude: point.longitude,
+            altitude: point.altitude,
+            timestamp: point.timestamp,
+            speed: point.speed,
+            heading: point.heading
+        }));
+
+        // Create animation timeline with 200ms frame intervals
+        const timeline = createAnimationTimeline(positions, {
+            frameInterval: 200,
+            speedMultiplier: 1.0, // Real-time speed
+            minFrameTime: 100,
+            maxFrameTime: 1000
+        });
+
+        animationTimelines.current[profileId] = timeline;
+        animationFrameRefs.current[profileId] = 0;
+
+        console.log(`Starting interpolated animation for ${profileId}: ${timeline.frames.length} frames, ${timeline.totalDuration}ms total`);
+
+        /**
+         * Processes the next frame in the animation sequence
+         * Updates UI and sends WebSocket data at 200ms intervals
+         */
+        const processNextFrame = () => {
+            const frameIndex = animationFrameRefs.current[profileId];
+            const currentTimeline = animationTimelines.current[profileId];
+            
+            if (!currentTimeline || frameIndex >= currentTimeline.frames.length) {
+                // Animation completed
+                console.log(`Interpolated animation completed for profile ${profileId}`);
+                setStatuses(prev => ({
+                    ...prev,
+                    [profileId]: {
+                        ...prev[profileId],
+                        currentIndex: points.length,
+                        totalPoints: points.length,
+                        progress: 100,
+                        running: false
+                    }
+                }));
+                return;
+            }
+
+            const frame = currentTimeline.frames[frameIndex];
+            const interpolatedPos = frame.position;
+
+            // Send interpolated position to WebSocket
+            try {
+                const message = JSON.stringify({
+                    profileId,
+                    latitude: interpolatedPos.latitude,
+                    longitude: interpolatedPos.longitude,
+                    altitude: interpolatedPos.altitude,
+                    timestamp: Date.now(),
+                    speed: interpolatedPos.speed || 0,
+                    heading: interpolatedPos.heading || 0
+                });
+
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(message);
+                    console.debug(`Sent interpolated frame ${frameIndex}/${currentTimeline.frames.length} for ${profileId}`);
+                }
+            } catch (error) {
+                console.error(`Error sending interpolated data for ${profileId}:`, error);
+            }
+
+            // Update UI with smooth progress
+            const originalPointIndex = Math.floor((frameIndex / currentTimeline.frames.length) * points.length);
+            const smoothProgress = frameIndex / currentTimeline.frames.length;
+
+            // Update map position - use frame index for smooth movement
+            if (onSimulationPosition) {
+                onSimulationPosition(profileId, frameIndex);
+            }
+
+            // Update status with smooth progress
+            setStatuses(prev => ({
+                ...prev,
+                [profileId]: {
+                    ...prev[profileId],
+                    currentIndex: originalPointIndex,
+                    totalPoints: points.length,
+                    progress: smoothProgress * 100,
+                    running: true
+                }
+            }));
+
+            // Schedule next frame
+            animationFrameRefs.current[profileId] = frameIndex + 1;
+            intervalRefs.current[profileId] = setTimeout(processNextFrame, 200); // 200ms intervals
+        };
+
+        // Start the animation
+        processNextFrame();
+    };
+
     const start = async () => {
         for (const profileId of profileIds) {
             try {
@@ -238,6 +362,40 @@ const Controls: React.FC<ControlsProps> = ({profileIds, onSimulationPosition, ro
         });
     };
 
+    const reset = async () => {
+        // Stop all current animations and connections
+        stop();
+
+        // Reset all indices to 0
+        profileIds.forEach(profileId => {
+            currentIndexRefs.current[profileId] = 0;
+            wsRefs.current[profileId] = null;
+            intervalRefs.current[profileId] = null;
+        });
+
+        // Reset status state
+        setStatuses({});
+
+        // Reset simulation positions on map
+        profileIds.forEach(profileId => {
+            if (onSimulationPosition) {
+                onSimulationPosition(profileId, 0);
+            }
+        });
+
+        // Reset backend simulation state
+        for (const profileId of profileIds) {
+            try {
+                await axios.post(`/api/simulation/${profileId}/reset`);
+                console.log(`Reset simulation for profile ${profileId}`);
+            } catch (error) {
+                console.debug('Reset error for profile', profileId, ':', error);
+            }
+        }
+
+        console.log('Simulation reset completed');
+    };
+
     // Cleanup on unmount
     useEffect(() => {
         return () => {
@@ -256,6 +414,7 @@ const Controls: React.FC<ControlsProps> = ({profileIds, onSimulationPosition, ro
         <div>
             <button onClick={start} disabled={profileIds.length === 0}>Simulation starten</button>
             <button onClick={stop} disabled={profileIds.length === 0}>Simulation stoppen</button>
+            <button onClick={reset} disabled={profileIds.length === 0}>Simulation zurücksetzen</button>
             <div style={{marginTop: 16}}>
                 {profileIds.map(profileId => {
                     const points = routePointsByProfile[profileId] || [];
