@@ -17,14 +17,18 @@ interface SensorData {
     heading?: number;
 }
 
-const Controls: React.FC<{ profileId: string | null }> = ({profileId}) => {
-    const [status, setStatus] = useState<SimulationStatus>({running: false});
-    const [loading, setLoading] = useState(false);
-    const [routePoints, setRoutePoints] = useState<SensorData[]>([]);
-    const wsRef = useRef<WebSocket | null>(null);
-    const intervalRef = useRef<NodeJS.Timeout | null>(null);
-    const currentIndexRef = useRef(0);
-    const disabled = !profileId;
+interface ControlsProps {
+    profileIds: string[];
+    onSimulationPosition?: (profileId: string, index: number) => void;
+}
+
+const Controls: React.FC<ControlsProps> = ({ profileIds, onSimulationPosition }) => {
+    const [statuses, setStatuses] = useState<{ [id: string]: SimulationStatus }>({});
+    const [loading, setLoading] = useState<{ [id: string]: boolean }>({});
+    const wsRefs = useRef<{ [id: string]: WebSocket | null }>({});
+    const intervalRefs = useRef<{ [id: string]: NodeJS.Timeout | null }>({});
+    const currentIndexRefs = useRef<{ [id: string]: number }>({});
+    const [routePoints, setRoutePoints] = useState<{ [id: string]: SensorData[] }>({});
 
     // Get prediction service WebSocket URL from environment variables
     const getWebSocketURL = () => {
@@ -40,41 +44,34 @@ const Controls: React.FC<{ profileId: string | null }> = ({profileId}) => {
 
     // Poll simulation status less frequently to avoid 429 errors
     useEffect(() => {
-        if (!profileId) return;
+        const intervals: NodeJS.Timeout[] = [];
+        profileIds.forEach(profileId => {
+            if (!profileId) return;
+            const interval = setInterval(async () => {
+                try {
+                    const res = await axios.get(`/api/simulation/${profileId}/status`);
+                    setStatuses(prev => ({ ...prev, [profileId]: res.data }));
+                } catch (error) {
+                    // Optionally handle error
+                }
+            }, 3000);
+            intervals.push(interval);
+        });
+        return () => intervals.forEach(clearInterval);
+    }, [profileIds]);
 
-        const interval = setInterval(async () => {
-            try {
-                const res = await axios.get(`/api/simulation/${profileId}/status`);
-                setStatus(res.data);
-            } catch (error) {
-                console.error('Failed to get simulation status:', error);
-            }
-        }, 3000); // Keep it at 3 seconds, not 1 second
-
-        return () => clearInterval(interval);
-    }, [profileId]);
-
-    // Fetch route points when profile changes
+    // Fetch route points for all selected profiles
     useEffect(() => {
-        if (!profileId) {
-            setRoutePoints([]);
-            return;
-        }
-
-        const fetchRoutePoints = async () => {
-            try {
-                const res = await axios.get(`/api/simulation/${profileId}/route`);
-                setRoutePoints(res.data || []);
-            } catch (error) {
-                console.error('Failed to fetch route points:', error);
-            }
-        };
-
-        fetchRoutePoints();
-    }, [profileId]);
+        profileIds.forEach(profileId => {
+            if (!profileId) return;
+            axios.get(`/api/simulation/${profileId}/route`).then(res => {
+                setRoutePoints(prev => ({ ...prev, [profileId]: res.data || [] }));
+            }).catch(() => {});
+        });
+    }, [profileIds]);
 
     // Create WebSocket connection to prediction service
-    const createWebSocketConnection = () => {
+    const createWebSocketConnection = (profileId: string) => {
         if (!profileId) return null;
 
         const ws = new WebSocket(PREDICTION_WS_URL);
@@ -103,229 +100,125 @@ const Controls: React.FC<{ profileId: string | null }> = ({profileId}) => {
         return ws;
     };
 
-    // Send simulation data via WebSocket
-    const sendSimulationData = async () => {
-        if (!wsRef.current || !profileId || currentIndexRef.current >= routePoints.length) {
-            return;
-        }
+    const sendSimulationDataWithTiming = (profileId: string) => {
+        const ws = wsRefs.current[profileId];
+        const points = routePoints[profileId] || [];
+        let idx = currentIndexRefs.current[profileId] || 0;
+        if (!ws || !profileId || idx >= points.length) return;
 
-        const currentPoint = routePoints[currentIndexRef.current];
-        if (!currentPoint) return;
-
-        try {
-            const message = JSON.stringify({
-                profileId,
-                ...currentPoint,
-                timestamp: Date.now()
-            });
-
-            if (wsRef.current.readyState === WebSocket.OPEN) {
-                wsRef.current.send(message);
-                console.log(`Sent data for profile ${profileId}:`, currentPoint);
+        const sendNext = () => {
+            if (!ws || idx >= points.length) return;
+            const currentPoint = points[idx];
+            if (!currentPoint) return;
+            try {
+                const message = JSON.stringify({ profileId, ...currentPoint, timestamp: Date.now() });
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(message);
+                }
+            } catch {}
+            idx++;
+            currentIndexRefs.current[profileId] = idx;
+            if (onSimulationPosition) onSimulationPosition(profileId, idx);
+            if (idx < points.length) {
+                const now = currentPoint.timestamp;
+                const next = points[idx].timestamp;
+                const diff = Math.max(0, next - now);
+                intervalRefs.current[profileId] = setTimeout(sendNext, diff);
             }
-        } catch (error) {
-            console.error('Error sending simulation data:', error);
-        }
-
-        currentIndexRef.current++;
+        };
+        sendNext();
     };
 
     const start = async () => {
-        if (!profileId) return;
-        setLoading(true);
-        try {
-            // Start simulation state management on backend
-            await axios.post(`/api/simulation/${profileId}/start`);
+        for (const profileId of profileIds) {
+            setLoading(prev => ({ ...prev, [profileId]: true }));
+            try {
+                // Start simulation state management on backend
+                await axios.post(`/api/simulation/${profileId}/start`);
 
-            // Create WebSocket connection to prediction service
-            wsRef.current = createWebSocketConnection();
+                // Create WebSocket connection to prediction service
+                wsRefs.current[profileId] = createWebSocketConnection(profileId);
 
-            // Wait for WebSocket to connect before starting data transmission
-            if (wsRef.current) {
-                wsRef.current.onopen = () => {
-                    console.log('WebSocket connected, starting data transmission');
-                    currentIndexRef.current = 0;
+                // Wait for WebSocket to connect before starting data transmission
+                if (wsRefs.current[profileId]) {
+                    wsRefs.current[profileId]!.onopen = () => {
+                        console.log('WebSocket connected, starting data transmission');
+                        currentIndexRefs.current[profileId] = 0;
 
-                    // Start sending data every second
-                    intervalRef.current = setInterval(sendSimulationData, 1000);
-                };
-            }
-
-            setStatus({running: true});
-        } catch (error) {
-            console.error('Failed to start simulation:', error);
-        } finally {
-            setLoading(false);
+                        // Start sending data every second
+                        sendSimulationDataWithTiming(profileId);
+                    };
+                }
+            } catch {}
+            setLoading(prev => ({ ...prev, [profileId]: false }));
         }
     };
 
-    const stop = async () => {
-        if (!profileId) return;
-        setLoading(true);
-        try {
-            // Stop simulation state management on backend
-            await axios.post(`/api/simulation/${profileId}/stop`);
-
-            // Close WebSocket connection
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
-
-            // Stop data transmission interval
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-
-            setStatus({running: false});
-        } catch (error) {
-            console.error('Failed to stop simulation:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const reset = async () => {
-        if (!profileId) return;
-        setLoading(true);
-        try {
-            // Reset simulation state on backend
-            await axios.post(`/api/simulation/${profileId}/reset`);
-
-            // Reset local state
-            currentIndexRef.current = 0;
-
-            // Close WebSocket if running
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
-
-            // Stop data transmission interval
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-
-            setStatus({running: false, currentIndex: 0, progress: 0});
-        } catch (error) {
-            console.error('Failed to reset simulation:', error);
-        } finally {
-            setLoading(false);
-        }
+    const stop = () => {
+        profileIds.forEach(profileId => {
+            if (intervalRefs.current[profileId]) clearTimeout(intervalRefs.current[profileId]!);
+            if (wsRefs.current[profileId]) wsRefs.current[profileId]!.close();
+        });
     };
 
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (wsRef.current) {
-                wsRef.current.close();
-            }
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-            }
+            profileIds.forEach(profileId => {
+                if (wsRefs.current[profileId]) {
+                    wsRefs.current[profileId].close();
+                }
+                if (intervalRefs.current[profileId]) {
+                    clearInterval(intervalRefs.current[profileId]);
+                }
+            });
         };
     }, []);
 
     return (
-        <div style={{
-            padding: '16px',
-            background: '#f5f5f5',
-            borderRadius: '8px',
-            marginBottom: '16px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-        }}>
-            <h3 style={{margin: '0 0 12px 0'}}>
-                Simulation Controls
-                {profileId && (
-                    <span style={{fontSize: '14px', color: '#666', marginLeft: '8px'}}>
-                        Profile: {profileId.slice(0, 8)}
-                    </span>
-                )}
-            </h3>
+        <div>
+            <button onClick={start} disabled={profileIds.length === 0}>Simulation starten</button>
+            <button onClick={stop} disabled={profileIds.length === 0}>Simulation stoppen</button>
+            <div style={{marginTop: 16}}>
+                {profileIds.map(profileId => {
+                    const points = routePoints[profileId] || [];
+                    const total = points.length;
+                    const current = currentIndexRefs.current[profileId] || 0;
+                    const progress = total > 0 ? current / total : 0;
 
-            {status.progress !== undefined && (
-                <div style={{marginBottom: '12px'}}>
-                    <div style={{
-                        background: '#e0e0e0',
-                        borderRadius: '4px',
-                        height: '8px',
-                        overflow: 'hidden'
-                    }}>
-                        <div style={{
-                            background: status.running ? '#4CAF50' : '#2196F3',
-                            height: '100%',
-                            width: `${status.progress}%`,
-                            transition: 'width 0.3s ease'
-                        }}></div>
-                    </div>
-                    <small style={{color: '#666'}}>
-                        Progress: {status.currentIndex || 0} / {status.totalPoints || 0} points
-                    </small>
-                </div>
-            )}
+                    // Zeitberechnung für Anzeige
+                    let elapsed = 0;
+                    let duration = 0;
+                    if (points.length > 1) {
+                        const first = points[0].timestamp;
+                        const last = points[points.length - 1].timestamp;
+                        duration = Math.round((last - first) / 1000);
+                        if (current > 0 && current < points.length) {
+                            elapsed = Math.round((points[current - 1].timestamp - first) / 1000);
+                        } else if (current >= points.length) {
+                            elapsed = duration;
+                        }
+                    }
 
-            <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
-                <button
-                    onClick={start}
-                    disabled={disabled || loading || status.running}
-                    style={{
-                        padding: '8px 16px',
-                        borderRadius: '4px',
-                        border: 'none',
-                        background: status.running ? '#ccc' : '#4CAF50',
-                        color: 'white',
-                        cursor: disabled || loading || status.running ? 'not-allowed' : 'pointer'
-                    }}
-                >
-                    {loading ? 'Loading...' : 'Start Simulation'}
-                </button>
-                <button
-                    onClick={stop}
-                    disabled={disabled || loading || !status.running}
-                    style={{
-                        padding: '8px 16px',
-                        borderRadius: '4px',
-                        border: 'none',
-                        background: !status.running ? '#ccc' : '#f44336',
-                        color: 'white',
-                        cursor: disabled || loading || !status.running ? 'not-allowed' : 'pointer'
-                    }}
-                >
-                    Stop
-                </button>
-                <button
-                    onClick={reset}
-                    disabled={disabled || loading}
-                    style={{
-                        padding: '8px 16px',
-                        borderRadius: '4px',
-                        border: 'none',
-                        background: '#FF9800',
-                        color: 'white',
-                        cursor: disabled || loading ? 'not-allowed' : 'pointer'
-                    }}
-                >
-                    Reset
-                </button>
+                    // Status nur aus Backend holen
+                    const status = statuses[profileId];
 
-                <div style={{
-                    marginLeft: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                }}>
-                    <div style={{
-                        width: '12px',
-                        height: '12px',
-                        borderRadius: '50%',
-                        background: status.running ? '#4CAF50' : '#ccc'
-                    }}></div>
-                    <span style={{fontSize: '14px', color: '#666'}}>
-                        {status.running ? 'Running' : 'Stopped'}
-                    </span>
-                </div>
+                    return (
+                        <div key={profileId} style={{marginBottom: 16, padding: 8, border: '1px solid #eee', borderRadius: 4}}>
+                            <strong>Profil {profileId.slice(0,8)}</strong><br/>
+                            Status: {status?.running ? 'Läuft' : 'Gestoppt'}<br/>
+                            <div style={{display: 'flex', alignItems: 'center', margin: '8px 0'}}>
+                                <div style={{flex: 1, height: 18, background: '#eee', borderRadius: 8, overflow: 'hidden', marginRight: 8}}>
+                                    <div style={{width: `${progress * 100}%`, height: '100%', background: '#4caf50', transition: 'width 0.3s'}}></div>
+                                </div>
+                                <span style={{minWidth: 80, fontSize: 13}}>{current} / {total} Punkte</span>
+                            </div>
+                            <div style={{fontSize: 13, color: '#555'}}>
+                                Zeit: {elapsed}s / {duration}s
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );

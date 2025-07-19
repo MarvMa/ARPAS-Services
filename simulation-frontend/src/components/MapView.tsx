@@ -18,6 +18,7 @@ interface MapViewProps {
     profiles: Profile[];
     visibleProfiles: string[];
     focusProfileId: string | null;
+    simulationPositions?: { [profileId: string]: number };
 }
 
 interface SimulationPosition {
@@ -72,7 +73,6 @@ const FitBounds: React.FC<{ bounds: [[number, number], [number, number]] | null 
         // Only fit bounds on initial load, not on visibility changes
         if (bounds && !hasInitialBounds.current) {
             map.fitBounds(bounds, {padding: [30, 30]});
-            setTimeout(() => map.setZoom(19), 100);
             hasInitialBounds.current = true;
         }
         if (!bounds && !hasInitialBounds.current) {
@@ -108,10 +108,10 @@ const endIcon = new Icon({
     popupAnchor: [1, -34],
 });
 
-const MapView: React.FC<MapViewProps> = ({profiles, visibleProfiles, focusProfileId}) => {
+const MapView: React.FC<MapViewProps> = ({profiles, visibleProfiles, focusProfileId, simulationPositions = {}}) => {
     const {setSelectedPosition} = useContext(AppContext);
     const [clickPosition, setClickPosition] = useState<[number, number] | null>(null);
-    const [simulationPositions, setSimulationPositions] = useState<SimulationPosition[]>([]);
+    const [simulationPositionsState, setSimulationPositions] = useState<SimulationPosition[]>([]);
 
     // Ref for MapContainer - MUST be defined before useEffect
     const mapRef = useRef<any>(null);
@@ -161,109 +161,92 @@ const MapView: React.FC<MapViewProps> = ({profiles, visibleProfiles, focusProfil
                 // Use the correct Leaflet map instance
                 const map = mapRef.current;
                 map.fitBounds(positions, {padding: [30, 30]});
-                setTimeout(() => map.setZoom(19), 100);
+                // Entferne setTimeout(() => map.setZoom(19), 100);
             }
         }
     }, [focusProfileId, profiles]);
 
-    // Create animated marker icon for simulation
-    const simulationIcon = (color: string) => new Icon({
+    // Blinking dot icon as SVG
+    const getBlinkingIcon = (color: string) => new Icon({
         iconUrl: 'data:image/svg+xml;base64,' + btoa(`
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
-                <circle cx="10" cy="10" r="8" fill="${color}" stroke="#fff" stroke-width="2" opacity="0.8"/>
-                <circle cx="10" cy="10" r="4" fill="#fff"/>
-                <animateTransform attributeName="transform" type="rotate" dur="2s" repeatCount="indefinite" values="0 10 10;360 10 10"/>
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">
+                <circle cx="9" cy="9" r="7" fill="${color}"/>
             </svg>
         `),
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
+        iconSize: [18, 18],
+        iconAnchor: [9, 9],
+        className: 'blinking-dot',
     });
 
+    // Add blinking animation CSS
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `.blinking-dot { animation: blinker-dot 1s linear infinite; }
+        @keyframes blinker-dot { 50% { opacity: 0.2; } }`;
+        document.head.appendChild(style);
+        return () => { document.head.removeChild(style); };
+    }, []);
+
     return (
-        <div>
-            <MapContainer
-                center={[52.52, 13.405]}
-                zoom={19}
-                maxZoom={22}
-                style={{height: '500px', width: '100%'}}
-                scrollWheelZoom
-                ref={mapRef}
-            >
-                {/* Use satellite tiles for better high-zoom experience */}
-                <TileLayer
-                    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                    attribution="Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
-                    maxZoom={22}
+        <MapContainer
+            ref={mapRef}
+            style={{height: '60vh', width: '100%', borderRadius: 8, margin: '16px 0', boxShadow: '0 2px 8px #0001'}}
+            center={[52.52, 13.405]}
+            zoom={19}
+            scrollWheelZoom={true}
+            maxZoom={19}
+            minZoom={3}
+            maxBounds={[[-85, -180], [85, 180]]}
+        >
+            <TileLayer
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution="&copy; OpenStreetMap contributors"
+                maxZoom={19}
+                minZoom={3}
+            />
+            {bounds && <FitBounds bounds={bounds}/>} 
+            <LocationPicker/>
+            {profiles.filter(p => visibleProfiles.includes(p.id)).map(profile => (
+                <Polyline
+                    key={profile.id}
+                    positions={profile.route.map(pt => [pt.latitude, pt.longitude])}
+                    pathOptions={{color: profile.color, weight: 4, opacity: 0.7}}
                 />
-                {/* Add street overlay for better navigation */}
-                <TileLayer
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    attribution="&copy; OpenStreetMap contributors"
-                    maxZoom={22}
-                    opacity={0.6}
+            ))}
+            {/* Start/End markers */}
+            {profiles.filter(p => visibleProfiles.includes(p.id)).map(profile => (
+                <Marker
+                    key={profile.id + '-start'}
+                    position={[profile.startLat, profile.startLon]}
+                    icon={startIcon}
                 />
-                <FitBounds bounds={bounds}/>
-                <LocationPicker/>
-                {clickPosition && <Marker position={clickPosition}/>}
-                
-                {/* Render simulation positions */}
-                {simulationPositions.map(simPos => {
-                    const profile = profiles.find(p => p.id === simPos.profileId);
-                    if (!profile || !visibleProfiles.includes(profile.id)) return null;
-                    
-                    return (
-                        <Marker
-                            key={`sim-${simPos.profileId}`}
-                            position={[simPos.latitude, simPos.longitude]}
-                            icon={simulationIcon(profile.color)}
-                            title={`Simulation: ${profile.id.slice(0, 8)} - Alt: ${simPos.altitude}m`}
-                        />
-                    );
-                })}
-                
-                {profiles.filter(p => visibleProfiles.includes(p.id) && p.route && p.route.length > 1).map(profile => {
-                    const positions: [number, number][] = profile.route.map(pt => [
-                        parseFloat(pt.latitude as any),
-                        parseFloat(pt.longitude as any)
-                    ]) as [number, number][];
-                    return (
-                        <React.Fragment key={profile.id}>
-                            <Polyline
-                                positions={positions as [number, number][]}
-                                pathOptions={{
-                                    color: profile.color,
-                                    weight: 6,
-                                    opacity: 0.8,
-                                    dashArray: '10, 5'
-                                }}
-                            />
-                            <Marker
-                                position={positions[0] as [number, number]}
-                                icon={startIcon}
-                                title={`Start: ${profile.id.slice(0, 8)}`}
-                            />
-                            <Marker
-                                position={positions[positions.length - 1] as [number, number]}
-                                icon={endIcon}
-                                title={`Ende: ${profile.id.slice(0, 8)}`}
-                            />
-                            {positions.length > 10 && positions.filter((_, index) => index % Math.floor(positions.length / 5) === 0 && index !== 0 && index !== positions.length - 1).map((pos, idx) => (
-                                <Marker
-                                    key={`waypoint-${profile.id}-${idx}`}
-                                    position={pos}
-                                    icon={new Icon({
-                                        iconUrl: 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><circle cx="6" cy="6" r="4" fill="${profile.color}" stroke="#fff" stroke-width="2"/></svg>`),
-                                        iconSize: [12, 12],
-                                        iconAnchor: [6, 6]
-                                    })}
-                                    title={`Waypoint: ${profile.id.slice(0, 8)}`}
-                                />
-                            ))}
-                        </React.Fragment>
-                    );
-                })}
-            </MapContainer>
-        </div>
+            ))}
+            {profiles.filter(p => visibleProfiles.includes(p.id)).map(profile => (
+                <Marker
+                    key={profile.id + '-end'}
+                    position={[profile.endLat, profile.endLon]}
+                    icon={endIcon}
+                />
+            ))}
+            {/* Blinking simulation dot for each running profile */}
+            {Object.entries(simulationPositions).map(([profileId, idx]) => {
+                const profile = profiles.find(p => p.id === profileId);
+                if (!profile || !profile.route || !profile.route[idx]) {
+                    console.warn('Simulation dot: No valid route position for', profileId, idx, profile?.route);
+                    return null;
+                }
+                const pt = profile.route[idx];
+                // Debug: Log the marker position
+                console.debug('Simulation dot for', profileId, 'at index', idx, '->', pt.latitude, pt.longitude);
+                return (
+                    <Marker
+                        key={profileId + '-sim-dot'}
+                        position={[parseFloat(pt.latitude as any), parseFloat(pt.longitude as any)]}
+                        icon={getBlinkingIcon(profile.color || '#4caf50')}
+                    />
+                );
+            })}
+        </MapContainer>
     );
 };
 

@@ -24,6 +24,8 @@ const AppContent: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [visibleProfiles, setVisibleProfiles] = useState<string[]>([]);
     const [focusProfileId, setFocusProfileId] = useState<string | null>(null);
+    const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
+    const [simulationPositions, setSimulationPositions] = useState<{ [profileId: string]: number }>({});
 
     const fetchProfiles = useCallback(async () => {
         setLoading(true);
@@ -58,23 +60,33 @@ const AppContent: React.FC = () => {
     const handleZoomProfile = (id: string) => {
         setFocusProfileId(id);
     };
+    const handleSelectProfile = (id: string, checked: boolean) => {
+        setSelectedProfiles(prev => checked ? [...prev, id] : prev.filter(pid => pid !== id));
+    };
+    // Handler to update simulation position for a profile
+    const handleSimulationPosition = (profileId: string, index: number) => {
+        setSimulationPositions(prev => ({ ...prev, [profileId]: index }));
+    };
 
     return (
         <div>
             <h1>ARPAS-Simulation Interface</h1>
             <ProfileUploader onUploaded={handleProfileUploaded}/>
-            <Controls profileId={focusProfileId}/>
+            <Controls profileIds={selectedProfiles} onSimulationPosition={handleSimulationPosition} />
             <ProfileList
                 profiles={profiles}
                 visibleProfiles={visibleProfiles}
                 onToggle={handleToggleProfile}
                 onZoom={handleZoomProfile}
                 loading={loading}
+                selectedProfiles={selectedProfiles}
+                onSelectProfile={handleSelectProfile}
             />
             <MapView
                 profiles={profiles}
                 visibleProfiles={visibleProfiles}
                 focusProfileId={focusProfileId}
+                simulationPositions={simulationPositions}
             />
             <ObjectUploadModal/>
         </div>
