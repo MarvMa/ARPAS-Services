@@ -29,5 +29,8 @@ export default defineConfig({
     preview: {
         port: 3000,
         host: true
+    },
+    optimizeDeps: {
+        include: ['leaflet', 'react-leaflet']
     }
 })
