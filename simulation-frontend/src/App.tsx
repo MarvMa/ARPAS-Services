@@ -5,6 +5,7 @@ import ProfileUploader from './components/ProfileUploader';
 import ProfileList from './components/ProfileList';
 import ObjectUploadModal from './components/ObjectUploadModal';
 import {AppProvider, AppContext} from './context/AppContext';
+import { prepareRoutePointsForFrontend } from './utils/routeUtils';
 import axios from 'axios';
 
 interface Profile {
@@ -31,7 +32,6 @@ const AppContent: React.FC = () => {
         setLoading(true);
         try {
             const res = await axios.get('/api/simulation/profiles');
-            console.log('Profiles response:', res.data);
             const loadedProfiles = Array.isArray(res.data) ? res.data : [];
             setProfiles(loadedProfiles);
             setVisibleProfiles(loadedProfiles.map((p: Profile) => p.id));
@@ -61,18 +61,32 @@ const AppContent: React.FC = () => {
         setFocusProfileId(id);
     };
     const handleSelectProfile = (id: string, checked: boolean) => {
-        setSelectedProfiles(prev => checked ? [...prev, id] : prev.filter(pid => pid !== id));
+        setSelectedProfiles(prev => {
+            const updated = checked ? [...prev, id] : prev.filter(pid => pid !== id);
+            return updated;
+        });
     };
     // Handler to update simulation position for a profile
     const handleSimulationPosition = (profileId: string, index: number) => {
-        setSimulationPositions(prev => ({ ...prev, [profileId]: index }));
+        setSimulationPositions(prev => ({...prev, [profileId]: index}));
     };
 
     return (
         <div>
             <h1>ARPAS-Simulation Interface</h1>
             <ProfileUploader onUploaded={handleProfileUploaded}/>
-            <Controls profileIds={selectedProfiles} onSimulationPosition={handleSimulationPosition} />
+            <Controls
+                profileIds={selectedProfiles}
+                onSimulationPosition={handleSimulationPosition}
+                routePointsByProfile={Object.fromEntries(
+                    profiles.map(p => [
+                        p.id,
+                        // Use backend filtering logic to match the 28 points from simulation service
+                        prepareRoutePointsForFrontend(p.route || [], p.duration)
+                    ])
+                )}
+                profilesById={Object.fromEntries(profiles.map(p => [p.id, p]))}
+            />
             <ProfileList
                 profiles={profiles}
                 visibleProfiles={visibleProfiles}

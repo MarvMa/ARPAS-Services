@@ -1,7 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
 import compression from 'compression';
-import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import {sequelize} from './models/index';
 import {simulationRouter} from './routes/simulationRoutes';
@@ -13,8 +12,7 @@ const app = express();
 
 app.use(helmet());
 app.use(compression());
-app.use(express.json());  
-app.use(rateLimit({windowMs: 15 * 60 * 1000, max: 100}));  // basic rate limiting
+app.use(express.json());
 
 app.use('/api', simulationRouter);
 app.use('/simulation', simulationRouter);

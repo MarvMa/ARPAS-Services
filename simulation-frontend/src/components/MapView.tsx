@@ -86,26 +86,26 @@ const FitBounds: React.FC<{ bounds: [[number, number], [number, number]] | null 
 
 const startIcon = new Icon({
     iconUrl: 'data:image/svg+xml;base64,' + btoa(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="25" height="41" viewBox="0 0 25 41">
-            <path d="M12.5 0C5.596 0 0 5.596 0 12.5c0 12.5 12.5 28.5 12.5 28.5s12.5-16 12.5-28.5C25 5.596 19.404 0 12.5 0z" fill="#2563eb"/>
-            <circle cx="12.5" cy="12.5" r="4" fill="white"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="25" viewBox="0 0 15 25" opacity="0.5">
+            <path d="M7.5 0C3.358 0 0 3.358 0 7.5c0 7.5 7.5 17.5 7.5 17.5s7.5-10 7.5-17.5C15 3.358 11.642 0 7.5 0z" fill="#2563eb" opacity="0.5"/>
+            <circle cx="7.5" cy="7.5" r="2.5" fill="white" opacity="0.5"/>
         </svg>
     `),
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
+    iconSize: [15, 25],
+    iconAnchor: [7, 25],
+    popupAnchor: [1, -20],
 });
 
 const endIcon = new Icon({
     iconUrl: 'data:image/svg+xml;base64,' + btoa(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="25" height="41" viewBox="0 0 25 41">
-            <path d="M12.5 0C5.596 0 0 5.596 0 12.5c0 12.5 12.5 28.5 12.5 28.5s12.5-16 12.5-28.5C25 5.596 19.404 0 12.5 0z" fill="#dc2626"/>
-            <circle cx="12.5" cy="12.5" r="4" fill="white"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="25" viewBox="0 0 15 25" opacity="0.5">
+            <path d="M7.5 0C3.358 0 0 3.358 0 7.5c0 7.5 7.5 17.5 7.5 17.5s7.5-10 7.5-17.5C15 3.358 11.642 0 7.5 0z" fill="#dc2626" opacity="0.5"/>
+            <circle cx="7.5" cy="7.5" r="2.5" fill="white" opacity="0.5"/>
         </svg>
     `),
-    iconSize: [25, 41],
-    iconAnchor: [12, 41],
-    popupAnchor: [1, -34],
+    iconSize: [15, 25],
+    iconAnchor: [7, 25],
+    popupAnchor: [1, -20],
 });
 
 const MapView: React.FC<MapViewProps> = ({profiles, visibleProfiles, focusProfileId, simulationPositions = {}}) => {

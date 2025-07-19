@@ -85,7 +85,10 @@ const ProfileList: React.FC<ProfileListProps> = ({
                                 <input
                                     type="checkbox"
                                     checked={selectedProfiles.includes(profile.id)}
-                                    onChange={e => onSelectProfile(profile.id, e.target.checked)}
+                                    onChange={e => {
+                                        console.debug('Checkbox changed', {id: profile.id, checked: e.target.checked});
+                                        onSelectProfile(profile.id, e.target.checked);
+                                    }}
                                     title="Für Simulation auswählen"
                                 />
                             </td>
