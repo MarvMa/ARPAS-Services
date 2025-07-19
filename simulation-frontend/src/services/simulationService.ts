@@ -14,7 +14,7 @@ import { DataCollector } from './dataCollector';
 export class SimulationService {
     private dataCollector: DataCollector;
     private simulationState: SimulationState | null = null;
-    private intervalIds: Map<string, NodeJS.Timeout> = new Map();
+    private intervalIds: Map<string, number> = new Map();
 
     constructor() {
         this.dataCollector = new DataCollector();
@@ -104,7 +104,8 @@ export class SimulationService {
         profile: Profile
     ): Promise<void> {
         return new Promise((resolve, reject) => {
-            const ws = new WebSocket(`ws://localhost/ws/predict`);
+            const wsUrl = (import.meta as any).env?.DEV ? 'ws://localhost:5173/ws/predict' : 'ws://localhost:8080/ws/predict';
+            const ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
                 console.log(`WebSocket connected for profile ${profile.name}`);
@@ -169,8 +170,9 @@ export class SimulationService {
         const startTime = performance.now();
 
         try {
+            const apiBase = (import.meta as any).env?.DEV ? '/api/storage' : 'http://localhost:8080/api/storage';
             const response = await axios.get(
-                `http://localhost/api/storage/objects/${objectId}/download`,
+                `${apiBase}/objects/${objectId}/download`,
                 { responseType: 'blob' }
             );
 
@@ -210,7 +212,7 @@ export class SimulationService {
         const interpolatedPoints = interpolatePoints(profile.data, config.intervalMs);
         let currentIndex = 0;
 
-        const intervalId = setInterval(async () => {
+        const intervalId = window.setInterval(async () => {
             if (!this.simulationState?.isRunning || currentIndex >= interpolatedPoints.length) {
                 clearInterval(intervalId);
                 this.intervalIds.delete(profile.id);
@@ -257,7 +259,7 @@ export class SimulationService {
         const numObjects = Math.floor(Math.random() * 3) + 1; // 1-3 objects
         const objectIds = Array.from(
             { length: numObjects },
-            () => `obj_${Math.random().toString(36).substr(2, 9)}`
+            () => `obj_${Math.random().toString(36).substring(2, 11)}`
         );
 
         await this.processObjectIds(objectIds, profileState);
@@ -302,7 +304,7 @@ export class SimulationService {
      * Generates a unique simulation ID
      */
     private generateSimulationId(): string {
-        return `sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return `sim_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     }
 
     /**
@@ -310,7 +312,7 @@ export class SimulationService {
      */
     private getCurrentSimulationId(): string {
         return this.simulationState ?
-            `sim_${this.simulationState.startTime}_${Math.random().toString(36).substr(2, 9)}` :
+            `sim_${this.simulationState.startTime}_${Math.random().toString(36).substring(2, 11)}` :
             'unknown';
     }
 }

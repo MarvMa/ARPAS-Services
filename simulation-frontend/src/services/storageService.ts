@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { Object3D } from '../types/simulation';
 
-const STORAGE_API_BASE = 'http://localhost/api/storage';
+// Use relative URLs when running through Vite proxy, fallback to direct URL for production
+const STORAGE_API_BASE = (import.meta as any).env?.DEV ? '/api/storage' : 'http://localhost:8080/api/storage';
 
 export class StorageService {
     /**
@@ -129,7 +130,8 @@ export class StorageService {
      */
     async healthCheck(): Promise<boolean> {
         try {
-            await axios.get(`${STORAGE_API_BASE.replace('/api/storage', '')}/health`, {
+            const healthUrl = (import.meta as any).env?.DEV ? '/health' : 'http://localhost/api/storage/health';
+            await axios.get(healthUrl, {
                 timeout: 5000
             });
             return true;

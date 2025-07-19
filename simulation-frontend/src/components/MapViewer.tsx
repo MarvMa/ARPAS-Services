@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, Marker, useMapEvents } from 'react-leaflet';
-import { LatLngExpression, LeafletMouseEvent, Icon, DivIcon } from 'leaflet';
+import { LatLngExpression, LatLngBoundsExpression, LatLngTuple, LeafletMouseEvent, DivIcon } from 'leaflet';
 import { Profile, InterpolatedPoint, SimulationState, Object3D } from '../types/simulation';
 import { interpolatePoints, smoothPoints } from '../utils/interpolation';
 import 'leaflet/dist/leaflet.css';
@@ -33,7 +33,6 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     const [interpolatedData, setInterpolatedData] = useState<Map<string, InterpolatedPoint[]>>(new Map());
     const [currentPositions, setCurrentPositions] = useState<Map<string, InterpolatedPoint>>(new Map());
     const mapRef = useRef<any>(null);
-
 
     /**
      * Custom map event handler component
@@ -112,18 +111,13 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         updateCurrentPositions();
         const interval = setInterval(updateCurrentPositions, 100);
 
-        const bounds = getMapBounds();
-        const center: LatLngExpression = bounds
-            ? [(bounds[0][0] + bounds[1][0]) / 2, (bounds[0][1] + bounds[1][1]) / 2]
-            : [51.505, -0.09]; // Default to London
-
         return () => clearInterval(interval);
     }, [simulationState, interpolatedData]);
 
     /**
      * Calculates map bounds to fit all data including 3D objects
      */
-    const getMapBounds = (): LatLngExpression[] | undefined => {
+    const getMapBounds = (): LatLngBoundsExpression | undefined => {
         const allPoints: { lat: number; lng: number }[] = [];
 
         // Add profile data points
@@ -148,9 +142,44 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         const lngs = allPoints.map(p => p.lng);
 
         return [
-            [Math.min(...lats), Math.min(...lngs)],
-            [Math.max(...lats), Math.max(...lngs)]
+            [Math.min(...lats), Math.min(...lngs)] as LatLngTuple,
+            [Math.max(...lats), Math.max(...lngs)] as LatLngTuple
         ];
+    };
+
+    /**
+     * Calculates the center point for the map
+     */
+    const getMapCenter = (): LatLngExpression => {
+        const allPoints: { lat: number; lng: number }[] = [];
+
+        // Add profile data points
+        if (showInterpolated) {
+            interpolatedData.forEach(points => allPoints.push(...points));
+        } else {
+            selectedProfiles.forEach(profile => {
+                allPoints.push(...profile.data);
+            });
+        }
+
+        // Add 3D object locations
+        objects3D.forEach(obj => {
+            if (obj.latitude !== undefined && obj.longitude !== undefined) {
+                allPoints.push({ lat: obj.latitude, lng: obj.longitude });
+            }
+        });
+
+        if (allPoints.length === 0) {
+            return [51.505, -0.09]; // Default to London
+        }
+
+        const lats = allPoints.map(p => p.lat);
+        const lngs = allPoints.map(p => p.lng);
+
+        const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+        const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+
+        return [centerLat, centerLng];
     };
 
     /**
@@ -219,7 +248,8 @@ export const MapViewer: React.FC<MapViewerProps> = ({
      */
     const downloadObject = async (object: Object3D) => {
         try {
-            const response = await fetch(`http://localhost/api/storage/objects/${object.id}/download`);
+            const apiBase = (import.meta as any).env?.DEV ? '/api/storage' : 'http://localhost:8080/api/storage';
+            const response = await fetch(`${apiBase}/objects/${object.id}/download`);
             if (!response.ok) throw new Error('Download failed');
 
             const blob = await response.blob();
@@ -248,6 +278,10 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
+
+    /**
+     * Renders profile polylines
+     */
     const renderProfilePolylines = (profile: Profile) => {
         const data = showInterpolated
             ? interpolatedData.get(profile.id) || []
@@ -372,6 +406,10 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             );
         });
     };
+
+    // Calculate bounds and center for the map
+    const bounds = getMapBounds();
+    const center = getMapCenter();
 
     return (
         <div className="map-viewer">
