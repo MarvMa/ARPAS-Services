@@ -1,17 +1,38 @@
-﻿# 1) Build with Node & Vite
-FROM node:18-alpine AS builder
+﻿# Build stage
+FROM node:alpine AS builder
+
 WORKDIR /app
-COPY package.json package-lock.json* ./
-COPY tsconfig.json vite.config.mjs ./
-COPY public ./public
-COPY public/index.html ./
-COPY src ./src
-RUN npm install
+
+# Copy package files
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Build the application
 RUN npm run build
 
-# 2) Serve the static build with nginx
-FROM nginx:alpine
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# Production stage
+FROM node:alpine
+
+WORKDIR /app
+
+# Install serve to serve the static files
+RUN npm install -g serve
+
+# Copy build files
+COPY --from=builder /app/dist /app/dist
+
+# Create a simple health check endpoint
+RUN echo '<!DOCTYPE html><html><head><title>Health</title></head><body>OK</body></html>' > /app/dist/health
+
+# Expose port 3000
+EXPOSE 3000
+
+# Add health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
+# Start the server on port 3000
+CMD ["serve", "-s", "dist", "-l", "3000"]

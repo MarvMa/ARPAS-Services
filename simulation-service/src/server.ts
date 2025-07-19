@@ -1,40 +1,33 @@
-import 'tsconfig-paths/register';
+import express from 'express';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import app from './app';
-import {initializeDatabase} from '@/config/database';
-import {logger} from '@/middleware/logger';
+import {sequelize} from './models/index';
+import {simulationRouter} from './routes/simulationRoutes';
 
-
-// Load environment variables
 dotenv.config();
 
-const PORT = process.env.PORT || 3001;
-const HOST = process.env.HOST || 'localhost';
+const PORT = process.env.PORT || process.env.SIMULATION_PORT || 8003;
+const app = express();
 
-async function startServer(): Promise<void> {
-    try {
-        await initializeDatabase();
+app.use(helmet());
+app.use(compression());
+app.use(express.json());  
+app.use(rateLimit({windowMs: 15 * 60 * 1000, max: 100}));  // basic rate limiting
 
-        // Start server
-        app.listen(PORT, () => {
-            logger.info(`Simulation service running on http://${HOST}:${PORT}`);
-            logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-        });
-    } catch (error) {
-        logger.error('Failed to start server:', error);
-        process.exit(1);
-    }
-}
+app.use('/api', simulationRouter);
+app.use('/simulation', simulationRouter);
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-    logger.info('SIGTERM received, shutting down gracefully');
-    process.exit(0);
+app.get('/health', (_, res) => res.send('OK'));
+
+// Initialize database
+sequelize.sync().then(() => {
+    console.log('Database synchronized');
+}).catch(err => {
+    console.error('Database sync error:', err);
 });
 
-process.on('SIGINT', () => {
-    logger.info('SIGINT received, shutting down gracefully');
-    process.exit(0);
+app.listen(PORT, () => {
+    console.log(`Simulation Service is running on port ${PORT}`);
 });
-
-startServer();

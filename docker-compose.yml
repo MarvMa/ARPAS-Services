@@ -5,12 +5,14 @@ networks:
     driver: bridge
 
 volumes:
-  pgdata:            # PostgreSQL Database
-  minio-data:        # MinIO Object-Storage
-  sonarqube_data:    # SonarQube Database (embedded H2)
-  sonarqube_logs:    # SonarQube Logs
-  sonarqube_ext:     # SonarQube Extensions/Plugins
-  redis-data:        # Redis Data
+  pgdata:             # PostgreSQL Database
+  minio-data:         # MinIO Object-Storage
+  sonarqube_data:     # SonarQube Database (embedded H2)
+  sonarqube_logs:     # SonarQube Logs
+  sonarqube_ext:      # SonarQube Extensions/Plugins
+  redis-data:         # Redis Data
+  simulation-uploads: # Simulation Service Uploads
+  simulation-logs:    # Simulation Service Logs
 
 services:
 
@@ -31,30 +33,47 @@ services:
     build: ./simulation-service
     networks:
       - backend-net
-    depends_on:
-      storage-service:
-        condition: service_healthy
     environment:
-      PORT: ${SIMULATION_PORT}
-      STORAGE_API_URL: ${STORAGE_API_URL}
+      PORT: ${SIMULATION_BACKEND_PORT}
+      HOST: 0.0.0.0
+      UPLOAD_DIR: /app/uploads
+      RATE_LIMIT_WINDOW: 15
+      RATE_LIMIT_MAX: 100
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      PREDICTION_URL: http://prediction-service:8002
+    volumes:
+      - simulation-uploads:/app/uploads
+      - simulation-logs:/app/logs
+      - ./simulation-service/data:/app/data
+    ports:
+      - "8003:8003"
     expose:
-      - ${SIMULATION_PORT}
+      - "${SIMULATION_BACKEND_PORT}"
+    healthcheck:
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:${SIMULATION_BACKEND_PORT}/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   simulation-frontend:
     build: ./simulation-frontend
     ports:
-      - ${SIMULATION_FRONTEND_PORT}
+      - "${SIMULATION_FRONTEND_PORT}:3000"
     networks:
       - backend-net
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health" ]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
     environment:
-      SIMULATION_PORT: ${SIMULATION_PORT}
-  
+      SIMULATION_FRONTEND_PORT: ${SIMULATION_FRONTEND_PORT}
+      REACT_APP_API_GATEWAY_PORT: ${API_GATEWAY_PORT}
+      REACT_APP_PREDICTION_WS_URL: ${REACT_APP_PREDICTION_WS_URL}
+      REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
+
   cache-service:
     build: ./cache-service
     networks:
