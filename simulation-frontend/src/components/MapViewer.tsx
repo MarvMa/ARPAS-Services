@@ -69,16 +69,13 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         });
     }, []);
 
-    /**
-     * Create stable profile identifiers for dependencies
-     */
-    const selectedProfileIds = useMemo(() =>
-            selectedProfiles.map(p => p.id).sort().join(','),
-        [selectedProfiles]
+    const allProfileIds = useMemo(() =>
+            profiles.map(p => p.id).sort().join(','),
+        [profiles]
     );
 
     const selectedProfilesData = useMemo(() =>
-            selectedProfiles.map(p => ({ id: p.id, dataLength: p.data.length })),
+            selectedProfiles.map(p => ({id: p.id, dataLength: p.data.length})),
         [selectedProfiles]
     );
 
@@ -88,7 +85,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     useEffect(() => {
         const newInterpolatedData = new Map<string, InterpolatedPoint[]>();
 
-        selectedProfiles.forEach(profile => {
+        profiles.forEach(profile => {
             try {
                 let interpolated = interpolatePoints(profile.data, intervalMs);
 
@@ -103,7 +100,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         });
 
         setInterpolatedData(newInterpolatedData);
-    }, [selectedProfileIds, smoothingEnabled]); // Use stable string instead of array
+    }, [allProfileIds, smoothingEnabled]);
 
     /**
      * Updates current positions during simulation - simplified
@@ -157,7 +154,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         const allPoints: { lat: number; lng: number }[] = [];
 
         // Add profile data points from visible profiles
-        visibleProfilesData.forEach(({ data }) => {
+        visibleProfilesData.forEach(({data}) => {
             allPoints.push(...data);
         });
 
@@ -186,7 +183,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         const allPoints: { lat: number; lng: number }[] = [];
 
         // Add profile data points from visible profiles
-        visibleProfilesData.forEach(({ data }) => {
+        visibleProfilesData.forEach(({data}) => {
             allPoints.push(...data);
         });
 

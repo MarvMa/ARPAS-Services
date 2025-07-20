@@ -219,20 +219,20 @@ export class ProfileService {
             return null;
         }
 
-        // Handle different timestamp formats
-        // Check if it's in nanoseconds (very large number like 1752938849970397000)
-        if (timestamp > Date.now() * 1000000) {
-            return Math.floor(timestamp / 1000000); // Convert nanoseconds to milliseconds
+        const absTimestamp = Math.abs(timestamp);
+
+        // Nanoseconds have ~19 digits (1e18 and above)
+        if (absTimestamp >= 1e17) {
+            return Math.floor(timestamp / 1_000_000); // Convert nanoseconds to milliseconds
         }
-        // Check if it's in microseconds
-        else if (timestamp > Date.now() * 1000) {
-            return Math.floor(timestamp / 1000); // Convert microseconds to milliseconds
+        // Microseconds have ~16 digits (1e15 and above)
+        if (absTimestamp >= 1e14) {
+            return Math.floor(timestamp / 1_000); // Convert microseconds to milliseconds
         }
-        // Check if it's in seconds (too small)
-        else if (timestamp < Date.now() / 1000) {
+        // If it's likely in seconds (10^10 or less)
+        if (absTimestamp <= 1e12) {
             return timestamp * 1000; // Convert seconds to milliseconds
         }
-        // Assume it's already in milliseconds
         return timestamp;
     }
 

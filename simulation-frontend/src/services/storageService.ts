@@ -1,8 +1,7 @@
 import axios from 'axios';
 import {Object3D} from '../types/simulation';
 
-// Use relative URLs when running through Vite proxy, fallback to direct URL for production
-const STORAGE_API_BASE = (import.meta as any).env?.DEV ? '/api/storage' : 'http://localhost:8080/api/storage';
+const STORAGE_API_BASE = 'http://localhost/api/storage';
 
 export class StorageService {
     /**
