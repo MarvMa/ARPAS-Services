@@ -29,7 +29,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                                                                           onFocusProfile
                                                                       }) => {
     const [optimized, setOptimized] = useState<boolean>(true);
-    const [intervalMs, setIntervalMs] = useState<number>(200);
+    const [intervalMs, setIntervalMs] = useState<number>(200); // Default 200ms interval
     const [isStarting, setIsStarting] = useState<boolean>(false);
 
     /**
@@ -80,11 +80,16 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
     }, [onFocusProfile]);
 
     /**
-     * Handles simulation start
+     * Handles simulation start with validation
      */
     const handleStartSimulation = useCallback(async () => {
         if (selectedProfiles.length === 0) {
             alert('Please select at least one profile for simulation');
+            return;
+        }
+
+        if (intervalMs < 50 || intervalMs > 5000) {
+            alert('Interval must be between 50ms and 5000ms');
             return;
         }
 
@@ -95,6 +100,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                 optimized,
                 intervalMs
             });
+            console.log(`Started ${optimized ? 'optimized' : 'unoptimized'} simulation with ${intervalMs}ms interval`);
         } catch (error) {
             console.error('Failed to start simulation:', error);
             alert('Failed to start simulation. Please check the console for details.');
@@ -109,6 +115,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
     const handleStopSimulation = useCallback(async () => {
         try {
             await onStopSimulation();
+            console.log('Simulation stopped successfully');
         } catch (error) {
             console.error('Failed to stop simulation:', error);
             alert('Failed to stop simulation properly.');
@@ -151,6 +158,16 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         });
     }, [profiles, onProfileVisibilityToggle]);
 
+    /**
+     * Handles interval change with validation
+     */
+    const handleIntervalChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        const value = Number(event.target.value);
+        if (value >= 50 && value <= 5000) {
+            setIntervalMs(value);
+        }
+    }, []);
+
     return (
         <div className="simulation-controls">
             <div className="controls-header">
@@ -158,8 +175,8 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                 <div className="status-indicator">
                     <span className={`status-light ${derivedState.isRunning ? 'running' : 'stopped'}`}></span>
                     <span className="status-text">
-            {derivedState.isRunning ? 'Simulation Running' : 'Simulation Stopped'}
-          </span>
+                        {derivedState.isRunning ? 'Running' : 'Stopped'}
+                    </span>
                 </div>
             </div>
 
@@ -253,8 +270,11 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                 </div>
             </div>
 
-            {/* Optimization Toggle */}
+            {/* Simulation Configuration */}
             <div className="control-group">
+                <h3>Simulation Configuration</h3>
+
+                {/* Optimization Mode Toggle */}
                 <label className="optimization-toggle">
                     <input
                         type="checkbox"
@@ -264,32 +284,51 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                     />
                     <span className="toggle-slider"></span>
                     <span className="toggle-label">
-            {optimized ? 'Optimized Mode (WebSocket)' : 'Unoptimized Mode (No WebSocket)'}
-          </span>
+                        {optimized ? 'Optimized Mode (WebSocket + Caching)' : 'Unoptimized Mode (Distance-based)'}
+                    </span>
                 </label>
                 <div className="mode-description">
                     {optimized ? (
-                        <p>Uses WebSocket connections for real-time object detection and caching optimization.</p>
+                        <p>Uses WebSocket connections for real-time object detection with caching optimization. Each profile gets its own WebSocket connection.</p>
                     ) : (
-                        <p>Simulates object detection without WebSocket connections for comparison.</p>
+                        <p>Downloads 3D objects when within 10 meters proximity without WebSocket connections for performance comparison.</p>
                     )}
                 </div>
-            </div>
 
-            {/* Interval Configuration */}
-            <div className="control-group">
-                <label htmlFor="interval">Data Transmission Interval (ms):</label>
-                <input
-                    id="interval"
-                    type="number"
-                    min="50"
-                    max="5000"
-                    step="50"
-                    value={intervalMs}
-                    onChange={(e) => setIntervalMs(Number(e.target.value))}
-                    disabled={derivedState.isRunning}
-                />
-                <small>Lower values provide smoother interpolation but higher computational load.</small>
+                {/* Data Transmission Interval */}
+                <div className="interval-control">
+                    <label htmlFor="interval">Data Transmission Interval (ms):</label>
+                    <div className="interval-input-group">
+                        <input
+                            id="interval"
+                            type="number"
+                            min="50"
+                            max="5000"
+                            step="50"
+                            value={intervalMs}
+                            onChange={handleIntervalChange}
+                            disabled={derivedState.isRunning}
+                            className="interval-input"
+                        />
+                        <div className="interval-presets">
+                            {[100, 200, 500, 1000].map(preset => (
+                                <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => setIntervalMs(preset)}
+                                    disabled={derivedState.isRunning}
+                                    className={`btn-secondary btn-tiny ${intervalMs === preset ? 'active' : ''}`}
+                                >
+                                    {preset}ms
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <small>
+                        Lower values provide more frequent data transmission and smoother animation but higher computational load.
+                        {optimized ? ' WebSocket data will be sent at this interval.' : ' Distance checks will be performed at this interval.'}
+                    </small>
+                </div>
             </div>
 
             {/* Profile Selection for Simulation */}
@@ -316,7 +355,10 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                     </div>
                 </div>
                 <div className="selection-info">
-                    <small>Select profiles to include in the simulation. Visibility on map is independent of simulation selection.</small>
+                    <small>
+                        Select profiles to include in the simulation. Each selected profile will {optimized ? 'establish its own WebSocket connection' : 'perform distance-based object detection'}.
+                        Map visibility is independent of simulation selection.
+                    </small>
                 </div>
             </div>
 
@@ -341,6 +383,10 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         Stop Simulation
                     </button>
                 </div>
+
+                {!derivedState.canStart && selectedProfiles.length === 0 && (
+                    <small className="error-hint">Please select at least one profile to start simulation.</small>
+                )}
             </div>
 
             {/* Results Management */}
@@ -368,17 +414,25 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             {/* Simulation Statistics */}
             {simulationState && (
                 <div className="control-group">
-                    <h3>Current Simulation</h3>
+                    <h3>Current Simulation Status</h3>
                     <div className="simulation-stats">
                         <div className="stat">
                             <span className="stat-label">Running Time:</span>
                             <span className="stat-value">
-                {Math.floor((Date.now() - simulationState.startTime) / 1000)}s
-              </span>
+                                {Math.floor((Date.now() - simulationState.startTime) / 1000)}s
+                            </span>
                         </div>
                         <div className="stat">
                             <span className="stat-label">Active Profiles:</span>
                             <span className="stat-value">{derivedState.activeProfilesCount}</span>
+                        </div>
+                        <div className="stat">
+                            <span className="stat-label">Mode:</span>
+                            <span className="stat-value">{optimized ? 'Optimized' : 'Unoptimized'}</span>
+                        </div>
+                        <div className="stat">
+                            <span className="stat-label">Interval:</span>
+                            <span className="stat-value">{intervalMs}ms</span>
                         </div>
                     </div>
                 </div>

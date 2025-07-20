@@ -20,17 +20,10 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
-    const [isAddingMode, setIsAddingMode] = useState(false);
-    const [newObjectLocation, setNewObjectLocation] = useState<{
-        lat: number;
-        lng: number;
-        alt?: number;
-    } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-
     /**
-     * Handles object deletion
+     * Handles object deletion with confirmation
      */
     const handleDeleteObject = async (objectId: string) => {
         const objectToDelete = objects.find(obj => obj.ID === objectId);
@@ -47,11 +40,12 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
             const updatedObjects = objects.filter(obj => obj.ID !== objectId);
             onObjectsChange(updatedObjects);
 
+            // Clear selection if deleted object was selected
             if (selectedObject?.ID === objectId) {
                 onObjectSelect(null);
             }
 
-            alert('Object deleted successfully');
+            console.log(`Successfully deleted object: ${objectToDelete.OriginalFilename}`);
         } catch (error) {
             console.error('Delete failed:', error);
             setError(error instanceof Error ? error.message : 'Delete failed');
@@ -63,6 +57,7 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
      */
     const handleDownloadObject = async (object: Object3D) => {
         try {
+            console.log(`Downloading object: ${object.OriginalFilename}`);
             const blob = await storageService.downloadObject(object.ID);
             const url = URL.createObjectURL(blob);
 
@@ -73,19 +68,69 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
             link.click();
             document.body.removeChild(link);
             URL.revokeObjectURL(url);
+
+            console.log(`Successfully downloaded: ${object.OriginalFilename}`);
         } catch (error) {
             console.error('Download failed:', error);
             setError(error instanceof Error ? error.message : 'Download failed');
         }
     };
-    
+
     /**
-     * Cancels the adding process
+     * Handles bulk upload of GLB files
      */
-    const cancelAdding = () => {
-        setIsAddingMode(false);
-        setNewObjectLocation(null);
+    const handleBulkUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files;
+        if (!files || files.length === 0) return;
+
+        setIsUploading(true);
         setError(null);
+
+        const totalFiles = files.length;
+        let completedFiles = 0;
+
+        try {
+            console.log(`Starting bulk upload of ${totalFiles} files...`);
+
+            const uploadPromises = Array.from(files).map(async (file) => {
+                try {
+                    // Upload without location data for bulk upload
+                    const uploadedObject = await storageService.uploadObject(file);
+                    completedFiles++;
+                    setUploadProgress(Math.round((completedFiles / totalFiles) * 100));
+                    return uploadedObject;
+                } catch (error) {
+                    console.error(`Failed to upload ${file.name}:`, error);
+                    return null;
+                }
+            });
+
+            const results = await Promise.all(uploadPromises);
+            const successfulUploads = results.filter(obj => obj !== null) as Object3D[];
+
+            if (successfulUploads.length > 0) {
+                const updatedObjects = [...objects, ...successfulUploads];
+                onObjectsChange(updatedObjects);
+                console.log(`Successfully uploaded ${successfulUploads.length} objects`);
+            }
+
+            if (successfulUploads.length < totalFiles) {
+                const failedCount = totalFiles - successfulUploads.length;
+                setError(`${failedCount} out of ${totalFiles} uploads failed`);
+            }
+
+        } catch (error) {
+            console.error('Bulk upload failed:', error);
+            setError('Bulk upload failed');
+        } finally {
+            setIsUploading(false);
+            setUploadProgress(0);
+
+            // Reset file input
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
     };
 
     /**
@@ -106,10 +151,40 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
         return value !== undefined ? value.toFixed(decimals) : 'N/A';
     };
 
+    /**
+     * Gets object location summary
+     */
+    const getLocationSummary = (object: Object3D): string => {
+        if (object.latitude !== undefined && object.longitude !== undefined) {
+            const altStr = object.altitude !== undefined ? ` (${object.altitude.toFixed(1)}m)` : '';
+            return `📍 ${object.latitude.toFixed(4)}, ${object.longitude.toFixed(4)}${altStr}`;
+        }
+        return '📍 No location data';
+    };
+
     return (
         <div className="object-manager">
             <div className="object-manager-header">
                 <h3>3D Objects ({objects.length})</h3>
+                <div className="object-manager-actions">
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".glb"
+                        multiple
+                        onChange={handleBulkUpload}
+                        style={{display: 'none'}}
+                        id="bulk-upload"
+                        disabled={isUploading}
+                    />
+                    <label
+                        htmlFor="bulk-upload"
+                        className={`btn-primary btn-small ${isUploading ? 'loading' : ''}`}
+                        style={{cursor: isUploading ? 'not-allowed' : 'pointer'}}
+                    >
+                        {isUploading ? 'Uploading...' : 'Bulk Upload'}
+                    </label>
+                </div>
             </div>
 
             {error && (
@@ -131,25 +206,11 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                 </div>
             )}
 
-            {isAddingMode && newObjectLocation && (
-                <div className="adding-mode-info">
-                    <div className="adding-location">
-                        <strong>Adding object at:</strong><br/>
-                        Lat: {formatCoordinate(newObjectLocation.lat)}<br/>
-                        Lng: {formatCoordinate(newObjectLocation.lng)}
-                        {newObjectLocation.alt && <><br/>Alt: {formatCoordinate(newObjectLocation.alt, 1)}m</>}
-                    </div>
-                    <button onClick={cancelAdding} className="btn-secondary btn-small">
-                        Cancel
-                    </button>
-                </div>
-            )}
-
             <div className="object-list">
                 {objects.length === 0 ? (
                     <div className="empty-state">
                         <p>No 3D objects found.</p>
-                        <p>Upload a GLB file to get started.</p>
+                        <p>Use "Add 3D Object" button to place objects on the map or "Bulk Upload" to upload multiple files.</p>
                     </div>
                 ) : (
                     objects.map((object) => (
@@ -159,19 +220,18 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                             onClick={() => onObjectSelect(object)}
                         >
                             <div className="object-info">
-                                <div className="object-name">{object.OriginalFilename}</div>
+                                <div className="object-name" title={object.OriginalFilename}>
+                                    {object.OriginalFilename}
+                                </div>
                                 <div className="object-details">
                                     <span className="object-size">{formatFileSize(object.Size)}</span>
                                     <span className="object-date">
-                    {new Date(object.UploadedAt).toLocaleDateString()}
-                  </span>
+                                        {new Date(object.UploadedAt).toLocaleDateString()}
+                                    </span>
                                 </div>
-                                {(object.latitude !== undefined && object.longitude !== undefined) && (
-                                    <div className="object-location">
-                                        📍 {formatCoordinate(object.latitude)}, {formatCoordinate(object.longitude)}
-                                        {object.altitude !== undefined && ` (${formatCoordinate(object.altitude, 1)}m)`}
-                                    </div>
-                                )}
+                                <div className="object-location" title="Location coordinates">
+                                    {getLocationSummary(object)}
+                                </div>
                             </div>
 
                             <div className="object-actions">
@@ -181,7 +241,7 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                                         handleDownloadObject(object);
                                     }}
                                     className="btn-secondary btn-tiny"
-                                    title="Download"
+                                    title="Download GLB file"
                                 >
                                     ⬇️
                                 </button>
@@ -191,7 +251,7 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                                         handleDeleteObject(object.ID);
                                     }}
                                     className="btn-danger btn-tiny"
-                                    title="Delete"
+                                    title="Delete object"
                                 >
                                     🗑️
                                 </button>
@@ -201,24 +261,27 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                 )}
             </div>
 
+            {/* Object Details Panel - Only show when object is selected */}
             {selectedObject && (
                 <div className="object-details-panel">
-                    <h4>Object Details</h4>
+                    <h4>Selected Object Details</h4>
                     <div className="detail-grid">
                         <div className="detail-item">
                             <label>Filename:</label>
-                            <span>{selectedObject.OriginalFilename}</span>
+                            <span title={selectedObject.OriginalFilename}>{selectedObject.OriginalFilename}</span>
                         </div>
                         <div className="detail-item">
                             <label>ID:</label>
-                            <span className="object-id">{selectedObject.ID}</span>
+                            <span className="object-id" title={selectedObject.ID}>
+                                {selectedObject.ID.substring(0, 8)}...
+                            </span>
                         </div>
                         <div className="detail-item">
                             <label>Size:</label>
                             <span>{formatFileSize(selectedObject.Size)}</span>
                         </div>
                         <div className="detail-item">
-                            <label>Content Type:</label>
+                            <label>Type:</label>
                             <span>{selectedObject.ContentType}</span>
                         </div>
                         <div className="detail-item">
@@ -226,40 +289,41 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                             <span>{new Date(selectedObject.UploadedAt).toLocaleString()}</span>
                         </div>
                         {selectedObject.latitude !== undefined && (
-                            <div className="detail-item">
-                                <label>Latitude:</label>
-                                <span>{formatCoordinate(selectedObject.latitude)}</span>
-                            </div>
+                            <>
+                                <div className="detail-item">
+                                    <label>Latitude:</label>
+                                    <span>{formatCoordinate(selectedObject.latitude)}</span>
+                                </div>
+                                <div className="detail-item">
+                                    <label>Longitude:</label>
+                                    <span>{formatCoordinate(selectedObject.longitude)}</span>
+                                </div>
+                                {selectedObject.altitude !== undefined && (
+                                    <div className="detail-item">
+                                        <label>Altitude:</label>
+                                        <span>{formatCoordinate(selectedObject.altitude, 1)}m</span>
+                                    </div>
+                                )}
+                            </>
                         )}
-                        {selectedObject.longitude !== undefined && (
-                            <div className="detail-item">
-                                <label>Longitude:</label>
-                                <span>{formatCoordinate(selectedObject.longitude)}</span>
-                            </div>
-                        )}
-                        {selectedObject.altitude !== undefined && (
-                            <div className="detail-item">
-                                <label>Altitude:</label>
-                                <span>{formatCoordinate(selectedObject.altitude, 1)}m</span>
-                            </div>
-                        )}
+                    </div>
+
+                    <div className="detail-actions">
+                        <button
+                            onClick={() => handleDownloadObject(selectedObject)}
+                            className="btn-primary btn-small"
+                        >
+                            Download File
+                        </button>
+                        <button
+                            onClick={() => onObjectSelect(null)}
+                            className="btn-secondary btn-small"
+                        >
+                            Clear Selection
+                        </button>
                     </div>
                 </div>
             )}
         </div>
     );
-};
-
-// Export the function for external map interaction
-export const useObjectManager = () => {
-    const [isAddingMode, setIsAddingMode] = useState(false);
-
-    return {
-        isAddingMode,
-        startAddingObject: (lat: number, lng: number, alt?: number) => {
-            setIsAddingMode(true);
-            // This would be handled by the parent component
-        },
-        cancelAdding: () => setIsAddingMode(false)
-    };
 };

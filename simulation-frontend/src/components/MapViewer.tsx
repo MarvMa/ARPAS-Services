@@ -1,8 +1,8 @@
 import React, {useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle} from 'react';
-import {MapContainer, TileLayer, Polyline, CircleMarker, Popup, Marker, useMapEvents} from 'react-leaflet';
+import {MapContainer, TileLayer, Polyline, CircleMarker, Marker, useMapEvents} from 'react-leaflet';
 import {LatLngExpression, LatLngBoundsExpression, LatLngTuple, LeafletMouseEvent, DivIcon} from 'leaflet';
 import {Profile, InterpolatedPoint, SimulationState, Object3D} from '../types/simulation';
-import {interpolatePoints, smoothPoints, getRealTimePosition, calculateSegmentProgress} from '../utils/interpolation';
+import {interpolatePoints, smoothPoints} from '../utils/interpolation';
 import 'leaflet/dist/leaflet.css';
 
 interface MapViewerProps {
@@ -35,6 +35,7 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
     const [interpolatedData, setInterpolatedData] = useState<Map<string, InterpolatedPoint[]>>(new Map());
     const [currentPositions, setCurrentPositions] = useState<Map<string, InterpolatedPoint>>(new Map());
     const mapRef = useRef<any>(null);
+    const animationFrameRef = useRef<number>();
 
     const intervalMs = 200; // Default interval for interpolation
 
@@ -55,28 +56,26 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
     };
 
     /**
-     * Memoized 3D object icon creation
+     * Creates a 3D object marker icon
      */
     const create3DObjectIcon = useCallback((isSelected: boolean = false): DivIcon => {
         return new DivIcon({
             html: `<div class="object-marker ${isSelected ? 'selected' : ''}">
-        <div class="object-icon">📦</div>
-        ${isSelected ? '<div class="selection-ring"></div>' : ''}
-      </div>`,
+                <div class="object-icon">📦</div>
+                ${isSelected ? '<div class="selection-ring"></div>' : ''}
+            </div>`,
             className: 'custom-object-marker',
             iconSize: [24, 24],
             iconAnchor: [12, 12]
         });
     }, []);
 
+    /**
+     * Memoized profile IDs to detect changes
+     */
     const allProfileIds = useMemo(() =>
             profiles.map(p => p.id).sort().join(','),
         [profiles]
-    );
-
-    const selectedProfilesData = useMemo(() =>
-            selectedProfiles.map(p => ({id: p.id, dataLength: p.data.length})),
-        [selectedProfiles]
     );
 
     /**
@@ -103,92 +102,123 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
     }, [allProfileIds, smoothingEnabled]);
 
     /**
-     * Updates current positions during simulation - with smooth animation
+     * Smooth real-time position updates during simulation - FIXED ANIMATION
      */
     useEffect(() => {
         if (!simulationState?.isRunning) {
             setCurrentPositions(new Map());
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
             return;
         }
 
-        let animationFrameId: number;
-
-        const updateCurrentPositions = () => {
+        const updatePositions = () => {
             const newPositions = new Map<string, InterpolatedPoint>();
             const currentTime = Date.now();
+            const elapsedTime = currentTime - simulationState.startTime;
 
-            try {
-                Object.entries(simulationState.profileStates).forEach(([profileId, profileState]) => {
-                    const profile = profiles.find(p => p.id === profileId);
-                    if (!profile || !profile.data || profile.data.length === 0) return;
+            Object.entries(simulationState.profileStates).forEach(([profileId, profileState]) => {
+                const profile = profiles.find(p => p.id === profileId);
+                if (!profile?.data || profile.data.length === 0) return;
 
-                    // Get current segment information
-                    const currentIndex = Math.min(profileState.currentIndex, profile.data.length - 1);
+                // Sort data points by timestamp
+                const sortedData = [...profile.data].sort((a, b) => a.timestamp - b.timestamp);
 
-                    if (currentIndex >= profile.data.length - 1) {
-                        // At the last point
-                        const lastPoint = profile.data[profile.data.length - 1];
-                        newPositions.set(profileId, {
-                            ...lastPoint,
-                            isInterpolated: false
-                        });
-                        return;
+                if (sortedData.length === 0) return;
+
+                // Calculate what the current simulation time should be
+                const profileStartTime = sortedData[0].timestamp;
+                const currentSimulationTime = profileStartTime + elapsedTime;
+
+                // Find the appropriate segment based on current simulation time
+                let segmentIndex = 0;
+                for (let i = 0; i < sortedData.length - 1; i++) {
+                    if (currentSimulationTime >= sortedData[i].timestamp &&
+                        currentSimulationTime < sortedData[i + 1].timestamp) {
+                        segmentIndex = i;
+                        break;
                     }
-
-                    // Calculate smooth position between current and next point
-                    const currentPoint = profile.data[currentIndex];
-                    const nextPoint = profile.data[currentIndex + 1];
-
-                    // Calculate how far we are through this segment based on time
-                    const segmentProgress = calculateSegmentProgress(
-                        currentPoint,
-                        nextPoint,
-                        currentTime - (simulationState.startTime - currentPoint.timestamp)
-                    );
-
-                    // Get smooth interpolated position
-                    const smoothPosition = getRealTimePosition(
-                        profile.data,
-                        currentIndex,
-                        segmentProgress
-                    );
-
-                    if (smoothPosition) {
-                        newPositions.set(profileId, {
-                            lat: smoothPosition.lat,
-                            lng: smoothPosition.lng,
-                            timestamp: currentTime,
-                            bearing: smoothPosition.bearing,
-                            speed: currentPoint.speed,
-                            altitude: currentPoint.altitude,
-                            isInterpolated: true
-                        });
+                    if (currentSimulationTime >= sortedData[i].timestamp) {
+                        segmentIndex = i;
                     }
+                }
+
+                // Handle end of route
+                if (segmentIndex >= sortedData.length - 1) {
+                    const lastPoint = sortedData[sortedData.length - 1];
+                    newPositions.set(profileId, {
+                        ...lastPoint,
+                        isInterpolated: false
+                    });
+                    return;
+                }
+
+                const currentPoint = sortedData[segmentIndex];
+                const nextPoint = sortedData[segmentIndex + 1];
+
+                // Calculate smooth interpolation progress within the current segment
+                const segmentDuration = nextPoint.timestamp - currentPoint.timestamp;
+                const segmentElapsed = currentSimulationTime - currentPoint.timestamp;
+                const progress = segmentDuration > 0 ? Math.max(0, Math.min(1, segmentElapsed / segmentDuration)) : 0;
+
+                // Linear interpolation for smooth movement
+                const interpolatedLat = currentPoint.lat + (nextPoint.lat - currentPoint.lat) * progress;
+                const interpolatedLng = currentPoint.lng + (nextPoint.lng - currentPoint.lng) * progress;
+
+                // Interpolate optional values
+                const interpolatedSpeed = currentPoint.speed && nextPoint.speed
+                    ? currentPoint.speed + (nextPoint.speed - currentPoint.speed) * progress
+                    : currentPoint.speed || nextPoint.speed;
+
+                const interpolatedAltitude = currentPoint.altitude && nextPoint.altitude
+                    ? currentPoint.altitude + (nextPoint.altitude - currentPoint.altitude) * progress
+                    : currentPoint.altitude || nextPoint.altitude;
+
+                // Interpolate bearing (handling circular nature)
+                let interpolatedBearing: number | undefined;
+                if (currentPoint.bearing !== undefined && nextPoint.bearing !== undefined) {
+                    let bearingDiff = nextPoint.bearing - currentPoint.bearing;
+                    if (bearingDiff > 180) bearingDiff -= 360;
+                    if (bearingDiff < -180) bearingDiff += 360;
+                    interpolatedBearing = currentPoint.bearing + bearingDiff * progress;
+                    if (interpolatedBearing < 0) interpolatedBearing += 360;
+                    if (interpolatedBearing >= 360) interpolatedBearing -= 360;
+                } else {
+                    interpolatedBearing = currentPoint.bearing || nextPoint.bearing;
+                }
+
+                newPositions.set(profileId, {
+                    lat: interpolatedLat,
+                    lng: interpolatedLng,
+                    timestamp: currentSimulationTime,
+                    speed: interpolatedSpeed,
+                    altitude: interpolatedAltitude,
+                    bearing: interpolatedBearing,
+                    isInterpolated: true
                 });
+            });
 
-                setCurrentPositions(newPositions);
-            } catch (error) {
-                console.error('Error updating current positions:', error);
-            }
+            setCurrentPositions(newPositions);
 
-            // Continue animation loop
+            // Continue animation loop if simulation is still running
             if (simulationState?.isRunning) {
-                animationFrameId = requestAnimationFrame(updateCurrentPositions);
+                animationFrameRef.current = requestAnimationFrame(updatePositions);
             }
         };
 
         // Start animation loop
-        updateCurrentPositions();
+        updatePositions();
 
         return () => {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
             }
         };
-    }, [simulationState?.isRunning, simulationState?.startTime, profiles]); // Dependencies for smooth animation
+    }, [simulationState?.isRunning, simulationState?.startTime, profiles]);
 
     /**
-     * Calculate visible profiles data for bounds/center - simplified
+     * Calculate visible profiles data for bounds/center
      */
     const visibleProfilesData = useMemo(() => {
         const visible = profiles.filter(profile => profile.isVisible);
@@ -201,7 +231,7 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
     }, [profiles.map(p => `${p.id}:${p.isVisible}`).join(','), showInterpolated, interpolatedData.size]);
 
     /**
-     * Memoized map bounds calculation - simplified
+     * Memoized map bounds calculation
      */
     const mapBounds = useMemo((): LatLngBoundsExpression | undefined => {
         const allPoints: { lat: number; lng: number }[] = [];
@@ -227,20 +257,18 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
             [Math.min(...lats), Math.min(...lngs)] as LatLngTuple,
             [Math.max(...lats), Math.max(...lngs)] as LatLngTuple
         ];
-    }, [visibleProfilesData, objects3D.length]); // Simplified dependencies
+    }, [visibleProfilesData, objects3D.length]);
 
     /**
-     * Memoized map center calculation - simplified
+     * Memoized map center calculation
      */
     const mapCenter = useMemo((): LatLngExpression => {
         const allPoints: { lat: number; lng: number }[] = [];
 
-        // Add profile data points from visible profiles
         visibleProfilesData.forEach(({data}) => {
             allPoints.push(...data);
         });
 
-        // Add 3D object locations
         objects3D.forEach(obj => {
             if (obj.latitude !== undefined && obj.longitude !== undefined) {
                 allPoints.push({lat: obj.latitude, lng: obj.longitude});
@@ -248,7 +276,7 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
         });
 
         if (allPoints.length === 0) {
-            return [51.505, -0.09]; // Default to London
+            return [39.6142, 3.0394]; // Default to Mallorca coordinates from sample data
         }
 
         const lats = allPoints.map(p => p.lat);
@@ -258,46 +286,10 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
         const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
 
         return [centerLat, centerLng];
-    }, [visibleProfilesData, objects3D.length]); // Simplified dependencies
+    }, [visibleProfilesData, objects3D.length]);
 
     /**
-     * Downloads a 3D object
-     */
-    const downloadObject = useCallback(async (object: Object3D) => {
-        try {
-            const apiBase = (import.meta as any).env?.DEV ? '/api/storage' : 'http://localhost:8080/api/storage';
-            const response = await fetch(`${apiBase}/objects/${object.ID}/download`);
-            if (!response.ok) throw new Error('Download failed');
-
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = object.OriginalFilename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Download failed:', error);
-            alert('Failed to download object');
-        }
-    }, []);
-
-    /**
-     * Formats file size for display
-     */
-    const formatFileSize = useCallback((bytes: number): string => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }, []);
-
-    /**
-     * Renders 3D object markers on the map
+     * Renders 3D object markers on the map (without popups)
      */
     const render3DObjectMarkers = () => {
         return objects3D
@@ -313,47 +305,7 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
                             onObjectSelect?.(obj);
                         }
                     }}
-                >
-                    <Popup>
-                        <div className="object-popup">
-                            <div className="popup-header">
-                                <strong>📦 {obj.OriginalFilename}</strong>
-                            </div>
-                            <div className="popup-content">
-                                <div className="popup-field">
-                                    <label>ID:</label>
-                                    <span className="object-id-short">{obj.ID.substring(0, 8)}...</span>
-                                </div>
-                                <div className="popup-field">
-                                    <label>Size:</label>
-                                    <span>{formatFileSize(obj.Size)}</span>
-                                </div>
-                                <div className="popup-field">
-                                    <label>Location:</label>
-                                    <span>
-                    {obj.latitude?.toFixed(6)}, {obj.longitude?.toFixed(6)}
-                                        {obj.altitude !== undefined && <><br/>Alt: {obj.altitude.toFixed(1)}m</>}
-                  </span>
-                                </div>
-                                <div className="popup-field">
-                                    <label>Uploaded:</label>
-                                    <span>{new Date(obj.UploadedAt).toLocaleDateString()}</span>
-                                </div>
-                            </div>
-                            <div className="popup-actions">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        downloadObject(obj);
-                                    }}
-                                    className="btn-secondary btn-tiny"
-                                >
-                                    Download
-                                </button>
-                            </div>
-                        </div>
-                    </Popup>
-                </Marker>
+                />
             ));
     };
 
@@ -382,12 +334,12 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
     };
 
     /**
-     * Renders markers for original data points
+     * Renders markers for original data points (without popups)
      */
     const renderOriginalMarkers = (profile: Profile) => {
         if (showInterpolated) return null;
 
-        return profile.data.slice(0, 50).map((point, index) => ( // Limit to 50 markers for performance
+        return profile.data.slice(0, 50).map((point, index) => (
             <CircleMarker
                 key={`marker-${profile.id}-${index}`}
                 center={[point.lat, point.lng]}
@@ -396,24 +348,12 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
                 color="white"
                 weight={1}
                 fillOpacity={0.8}
-            >
-                <Popup>
-                    <div>
-                        <strong>{profile.name}</strong><br/>
-                        Point {index + 1}<br/>
-                        Lat: {point.lat.toFixed(6)}<br/>
-                        Lng: {point.lng.toFixed(6)}<br/>
-                        {point.speed && <span>Speed: {point.speed.toFixed(2)} m/s<br/></span>}
-                        {point.altitude && <span>Altitude: {point.altitude.toFixed(1)} m<br/></span>}
-                        Time: {new Date(point.timestamp).toLocaleTimeString()}
-                    </div>
-                </Popup>
-            </CircleMarker>
+            />
         ));
     };
 
     /**
-     * Renders interpolated points
+     * Renders interpolated points (without popups)
      */
     const renderInterpolatedMarkers = (profile: Profile) => {
         if (!showInterpolated) return null;
@@ -422,7 +362,7 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
 
         return interpolated
             .filter(point => !point.isInterpolated)
-            .slice(0, 50) // Limit for performance
+            .slice(0, 50)
             .map((point, index) => (
                 <CircleMarker
                     key={`interpolated-marker-${profile.id}-${index}`}
@@ -432,24 +372,12 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
                     color="white"
                     weight={1}
                     fillOpacity={0.6}
-                >
-                    <Popup>
-                        <div>
-                            <strong>{profile.name}</strong><br/>
-                            Original Point<br/>
-                            Lat: {point.lat.toFixed(6)}<br/>
-                            Lng: {point.lng.toFixed(6)}<br/>
-                            {point.speed && <span>Speed: {point.speed.toFixed(2)} m/s<br/></span>}
-                            {point.altitude && <span>Altitude: {point.altitude.toFixed(1)} m<br/></span>}
-                            Time: {new Date(point.timestamp).toLocaleTimeString()}
-                        </div>
-                    </Popup>
-                </CircleMarker>
+                />
             ));
     };
 
     /**
-     * Renders current position markers during simulation
+     * Renders current position markers during simulation with smooth animation - NO BOUNCING
      */
     const renderCurrentPositions = () => {
         if (!simulationState?.isRunning) return null;
@@ -467,21 +395,8 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
                     color="white"
                     weight={2}
                     fillOpacity={1}
-                    className="current-position-marker"
-                >
-                    <Popup>
-                        <div>
-                            <strong>{profile.name}</strong><br/>
-                            Current Position<br/>
-                            Lat: {position.lat.toFixed(6)}<br/>
-                            Lng: {position.lng.toFixed(6)}<br/>
-                            {position.speed && <span>Speed: {position.speed.toFixed(2)} m/s<br/></span>}
-                            {position.altitude && <span>Altitude: {position.altitude.toFixed(1)} m<br/></span>}
-                            {position.isInterpolated && <span><em>Interpolated</em><br/></span>}
-                            Time: {new Date(position.timestamp).toLocaleTimeString()}
-                        </div>
-                    </Popup>
-                </CircleMarker>
+                    className="current-position-marker-smooth"
+                />
             );
         });
     };
@@ -524,13 +439,13 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
                                 ></div>
                                 <span className="legend-label">{profile.name}</span>
                                 <span className="legend-count">
-                  ({showInterpolated
+                                    ({showInterpolated
                                     ? interpolatedData.get(profile.id)?.length || 0
                                     : profile.data.length} points)
-                </span>
+                                </span>
                                 {onProfileVisibilityToggle && (
                                     <button
-                                        className="legend-toggle"
+                                        className="legend-toggle btn-tiny"
                                         onClick={() => onProfileVisibilityToggle(profile.id)}
                                         title="Toggle visibility"
                                     >
@@ -559,8 +474,8 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
                             <div className="info-item">
                                 <span className="info-label">Mode:</span>
                                 <span className="info-value">
-                  {showInterpolated ? 'Interpolated' : 'Original'}
-                </span>
+                                    {showInterpolated ? 'Interpolated' : 'Original'}
+                                </span>
                             </div>
                         </div>
                     )}

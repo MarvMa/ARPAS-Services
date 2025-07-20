@@ -11,7 +11,7 @@ import {Profile, SimulationState, SimulationConfig, Object3D} from './types/simu
 // Define the profiles to be loaded automatically
 const PRELOADED_PROFILES: string[] = [
     'Disseminat_Var_668-2025-07-19_15-27-54.json',
-    // Example: 'profile1.json', 'profile2.json'
+    // Add more profile filenames here as needed
 ];
 
 const App: React.FC = () => {
@@ -27,29 +27,33 @@ const App: React.FC = () => {
     const [isLoadingProfiles, setIsLoadingProfiles] = useState<boolean>(false);
     const [loadingError, setLoadingError] = useState<string | null>(null);
 
+    // Service instances
     const [simulationService] = useState(() => new SimulationService());
     const [dataCollector] = useState(() => new DataCollector());
     const [storageService] = useState(() => new StorageService());
     const [profileService] = useState(() => new ProfileService());
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    // Ref for MapViewer to allow focusing/zooming
     const mapViewerRef = useRef<any>(null);
 
     /**
-     * Initialize app on mount only
+     * Initialize app on mount
      */
     useEffect(() => {
         let isMounted = true;
 
         const initializeApp = async () => {
             try {
+                console.log('Initializing application...');
+
                 // Check storage service availability
                 const isStorageAvailable = await storageService.healthCheck();
                 if (isMounted) {
                     setStorageServiceAvailable(isStorageAvailable);
+                    console.log(`Storage service ${isStorageAvailable ? 'available' : 'unavailable'}`);
                 }
 
+                // Load 3D objects if storage is available
                 if (isStorageAvailable) {
                     await load3DObjects();
                 } else {
@@ -61,8 +65,13 @@ const App: React.FC = () => {
 
                 // Load data collector from localStorage
                 dataCollector.loadFromLocalStorage();
+                console.log('Application initialization completed');
+
             } catch (error) {
                 console.error('Failed to initialize app:', error);
+                if (isMounted) {
+                    setLoadingError('Failed to initialize application. Check console for details.');
+                }
             }
         };
 
@@ -71,7 +80,14 @@ const App: React.FC = () => {
         return () => {
             isMounted = false;
         };
-    }, []); // Empty dependency array - run only once on mount
+    }, []);
+
+    /**
+     * Update simulation service with 3D objects when they change
+     */
+    useEffect(() => {
+        simulationService.setAvailableObjects(objects3D);
+    }, [objects3D, simulationService]);
 
     /**
      * Loads 3D objects from storage service
@@ -80,9 +96,10 @@ const App: React.FC = () => {
         try {
             const objects = await storageService.getAllObjects();
             setObjects3D(objects);
-            console.log(`Loaded ${objects.length} 3D objects`);
+            console.log(`Loaded ${objects.length} 3D objects from storage service`);
         } catch (error) {
             console.error('Failed to load 3D objects:', error);
+            setLoadingError('Failed to load 3D objects from storage service');
         }
     }, [storageService]);
 
@@ -99,19 +116,13 @@ const App: React.FC = () => {
         setLoadingError(null);
 
         try {
-            console.log(`Starting to load ${PRELOADED_PROFILES.length} predefined profiles:`, PRELOADED_PROFILES);
+            console.log(`Loading ${PRELOADED_PROFILES.length} predefined profiles:`, PRELOADED_PROFILES);
 
             const loadPromises = PRELOADED_PROFILES.map(async (filename) => {
                 try {
                     const url = `/profiles/${filename}`;
                     const profile = await profileService.loadProfileFromUrl(url, filename);
-                    console.log(`Successfully loaded profile: ${filename}`, {
-                        id: profile.id,
-                        name: profile.name,
-                        dataPoints: profile.data.length,
-                        color: profile.color,
-                        isVisible: profile.isVisible
-                    });
+                    console.log(`Successfully loaded profile: ${filename} (${profile.data.length} points)`);
                     return profile;
                 } catch (error) {
                     console.error(`Failed to load profile ${filename}:`, error);
@@ -124,7 +135,7 @@ const App: React.FC = () => {
 
             if (successfulProfiles.length > 0) {
                 const allProfiles = profileService.getAllProfiles();
-                setProfiles([...allProfiles]); // Create new array to ensure state update
+                setProfiles([...allProfiles]);
                 console.log(`Successfully loaded ${successfulProfiles.length} predefined profiles`);
             }
 
@@ -133,6 +144,7 @@ const App: React.FC = () => {
                 const errorMessage = `Only loaded ${successfulProfiles.length} out of ${PRELOADED_PROFILES.length} profiles. ${failedCount} failed to load.`;
                 setLoadingError(errorMessage);
             }
+
         } catch (error) {
             console.error('Failed to load predefined profiles:', error);
             setLoadingError('Failed to load predefined profiles. Check console for details.');
@@ -173,13 +185,14 @@ const App: React.FC = () => {
                 clearInterval(intervalId);
             }
         };
-    }, []); // No dependencies to avoid infinite loops
+    }, [simulationService]);
 
     /**
-     * Handle profile selection changes with memoization
+     * Handle profile selection changes
      */
     const handleProfileSelectionChange = useCallback((newSelectedProfiles: Profile[]) => {
         setSelectedProfiles(newSelectedProfiles);
+        console.log(`Selected ${newSelectedProfiles.length} profiles for simulation`);
     }, []);
 
     /**
@@ -202,10 +215,12 @@ const App: React.FC = () => {
         const files = event.target.files;
         if (!files) return;
 
+        console.log(`Uploading ${files.length} profile files...`);
         const uploadPromises = Array.from(files).map(async (file) => {
             try {
                 const profile = await profileService.parseJsonFile(file);
                 profileService.addProfile(profile);
+                console.log(`Successfully parsed ${file.name} (${profile.data.length} points)`);
                 return profile;
             } catch (error) {
                 console.error(`Failed to parse ${file.name}:`, error);
@@ -233,7 +248,9 @@ const App: React.FC = () => {
      */
     const handleMapClick = useCallback(async (lat: number, lng: number) => {
         if (!isAddingMode) return;
+
         console.log(`Adding 3D object at ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+
         if (!storageServiceAvailable) {
             alert('Storage service is not available. Cannot add 3D objects.');
             return;
@@ -254,6 +271,7 @@ const App: React.FC = () => {
                 setObjects3D(prev => [...prev, uploadedObject]);
                 setIsAddingMode(false);
                 alert(`Successfully added 3D object at ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+                console.log(`Uploaded 3D object: ${uploadedObject.OriginalFilename}`);
             } catch (error) {
                 console.error('Failed to upload 3D object:', error);
                 alert(`Failed to upload 3D object: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -270,8 +288,9 @@ const App: React.FC = () => {
      */
     const handleStartSimulation = useCallback(async (config: SimulationConfig) => {
         try {
+            console.log(`Starting ${config.optimized ? 'optimized' : 'unoptimized'} simulation with ${config.profiles.length} profiles`);
             const simulationId = await simulationService.startSimulation(config);
-            console.log(`Started simulation: ${simulationId}`);
+            console.log(`Simulation started successfully: ${simulationId}`);
         } catch (error) {
             console.error('Failed to start simulation:', error);
             throw error;
@@ -283,6 +302,7 @@ const App: React.FC = () => {
      */
     const handleStopSimulation = useCallback(async () => {
         try {
+            console.log('Stopping simulation...');
             const results = await simulationService.stopSimulation();
             if (results) {
                 console.log('Simulation completed:', results);
@@ -301,6 +321,7 @@ const App: React.FC = () => {
         try {
             await dataCollector.exportAllResults();
             alert('Results exported successfully!');
+            console.log('All simulation results exported');
         } catch (error) {
             console.error('Failed to export results:', error);
             alert('Failed to export results. Please check the console for details.');
@@ -318,6 +339,7 @@ const App: React.FC = () => {
         if (confirmed) {
             dataCollector.clearResults();
             alert('All results have been cleared.');
+            console.log('All simulation results cleared');
         }
     }, [dataCollector]);
 
@@ -330,6 +352,7 @@ const App: React.FC = () => {
             profileService.removeProfile(profileId);
             setProfiles([...profileService.getAllProfiles()]);
             setSelectedProfiles(prev => prev.filter(p => p.id !== profileId));
+            console.log(`Deleted profile: ${profileId}`);
         }
     }, [profileService]);
 
@@ -351,6 +374,7 @@ const App: React.FC = () => {
             URL.revokeObjectURL(url);
 
             alert('Profiles exported successfully!');
+            console.log('All profiles exported');
         } catch (error) {
             console.error('Failed to export profiles:', error);
             alert('Failed to export profiles.');
@@ -370,7 +394,9 @@ const App: React.FC = () => {
         }
     }, [profileService, loadPredefinedProfiles]);
 
-    // Focus handler for SimulationControls
+    /**
+     * Focus handler for SimulationControls
+     */
     const handleFocusProfile = useCallback((profileId: string) => {
         if (mapViewerRef.current && typeof mapViewerRef.current.focusProfile === 'function') {
             mapViewerRef.current.focusProfile(profileId);
@@ -380,7 +406,7 @@ const App: React.FC = () => {
     return (
         <div className="app">
             <header className="app-header">
-                <h1>Simulation Dashboard</h1>
+                <h1>Enhanced Simulation Dashboard</h1>
                 <div className="header-controls">
                     <input
                         ref={fileInputRef}
@@ -455,7 +481,7 @@ const App: React.FC = () => {
 
                 <div className="right-panel">
                     <div className="map-header">
-                        <h2>Route Visualization</h2>
+                        <h2>Real-time Route Visualization</h2>
                         <div className="map-controls">
                             <label className="control-toggle">
                                 <input
@@ -497,7 +523,7 @@ const App: React.FC = () => {
 
             <footer className="app-footer">
                 <div className="footer-info">
-                    <span>Simulation Framework v1.0</span>
+                    <span>Enhanced Simulation Framework v2.0</span>
                     <span>
                         {profiles.length} profiles loaded |
                         {selectedProfiles.length} selected |

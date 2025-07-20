@@ -1,0 +1,356 @@
+
+.current-position-marker-smooth {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Ensure Leaflet doesn't apply default animations */
+.current-position-marker-smooth .leaflet-interactive {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Smooth circle transitions */
+.current-position-marker-smooth circle {
+    /* Very fast smooth transitions for position changes */
+    transition: cx 0.05s linear, cy 0.05s linear !important;
+    /* Remove any transform or bouncing animations */
+    animation: none !important;
+}
+
+/* Override any Leaflet default marker animations */
+.leaflet-marker-icon.current-position-marker-smooth,
+.leaflet-marker-shadow.current-position-marker-smooth {
+    transition: transform 0.05s linear !important;
+    animation: none !important;
+}
+
+/* Disable all marker animations during simulation */
+.leaflet-map .leaflet-marker-icon {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Only allow smooth position updates */
+.leaflet-map .leaflet-interactive {
+    transition: none !important;
+}
+
+/* Custom smooth marker that moves naturally */
+.smooth-simulation-marker {
+    transition: none !important;
+    animation: none !important;
+    will-change: transform;
+}
+
+/* Remove default Leaflet zoom animations during simulation */
+.leaflet-map.simulation-active .leaflet-zoom-animated {
+    transition: none !important;
+}
+
+/* Ensure SVG elements animate smoothly */
+.leaflet-overlay-pane svg {
+    transition: none !important;
+}
+
+.leaflet-overlay-pane svg circle {
+    transition: cx 0.05s linear, cy 0.05s linear !important;
+    animation: none !important;
+}
+
+/* Remove any pulsing or bouncing effects */
+@keyframes no-animation {
+    from {
+        transform: none;
+    }
+    to {
+        transform: none;
+    }
+}
+
+/* Override bounce animation specifically */
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(0);
+    }
+    60% {
+        transform: translateY(0);
+    }
+}
+
+/* Disable pulse animation during simulation */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Ensure no unwanted CSS animations interfere */
+.current-position-marker-smooth * {
+    animation: none !important;
+    transition: none !important;
+}
+
+/* Smooth movement for the entire marker container */
+.leaflet-marker-pane .current-position-marker-smooth {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Performance optimization for smooth animation */
+.current-position-marker-smooth {
+    will-change: auto;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
+
+/* Disable any CSS transform animations */
+.current-position-marker-smooth {
+    transform: none !important;
+    transition: none !important;
+}
+
+/* Override any inherited animations */
+.leaflet-map * {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0s !important;
+}
+
+/* Only allow very fast linear transitions for position updates */
+.leaflet-overlay-pane circle.simulation-active {
+    transition: cx 0.05s linear, cy 0.05s linear !important;
+}
+
+/* Ensure map doesn't interfere with smooth movement */
+.leaflet-map.simulation-running {
+    animation: none !important;
+}
+
+.leaflet-map.simulation-running * {
+    animation: none !important;
+    transition: none !important;
+}
+
+/* Allow only essential positioning transitions */
+.leaflet-map.simulation-running .current-position-marker-smooth circle {
+    transition: cx 0.03s linear, cy 0.03s linear !important;
+}
+
+/* Remove any default marker behaviors that cause jumping */
+.leaflet-marker-icon {
+    animation: none !important;
+    transition: none !important;
+}
+
+.leaflet-marker-shadow {
+    animation: none !important;
+    transition: none !important;
+}
+
+/* Smooth real-time updates without visual artifacts */
+.simulation-marker-container {
+    position: relative;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    will-change: transform;
+}
+
+/* Ensure text and UI elements don't interfere */
+.map-viewer .simulation-info {
+    pointer-events: none;
+    user-select: none;
+}
+
+/* High performance rendering */
+.leaflet-map canvas,
+.leaflet-map svg {
+    image-rendering: auto;
+    image-rendering: crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+}
+
+/* Remove any inherited animations from parent elements */
+.map-viewer * {
+    animation-play-state: paused !important;
+}
+
+.map-viewer .current-position-marker-smooth * {
+    animation-play-state: paused !important;
+    transition: none !important;
+}
+
+/* Final override to ensure no bouncing */
+.current-position-marker-smooth,
+.current-position-marker-smooth *,
+.current-position-marker-smooth::before,
+.current-position-marker-smooth::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+}
+
+/* Only position changes allowed */
+.leaflet-interactive.simulation-active {
+    transition: none !important;
+}
+
+/* Ensure CircleMarker positions update smoothly */
+.leaflet-interactive circle {
+    transition: cx 0.033s linear, cy 0.033s linear !important;
+}
+
+/* Interval control styling */
+.interval-control {
+    margin-top: 1rem;
+}
+
+.interval-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.interval-input {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    max-width: 120px;
+}
+
+.interval-input:focus {
+    outline: none;
+    border-color: #2196F3;
+    box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.2);
+}
+
+.interval-presets {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.interval-presets .btn-tiny {
+    min-width: 50px;
+    text-align: center;
+}
+
+.interval-presets .btn-tiny.active {
+    background: #2196F3;
+    color: white;
+}
+
+/* Enhanced status indicators */
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.status-light {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.status-light.running {
+    background-color: #4CAF50;
+    animation: pulse 2s infinite;
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+}
+
+.status-light.stopped {
+    background-color: #f44336;
+    animation: none;
+}
+
+/* Enhanced error hints */
+.error-hint {
+    color: #d32f2f;
+    font-style: italic;
+    margin-top: 0.25rem;
+}
+
+/* Better mobile responsiveness for new controls */
+@media (max-width: 768px) {
+    .interval-input-group {
+        align-items: stretch;
+    }
+
+    .interval-input {
+        max-width: none;
+    }
+
+    .interval-presets {
+        justify-content: space-between;
+    }
+
+    .interval-presets .btn-tiny {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+/* Loading states for better UX */
+.btn-primary.loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    border-top-color: transparent;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Enhanced simulation statistics */
+.simulation-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.5rem;
+}
+
+.stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.stat-value {
+    font-weight: 600;
+    color: #333;
+    font-family: monospace;
+}
