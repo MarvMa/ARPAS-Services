@@ -11,6 +11,8 @@ interface SimulationControlsProps {
     onExportResults: () => Promise<void>;
     onClearResults: () => void;
     onDeleteProfile?: (profileId: string) => void;
+    onProfileVisibilityToggle?: (profileId: string) => void;
+    onFocusProfile?: (profileId: string) => void;
 }
 
 export const SimulationControls: React.FC<SimulationControlsProps> = ({
@@ -22,7 +24,9 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                                                                           simulationState,
                                                                           onExportResults,
                                                                           onClearResults,
-                                                                          onDeleteProfile
+                                                                          onDeleteProfile,
+                                                                          onProfileVisibilityToggle,
+                                                                          onFocusProfile
                                                                       }) => {
     const [optimized, setOptimized] = useState<boolean>(true);
     const [intervalMs, setIntervalMs] = useState<number>(200);
@@ -37,6 +41,24 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             onProfileSelectionChange(selectedProfiles.filter(p => p.id !== profile.id));
         } else {
             onProfileSelectionChange([...selectedProfiles, profile]);
+        }
+    };
+
+    /**
+     * Handles profile visibility toggle
+     */
+    const handleVisibilityToggle = (profileId: string) => {
+        if (onProfileVisibilityToggle) {
+            onProfileVisibilityToggle(profileId);
+        }
+    };
+
+    /**
+     * Handles focusing on a specific profile on the map
+     */
+    const handleFocusProfile = (profileId: string) => {
+        if (onFocusProfile) {
+            onFocusProfile(profileId);
         }
     };
 
@@ -90,8 +112,31 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         onProfileSelectionChange([]);
     };
 
+    /**
+     * Shows all profiles on the map
+     */
+    const showAllProfiles = () => {
+        profiles.forEach(profile => {
+            if (!profile.isVisible && onProfileVisibilityToggle) {
+                onProfileVisibilityToggle(profile.id);
+            }
+        });
+    };
+
+    /**
+     * Hides all profiles from the map
+     */
+    const hideAllProfiles = () => {
+        profiles.forEach(profile => {
+            if (profile.isVisible && onProfileVisibilityToggle) {
+                onProfileVisibilityToggle(profile.id);
+            }
+        });
+    };
+
     const isRunning = simulationState?.isRunning || false;
     const canStart = !isRunning && selectedProfiles.length > 0 && !isStarting;
+    const visibleProfilesCount = profiles.filter(p => p.isVisible).length;
 
     return (
         <div className="simulation-controls">
@@ -102,6 +147,96 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                     <span className="status-text">
             {isRunning ? 'Simulation Running' : 'Simulation Stopped'}
           </span>
+                </div>
+            </div>
+
+            {/* Profile Management */}
+            <div className="control-group">
+                <div className="profile-management-header">
+                    <h3>Profile Management ({profiles.length} total, {visibleProfilesCount} visible)</h3>
+                    <div className="profile-management-actions">
+                        <button
+                            type="button"
+                            onClick={showAllProfiles}
+                            className="btn-secondary btn-small"
+                            title="Show all profiles on map"
+                        >
+                            👁️ Show All
+                        </button>
+                        <button
+                            type="button"
+                            onClick={hideAllProfiles}
+                            className="btn-secondary btn-small"
+                            title="Hide all profiles from map"
+                        >
+                            🙈 Hide All
+                        </button>
+                    </div>
+                </div>
+
+                <div className="profile-list">
+                    {profiles.map((profile) => {
+                        const isSelected = selectedProfiles.some(p => p.id === profile.id);
+                        return (
+                            <div
+                                key={profile.id}
+                                className={`profile-item ${isSelected ? 'selected' : ''} ${profile.isVisible ? 'visible' : 'hidden'}`}
+                            >
+                                <div className="profile-main">
+                                    <div className="profile-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => handleProfileToggle(profile)}
+                                            disabled={isRunning}
+                                            title="Select for simulation"
+                                        />
+                                    </div>
+                                    <div className="profile-info">
+                                        <div className="profile-name">{profile.name}</div>
+                                        <div className="profile-details">
+                                            <span className="data-points">{profile.data.length} points</span>
+                                            <div
+                                                className="profile-color"
+                                                style={{ backgroundColor: profile.color }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="profile-actions">
+                                    <button
+                                        onClick={() => handleVisibilityToggle(profile.id)}
+                                        className={`btn-secondary btn-tiny ${profile.isVisible ? 'visible' : 'hidden'}`}
+                                        title={profile.isVisible ? 'Hide from map' : 'Show on map'}
+                                    >
+                                        {profile.isVisible ? '👁️' : '🙈'}
+                                    </button>
+                                    <button
+                                        onClick={() => handleFocusProfile(profile.id)}
+                                        className="btn-primary btn-tiny"
+                                        title="Focus on map"
+                                        disabled={!profile.isVisible}
+                                    >
+                                        🎯
+                                    </button>
+                                    {onDeleteProfile && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDeleteProfile(profile.id);
+                                            }}
+                                            className="btn-danger btn-tiny"
+                                            disabled={isRunning}
+                                            title="Delete Profile"
+                                        >
+                                            🗑️
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
@@ -144,10 +279,10 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                 <small>Lower values provide smoother interpolation but higher computational load.</small>
             </div>
 
-            {/* Profile Selection */}
+            {/* Profile Selection for Simulation */}
             <div className="control-group">
                 <div className="profile-selection-header">
-                    <h3>Profile Selection ({selectedProfiles.length}/{profiles.length})</h3>
+                    <h3>Simulation Selection ({selectedProfiles.length}/{profiles.length})</h3>
                     <div className="profile-selection-actions">
                         <button
                             type="button"
@@ -167,57 +302,8 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         </button>
                     </div>
                 </div>
-
-                <div className="profile-list">
-                    {profiles.map((profile) => {
-                        const isSelected = selectedProfiles.some(p => p.id === profile.id);
-                        return (
-                            <div
-                                key={profile.id}
-                                className={`profile-item ${isSelected ? 'selected' : ''}`}
-                            >
-                                <div
-                                    className="profile-main"
-                                    onClick={() => !isRunning && handleProfileToggle(profile)}
-                                >
-                                    <div className="profile-checkbox">
-                                        <input
-                                            type="checkbox"
-                                            checked={isSelected}
-                                            onChange={() => handleProfileToggle(profile)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className="profile-info">
-                                        <div className="profile-name">{profile.name}</div>
-                                        <div className="profile-details">
-                                            <span className="data-points">{profile.data.length} points</span>
-                                            <div
-                                                className="profile-color"
-                                                style={{ backgroundColor: profile.color }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {onDeleteProfile && (
-                                    <div className="profile-actions">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onDeleteProfile(profile.id);
-                                            }}
-                                            className="btn-danger btn-tiny"
-                                            disabled={isRunning}
-                                            title="Delete Profile"
-                                        >
-                                            🗑️
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                <div className="selection-info">
+                    <small>Select profiles to include in the simulation. Visibility on map is independent of simulation selection.</small>
                 </div>
             </div>
 

@@ -1087,4 +1087,23 @@ small {
     .profile-selection-actions button {
         width: 100%;
     }
+
+    /* Loading indicator */
+    .loading-indicator {
+        background: #e3f2fd;
+        border: 1px solid #2196F3;
+        border-radius: 4px;
+        padding: 1rem;
+        text-align: center;
+        color: #1976D2;
+        margin-bottom: 1rem;
+        animation: pulse 2s infinite;
+    }
+
+    /* Simulation actions */
+    .simulation-actions, .results-actions {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
 }

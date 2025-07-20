@@ -1,4 +1,4 @@
-import { Profile, DataPoint, RawLocationData } from '../types/simulation';
+import {Profile, DataPoint, RawLocationData} from '../types/simulation';
 
 export class ProfileService {
     private profiles: Profile[] = [];
@@ -17,7 +17,7 @@ export class ProfileService {
             reader.onload = (event) => {
                 try {
                     const content = event.target?.result as string;
-                    const rawData: RawLocationData[] = JSON.parse(content);
+                    const rawData = JSON.parse(content);
 
                     const profile = this.createProfileFromData(rawData, file.name);
                     resolve(profile);
@@ -36,45 +36,33 @@ export class ProfileService {
     }
 
     /**
-     * Creates a profile from raw location data
+     * Creates a profile from raw location data with flexible parsing
      */
-    private createProfileFromData(rawData: RawLocationData[], filename: string): Profile {
-        // Filter out metadata entries and only keep location sensor data
-        const locationData = rawData.filter(entry =>
-            entry.sensor === 'Location' &&
-            entry.latitude &&
-            entry.longitude &&
-            entry.time
-        );
+    private createProfileFromData(rawData: any, filename: string): Profile {
+        let dataPoints: DataPoint[] = [];
 
-        if (locationData.length === 0) {
-            throw new Error('No valid location data found in file');
+        // Check if rawData is an array
+        if (Array.isArray(rawData)) {
+            // Try to parse as array of location entries
+            dataPoints = this.parseLocationArray(rawData);
+        } else if (typeof rawData === 'object') {
+            // Check if it's an object with a data array property
+            const possibleArrayKeys = ['data', 'locations', 'points', 'coordinates', 'tracks'];
+            for (const key of possibleArrayKeys) {
+                if (Array.isArray(rawData[key])) {
+                    dataPoints = this.parseLocationArray(rawData[key]);
+                    break;
+                }
+            }
         }
 
-        const dataPoints: DataPoint[] = locationData.map(entry => {
-            // Convert nanosecond timestamp to milliseconds
-            let timestamp = parseInt(entry.time);
-            if (timestamp > Date.now() * 1000000) {
-                // Appears to be nanoseconds, convert to milliseconds
-                timestamp = Math.floor(timestamp / 1000000);
-            }
-
-            return {
-                lat: parseFloat(entry.latitude),
-                lng: parseFloat(entry.longitude),
-                timestamp,
-                speed: entry.speed && entry.speed !== '-1' ? parseFloat(entry.speed) : undefined,
-                altitude: entry.altitude && entry.altitude !== '0' ? parseFloat(entry.altitude) : undefined,
-                bearing: entry.bearing && entry.bearing !== '-1' ? parseFloat(entry.bearing) : undefined,
-                horizontalAccuracy: entry.horizontalAccuracy ? parseFloat(entry.horizontalAccuracy) : undefined,
-                verticalAccuracy: entry.verticalAccuracy ? parseFloat(entry.verticalAccuracy) : undefined,
-            };
-        });
+        if (dataPoints.length === 0) {
+            throw new Error('No valid location data found in file. Expected latitude/longitude data.');
+        }
 
         // Sort by timestamp to ensure correct order
         dataPoints.sort((a, b) => a.timestamp - b.timestamp);
 
-        // Generate profile name from filename
         const profileName = this.generateProfileName(filename);
 
         const profile: Profile = {
@@ -84,7 +72,123 @@ export class ProfileService {
             color: this.getNextColor()
         };
 
+        console.log(`Created profile "${profileName}" with ${dataPoints.length} points`);
         return profile;
+    }
+
+    /**
+     * Parses an array of location entries with flexible field detection
+     */
+    private parseLocationArray(rawArray: any[]): DataPoint[] {
+        const dataPoints: DataPoint[] = [];
+
+        for (const entry of rawArray) {
+            try {
+                // Try different field names for latitude
+                const lat = this.extractCoordinate(entry, ['latitude', 'lat', 'Latitude', 'Lat', 'y']);
+                const lng = this.extractCoordinate(entry, ['longitude', 'lng', 'lon', 'Longitude', 'Lng', 'Lon', 'x']);
+
+                if (lat === null || lng === null) {
+                    continue; // Skip entries without valid coordinates
+                }
+
+                // Try different field names for timestamp
+                const timestamp = this.extractTimestamp(entry, ['time', 'timestamp', 'Time', 'Timestamp', 'dateTime', 'DateTime']);
+
+                if (timestamp === null) {
+                    console.warn('Entry missing timestamp, skipping:', entry);
+                    continue;
+                }
+
+                const dataPoint: DataPoint = {
+                    lat,
+                    lng,
+                    timestamp,
+                    speed: this.extractOptionalNumber(entry, ['speed', 'Speed', 'velocity', 'Velocity']),
+                    altitude: this.extractOptionalNumber(entry, ['altitude', 'Altitude', 'alt', 'Alt', 'elevation', 'Elevation', 'z']),
+                    bearing: this.extractOptionalNumber(entry, ['bearing', 'Bearing', 'heading', 'Heading', 'direction', 'Direction']),
+                    horizontalAccuracy: this.extractOptionalNumber(entry, ['horizontalAccuracy', 'HorizontalAccuracy', 'accuracy', 'Accuracy']),
+                    verticalAccuracy: this.extractOptionalNumber(entry, ['verticalAccuracy', 'VerticalAccuracy'])
+                };
+
+                dataPoints.push(dataPoint);
+            } catch (error) {
+                console.warn('Failed to parse entry:', entry, error);
+            }
+        }
+
+        return dataPoints;
+    }
+
+    /**
+     * Extracts a coordinate value from an entry trying multiple field names
+     */
+    private extractCoordinate(entry: any, fieldNames: string[]): number | null {
+        for (const field of fieldNames) {
+            if (field in entry) {
+                const value = parseFloat(entry[field]);
+                if (!isNaN(value)) {
+                    return value;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extracts a timestamp from an entry trying multiple field names
+     */
+    private extractTimestamp(entry: any, fieldNames: string[]): number | null {
+        for (const field of fieldNames) {
+            if (field in entry) {
+                let timestamp = entry[field];
+
+                // Handle different timestamp formats
+                if (typeof timestamp === 'string') {
+                    // Try parsing as ISO date
+                    const date = new Date(timestamp);
+                    if (!isNaN(date.getTime())) {
+                        return date.getTime();
+                    }
+
+                    // Try parsing as number
+                    timestamp = parseInt(timestamp);
+                }
+
+                if (typeof timestamp === 'number') {
+                    // Check if it's in nanoseconds (very large number)
+                    if (timestamp > Date.now() * 1000000) {
+                        return Math.floor(timestamp / 1000000); // Convert nanoseconds to milliseconds
+                    }
+                    // Check if it's in microseconds
+                    else if (timestamp > Date.now() * 1000) {
+                        return Math.floor(timestamp / 1000); // Convert microseconds to milliseconds
+                    }
+                    // Check if it's in seconds (too small)
+                    else if (timestamp < Date.now() / 1000) {
+                        return timestamp * 1000; // Convert seconds to milliseconds
+                    }
+                    // Assume it's already in milliseconds
+                    return timestamp;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extracts an optional numeric value from an entry
+     */
+    private extractOptionalNumber(entry: any, fieldNames: string[]): number | undefined {
+        for (const field of fieldNames) {
+            if (field in entry) {
+                const value = parseFloat(entry[field]);
+                if (!isNaN(value) && value !== -1) { // -1 often means "no data"
+                    return value;
+                }
+            }
+        }
+        return undefined;
     }
 
     /**
@@ -130,7 +234,27 @@ export class ProfileService {
         }
 
         // If all colors are used, generate a random color
-        return `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
+        return `#${Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')}`;
+    }
+
+    /**
+     * Loads a profile from a URL (for pre-loaded profiles)
+     */
+    async loadProfileFromUrl(url: string, filename: string): Promise<Profile> {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch profile: ${response.statusText}`);
+            }
+
+            const rawData = await response.json();
+            const profile = this.createProfileFromData(rawData, filename);
+            this.addProfile(profile);
+            return profile;
+        } catch (error) {
+            console.error(`Failed to load profile from ${url}:`, error);
+            throw error;
+        }
     }
 
     /**
@@ -174,14 +298,14 @@ export class ProfileService {
             return false;
         }
 
-        // Check if at least some entries have the required location fields
-        const locationEntries = data.filter(entry =>
-            entry.sensor === 'Location' &&
-            entry.latitude &&
-            entry.longitude
-        );
+        // Check if at least some entries have recognizable location fields
+        const hasValidEntries = data.some(entry => {
+            const hasLat = this.extractCoordinate(entry, ['latitude', 'lat', 'Latitude', 'Lat']) !== null;
+            const hasLng = this.extractCoordinate(entry, ['longitude', 'lng', 'lon', 'Longitude', 'Lng', 'Lon']) !== null;
+            return hasLat && hasLng;
+        });
 
-        return locationEntries.length > 0;
+        return hasValidEntries;
     }
 
     /**
@@ -248,7 +372,7 @@ export class ProfileService {
         // Calculate total distance using Haversine formula
         let totalDistance = 0;
         for (let i = 1; i < data.length; i++) {
-            totalDistance += this.calculateDistance(data[i-1], data[i]);
+            totalDistance += this.calculateDistance(data[i - 1], data[i]);
         }
 
         const duration = data[data.length - 1].timestamp - data[0].timestamp;

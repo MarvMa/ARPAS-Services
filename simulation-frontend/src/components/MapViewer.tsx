@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Polyline, CircleMarker, Popup, Marker, useMapEvents } from 'react-leaflet';
-import { LatLngExpression, LatLngBoundsExpression, LatLngTuple, LeafletMouseEvent, DivIcon } from 'leaflet';
-import { Profile, InterpolatedPoint, SimulationState, Object3D } from '../types/simulation';
-import { interpolatePoints, smoothPoints } from '../utils/interpolation';
+import React, {useEffect, useRef, useState} from 'react';
+import {MapContainer, TileLayer, Polyline, CircleMarker, Popup, Marker, useMapEvents} from 'react-leaflet';
+import {LatLngExpression, LatLngBoundsExpression, LatLngTuple, LeafletMouseEvent, DivIcon} from 'leaflet';
+import {Profile, InterpolatedPoint, SimulationState, Object3D} from '../types/simulation';
+import {interpolatePoints, smoothPoints} from '../utils/interpolation';
 import 'leaflet/dist/leaflet.css';
 
 interface MapViewerProps {
@@ -16,6 +16,7 @@ interface MapViewerProps {
     onObjectSelect: (object: Object3D | null) => void;
     onMapClick?: (lat: number, lng: number) => void;
     isAddingMode?: boolean;
+    onProfileVisibilityToggle?: (profileId: string) => void;
 }
 
 export const MapViewer: React.FC<MapViewerProps> = ({
@@ -28,7 +29,8 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                                                         selectedObject,
                                                         onObjectSelect,
                                                         onMapClick,
-                                                        isAddingMode = false
+                                                        isAddingMode = false,
+                                                        onProfileVisibilityToggle
                                                     }) => {
     const [interpolatedData, setInterpolatedData] = useState<Map<string, InterpolatedPoint[]>>(new Map());
     const [currentPositions, setCurrentPositions] = useState<Map<string, InterpolatedPoint>>(new Map());
@@ -120,11 +122,16 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     const getMapBounds = (): LatLngBoundsExpression | undefined => {
         const allPoints: { lat: number; lng: number }[] = [];
 
-        // Add profile data points
+        // Add profile data points from visible profiles
+        const visibleProfiles = profiles.filter(profile => profile.isVisible);
+
         if (showInterpolated) {
-            interpolatedData.forEach(points => allPoints.push(...points));
+            visibleProfiles.forEach(profile => {
+                const points = interpolatedData.get(profile.id);
+                if (points) allPoints.push(...points);
+            });
         } else {
-            selectedProfiles.forEach(profile => {
+            visibleProfiles.forEach(profile => {
                 allPoints.push(...profile.data);
             });
         }
@@ -132,7 +139,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         // Add 3D object locations
         objects3D.forEach(obj => {
             if (obj.latitude !== undefined && obj.longitude !== undefined) {
-                allPoints.push({ lat: obj.latitude, lng: obj.longitude });
+                allPoints.push({lat: obj.latitude, lng: obj.longitude});
             }
         });
 
@@ -153,11 +160,16 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     const getMapCenter = (): LatLngExpression => {
         const allPoints: { lat: number; lng: number }[] = [];
 
-        // Add profile data points
+        // Add profile data points from visible profiles
+        const visibleProfiles = profiles.filter(profile => profile.isVisible);
+
         if (showInterpolated) {
-            interpolatedData.forEach(points => allPoints.push(...points));
+            visibleProfiles.forEach(profile => {
+                const points = interpolatedData.get(profile.id);
+                if (points) allPoints.push(...points);
+            });
         } else {
-            selectedProfiles.forEach(profile => {
+            visibleProfiles.forEach(profile => {
                 allPoints.push(...profile.data);
             });
         }
@@ -165,7 +177,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         // Add 3D object locations
         objects3D.forEach(obj => {
             if (obj.latitude !== undefined && obj.longitude !== undefined) {
-                allPoints.push({ lat: obj.latitude, lng: obj.longitude });
+                allPoints.push({lat: obj.latitude, lng: obj.longitude});
             }
         });
 
@@ -218,7 +230,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                                     <label>Location:</label>
                                     <span>
                     {obj.latitude?.toFixed(6)}, {obj.longitude?.toFixed(6)}
-                                        {obj.altitude !== undefined && <><br />Alt: {obj.altitude.toFixed(1)}m</>}
+                                        {obj.altitude !== undefined && <><br/>Alt: {obj.altitude.toFixed(1)}m</>}
                   </span>
                                 </div>
                                 <div className="popup-field">
@@ -230,7 +242,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        downloadObject(obj);
+                                        downloadObject(obj).then(r => console.log("Downloaded object:", r)).catch(err => console.error("Download error:", err));
                                     }}
                                     className="btn-secondary btn-tiny"
                                 >
@@ -285,7 +297,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     const renderProfilePolylines = (profile: Profile) => {
         const data = showInterpolated
             ? interpolatedData.get(profile.id) || []
-            : profile.data.map(p => ({ ...p, isInterpolated: false }));
+            : profile.data.map(p => ({...p, isInterpolated: false}));
 
         if (data.length < 2) return null;
 
@@ -321,12 +333,12 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             >
                 <Popup>
                     <div>
-                        <strong>{profile.name}</strong><br />
-                        Point {index + 1}<br />
-                        Lat: {point.lat.toFixed(6)}<br />
-                        Lng: {point.lng.toFixed(6)}<br />
-                        {point.speed && <span>Speed: {point.speed.toFixed(2)} m/s<br /></span>}
-                        {point.altitude && <span>Altitude: {point.altitude.toFixed(1)} m<br /></span>}
+                        <strong>{profile.name}</strong><br/>
+                        Point {index + 1}<br/>
+                        Lat: {point.lat.toFixed(6)}<br/>
+                        Lng: {point.lng.toFixed(6)}<br/>
+                        {point.speed && <span>Speed: {point.speed.toFixed(2)} m/s<br/></span>}
+                        {point.altitude && <span>Altitude: {point.altitude.toFixed(1)} m<br/></span>}
                         Time: {new Date(point.timestamp).toLocaleTimeString()}
                     </div>
                 </Popup>
@@ -356,12 +368,12 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                 >
                     <Popup>
                         <div>
-                            <strong>{profile.name}</strong><br />
-                            Original Point<br />
-                            Lat: {point.lat.toFixed(6)}<br />
-                            Lng: {point.lng.toFixed(6)}<br />
-                            {point.speed && <span>Speed: {point.speed.toFixed(2)} m/s<br /></span>}
-                            {point.altitude && <span>Altitude: {point.altitude.toFixed(1)} m<br /></span>}
+                            <strong>{profile.name}</strong><br/>
+                            Original Point<br/>
+                            Lat: {point.lat.toFixed(6)}<br/>
+                            Lng: {point.lng.toFixed(6)}<br/>
+                            {point.speed && <span>Speed: {point.speed.toFixed(2)} m/s<br/></span>}
+                            {point.altitude && <span>Altitude: {point.altitude.toFixed(1)} m<br/></span>}
                             Time: {new Date(point.timestamp).toLocaleTimeString()}
                         </div>
                     </Popup>
@@ -392,13 +404,13 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                 >
                     <Popup>
                         <div>
-                            <strong>{profile.name}</strong><br />
-                            Current Position<br />
-                            Lat: {position.lat.toFixed(6)}<br />
-                            Lng: {position.lng.toFixed(6)}<br />
-                            {position.speed && <span>Speed: {position.speed.toFixed(2)} m/s<br /></span>}
-                            {position.altitude && <span>Altitude: {position.altitude.toFixed(1)} m<br /></span>}
-                            {position.isInterpolated && <span><em>Interpolated</em><br /></span>}
+                            <strong>{profile.name}</strong><br/>
+                            Current Position<br/>
+                            Lat: {position.lat.toFixed(6)}<br/>
+                            Lng: {position.lng.toFixed(6)}<br/>
+                            {position.speed && <span>Speed: {position.speed.toFixed(2)} m/s<br/></span>}
+                            {position.altitude && <span>Altitude: {position.altitude.toFixed(1)} m<br/></span>}
+                            {position.isInterpolated && <span><em>Interpolated</em><br/></span>}
                             Time: {new Date(position.timestamp).toLocaleTimeString()}
                         </div>
                     </Popup>
@@ -417,11 +429,11 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                 <div className="map-legend">
                     <h4>Map Legend</h4>
                     <div className="legend-items">
-                        {selectedProfiles.map(profile => (
+                        {profiles.filter(profile => profile.isVisible).map(profile => (
                             <div key={profile.id} className="legend-item">
                                 <div
                                     className="legend-color"
-                                    style={{ backgroundColor: profile.color }}
+                                    style={{backgroundColor: profile.color}}
                                 ></div>
                                 <span className="legend-label">{profile.name}</span>
                                 <span className="legend-count">
@@ -429,6 +441,15 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                                     ? interpolatedData.get(profile.id)?.length || 0
                                     : profile.data.length} points)
                 </span>
+                                {onProfileVisibilityToggle && (
+                                    <button
+                                        className="legend-toggle"
+                                        onClick={() => onProfileVisibilityToggle(profile.id)}
+                                        title="Toggle visibility"
+                                    >
+                                        👁️
+                                    </button>
+                                )}
                             </div>
                         ))}
                         {objects3D.length > 0 && (
@@ -473,18 +494,18 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                 center={center}
                 zoom={13}
                 bounds={bounds}
-                style={{ height: '600px', width: '100%' }}
+                style={{height: '600px', width: '100%'}}
                 className={`leaflet-map ${isAddingMode ? 'adding-mode' : ''}`}
             >
-                <MapEventHandler />
+                <MapEventHandler/>
 
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
 
-                {/* Render profile data */}
-                {selectedProfiles.map(profile => (
+                {/* Render profile data for visible profiles */}
+                {profiles.filter(profile => profile.isVisible).map(profile => (
                     <React.Fragment key={profile.id}>
                         {renderProfilePolylines(profile)}
                         {renderOriginalMarkers(profile)}

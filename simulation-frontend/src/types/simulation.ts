@@ -3,6 +3,7 @@ export interface Profile {
     name: string;
     data: DataPoint[];
     color: string;
+    isVisible: boolean;
 }
 
 export interface DataPoint {
@@ -17,15 +18,23 @@ export interface DataPoint {
 }
 
 export interface RawLocationData {
-    latitude: string;
-    longitude: string;
-    time: string;
-    speed?: string;
-    altitude?: string;
-    bearing?: string;
-    horizontalAccuracy?: string;
-    verticalAccuracy?: string;
-    sensor: string;
+    latitude?: string | number;
+    longitude?: string | number;
+    lat?: string | number;
+    lng?: string | number;
+    lon?: string | number;
+    time?: string | number;
+    timestamp?: string | number;
+    speed?: string | number;
+    altitude?: string | number;
+    bearing?: string | number;
+    heading?: string | number;
+    horizontalAccuracy?: string | number;
+    verticalAccuracy?: string | number;
+    accuracy?: string | number;
+    sensor?: string;
+
+    [key: string]: any; // Allow additional fields
 }
 
 export interface Object3D {

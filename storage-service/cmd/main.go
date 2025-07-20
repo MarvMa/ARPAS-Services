@@ -81,6 +81,7 @@ func main() {
 
 	api.Post("/predict", predictionHandler.GetPredictedModels)
 
+	api.Get("/objects", objHandler.ListObjects)
 	api.Get("/objects/:id", objHandler.GetObject)
 	api.Post("/objects/upload", objHandler.UploadObject)
 	api.Delete("/objects/:id", objHandler.DeleteObject)

@@ -1,12 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { SimulationControls } from './components/SimulationControls';
-import { MapViewer } from './components/MapViewer';
-import { ObjectManager } from './components/ObjectManager';
-import { SimulationService } from './services/simulationService';
-import { DataCollector } from './services/dataCollector';
-import { StorageService } from './services/storageService';
-import { ProfileService } from './services/profileService';
-import { Profile, SimulationState, SimulationConfig, Object3D } from './types/simulation';
+import React, {useState, useEffect, useRef} from 'react';
+import {SimulationControls} from './components/SimulationControls';
+import {MapViewer} from './components/MapViewer';
+import {ObjectManager} from './components/ObjectManager';
+import {SimulationService} from './services/simulationService';
+import {DataCollector} from './services/dataCollector';
+import {StorageService} from './services/storageService';
+import {ProfileService} from './services/profileService';
+import {Profile, SimulationState, SimulationConfig, Object3D} from './types/simulation';
+
+// Define the profiles to be loaded automatically
+const PRELOADED_PROFILES: string[] = [
+    'Disseminat_Var_668-2025-07-19_15-27-54.json',
+    // Add your profile filenames here
+    // Example: 'profile1.json', 'profile2.json'
+];
 
 const App: React.FC = () => {
     const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -18,6 +25,8 @@ const App: React.FC = () => {
     const [smoothingEnabled, setSmoothingEnabled] = useState<boolean>(false);
     const [isAddingMode, setIsAddingMode] = useState<boolean>(false);
     const [storageServiceAvailable, setStorageServiceAvailable] = useState<boolean>(false);
+    const [isLoadingProfiles, setIsLoadingProfiles] = useState<boolean>(false);
+    const [loadingError, setLoadingError] = useState<string | null>(null);
 
     const [simulationService] = useState(() => new SimulationService());
     const [dataCollector] = useState(() => new DataCollector());
@@ -46,6 +55,53 @@ const App: React.FC = () => {
             await load3DObjects();
         } else {
             console.warn('Storage service is not available. 3D object features will be disabled.');
+        }
+
+        // Load predefined profiles from public folder
+        await loadPredefinedProfiles();
+    };
+
+    /**
+     * Loads predefined profiles from the public/profiles folder
+     */
+    const loadPredefinedProfiles = async () => {
+        if (PRELOADED_PROFILES.length === 0) {
+            console.log('No predefined profiles to load');
+            return;
+        }
+
+        setIsLoadingProfiles(true);
+        setLoadingError(null);
+
+        try {
+            const loadPromises = PRELOADED_PROFILES.map(async (filename) => {
+                try {
+                    const url = `/profiles/${filename}`;
+                    const profile = await profileService.loadProfileFromUrl(url, filename);
+                    console.log(`Successfully loaded profile: ${filename}`);
+                    return profile;
+                } catch (error) {
+                    console.error(`Failed to load profile ${filename}:`, error);
+                    return null;
+                }
+            });
+
+            const results = await Promise.all(loadPromises);
+            const successfulProfiles = results.filter(profile => profile !== null) as Profile[];
+
+            if (successfulProfiles.length > 0) {
+                setProfiles(profileService.getAllProfiles());
+                console.log(`Loaded ${successfulProfiles.length} predefined profiles`);
+            }
+
+            if (successfulProfiles.length < PRELOADED_PROFILES.length) {
+                setLoadingError(`Only loaded ${successfulProfiles.length} out of ${PRELOADED_PROFILES.length} profiles. Check console for details.`);
+            }
+        } catch (error) {
+            console.error('Failed to load predefined profiles:', error);
+            setLoadingError('Failed to load predefined profiles. Check console for details.');
+        } finally {
+            setIsLoadingProfiles(false);
         }
     };
 
@@ -219,7 +275,7 @@ const App: React.FC = () => {
     const handleExportProfiles = () => {
         try {
             const jsonString = profileService.exportProfiles();
-            const blob = new Blob([jsonString], { type: 'application/json' });
+            const blob = new Blob([jsonString], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
 
             const link = document.createElement('a');
@@ -237,6 +293,19 @@ const App: React.FC = () => {
         }
     };
 
+    /**
+     * Reloads predefined profiles
+     */
+    const handleReloadProfiles = async () => {
+        const confirmed = window.confirm('This will reload all predefined profiles. Continue?');
+        if (confirmed) {
+            profileService.clearAllProfiles();
+            setProfiles([]);
+            setSelectedProfiles([]);
+            await loadPredefinedProfiles();
+        }
+    };
+
     return (
         <div className="app">
             <header className="app-header">
@@ -248,7 +317,7 @@ const App: React.FC = () => {
                         accept=".json"
                         multiple
                         onChange={handleProfileUpload}
-                        style={{ display: 'none' }}
+                        style={{display: 'none'}}
                         id="profile-upload"
                     />
                     <label htmlFor="profile-upload" className="btn-secondary">
@@ -257,6 +326,11 @@ const App: React.FC = () => {
                     <button onClick={handleExportProfiles} className="btn-secondary">
                         Export Profiles
                     </button>
+                    {PRELOADED_PROFILES.length > 0 && (
+                        <button onClick={handleReloadProfiles} className="btn-secondary">
+                            Reload Predefined
+                        </button>
+                    )}
                     <button
                         onClick={() => setIsAddingMode(!isAddingMode)}
                         className={`btn-primary ${isAddingMode ? 'active' : ''}`}
@@ -270,6 +344,19 @@ const App: React.FC = () => {
 
             <main className="app-main">
                 <div className="left-panel">
+                    {loadingError && (
+                        <div className="error-message">
+                            <span>{loadingError}</span>
+                            <button onClick={() => setLoadingError(null)} className="error-close">×</button>
+                        </div>
+                    )}
+
+                    {isLoadingProfiles && (
+                        <div className="loading-indicator">
+                            <span>Loading predefined profiles...</span>
+                        </div>
+                    )}
+
                     <SimulationControls
                         profiles={profiles}
                         selectedProfiles={selectedProfiles}
@@ -337,12 +424,12 @@ const App: React.FC = () => {
                 <div className="footer-info">
                     <span>Simulation Framework v1.0</span>
                     <span>
-            {profiles.length} profiles loaded |
+                        {profiles.length} profiles loaded |
                         {selectedProfiles.length} selected |
                         {objects3D.length} 3D objects |
                         {simulationState?.isRunning ? ' Running' : ' Stopped'}
                         {!storageServiceAvailable && ' | Storage service unavailable'}
-          </span>
+                    </span>
                 </div>
             </footer>
         </div>
