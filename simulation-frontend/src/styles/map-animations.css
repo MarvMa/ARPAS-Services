@@ -1,0 +1,34 @@
+/* Smooth animation for simulation markers */
+.current-position-marker {
+    transition: all 0.1s ease-out !important;
+}
+
+/* Alternative smoother transition */
+.leaflet-interactive {
+    transition: transform 0.1s ease-out;
+}
+
+/* Specific styling for current position markers */
+.current-position-marker circle {
+    transition: cx 0.1s ease-out, cy 0.1s ease-out;
+}
+
+/* Pulsing animation for active simulation markers */
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.2);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.current-position-marker.active {
+    animation: pulse 2s infinite;
+}

@@ -1,4 +1,4 @@
-import { DataPoint, InterpolatedPoint } from '../types/simulation';
+import {DataPoint, InterpolatedPoint} from '../types/simulation';
 
 /**
  * Interpolates between data points to create a smooth timeline with consistent intervals
@@ -8,7 +8,7 @@ export function interpolatePoints(
     intervalMs: number
 ): InterpolatedPoint[] {
     if (originalPoints.length < 2) {
-        return originalPoints.map(point => ({ ...point, isInterpolated: false }));
+        return originalPoints.map(point => ({...point, isInterpolated: false}));
     }
 
     // Sort points by timestamp
@@ -20,11 +20,11 @@ export function interpolatePoints(
     const totalDuration = endTime - startTime;
 
     if (totalDuration <= 0) {
-        return sortedPoints.map(point => ({ ...point, isInterpolated: false }));
+        return sortedPoints.map(point => ({...point, isInterpolated: false}));
     }
 
     // Add the first point
-    interpolatedPoints.push({ ...sortedPoints[0], isInterpolated: false });
+    interpolatedPoints.push({...sortedPoints[0], isInterpolated: false});
 
     let currentTime = startTime + intervalMs;
     let currentSegmentIndex = 0;
@@ -37,7 +37,7 @@ export function interpolatePoints(
             ) {
             // Add original points that fall within our timeline
             const originalPoint = sortedPoints[currentSegmentIndex + 1];
-            interpolatedPoints.push({ ...originalPoint, isInterpolated: false });
+            interpolatedPoints.push({...originalPoint, isInterpolated: false});
             currentSegmentIndex++;
         }
 
@@ -53,9 +53,9 @@ export function interpolatePoints(
                     endPoint,
                     currentTime
                 );
-                
+
                 if (interpolatedPoint) {
-                    interpolatedPoints.push({ ...interpolatedPoint, isInterpolated: true });
+                    interpolatedPoints.push({...interpolatedPoint, isInterpolated: true});
                 }
             }
         }
@@ -66,7 +66,7 @@ export function interpolatePoints(
     // Add the last point
     const lastPoint = sortedPoints[sortedPoints.length - 1];
     if (interpolatedPoints[interpolatedPoints.length - 1]?.timestamp !== lastPoint.timestamp) {
-        interpolatedPoints.push({ ...lastPoint, isInterpolated: false });
+        interpolatedPoints.push({...lastPoint, isInterpolated: false});
     }
 
     return interpolatedPoints;
@@ -92,7 +92,7 @@ export function interpolateBetweenPoints(
         timestamp: targetTime,
         speed: startPoint.speed ? startPoint.speed + (endPoint.speed! - startPoint.speed) * clampedRatio : undefined,
         altitude: startPoint.altitude ? startPoint.altitude + (endPoint.altitude! - startPoint.altitude) * clampedRatio : undefined,
-        bearing: interpolateBearing(startPoint.bearing, endPoint.bearing, clampedRatio),
+        bearing: interpolateBearing(clampedRatio, startPoint.bearing, endPoint.bearing),
         isInterpolated: true
     };
 }
@@ -122,9 +122,9 @@ export function getRealTimePosition(
     // Smooth interpolation between current and next point
     const lat = currentPoint.lat + (nextPoint.lat - currentPoint.lat) * segmentProgress;
     const lng = currentPoint.lng + (nextPoint.lng - currentPoint.lng) * segmentProgress;
-    const bearing = interpolateBearing(currentPoint.bearing, nextPoint.bearing, segmentProgress);
+    const bearing = interpolateBearing(segmentProgress, currentPoint.bearing, nextPoint.bearing);
 
-    return { lat, lng, bearing };
+    return {lat, lng, bearing};
 }
 
 /**
@@ -145,7 +145,7 @@ export function calculateSegmentProgress(
 /**
  * Interpolates bearing/heading values handling circular nature (0-360 degrees)
  */
-function interpolateBearing(start?: number, end?: number, ratio: number): number | undefined {
+function interpolateBearing(ratio: number, start?: number, end?: number): number | undefined {
     if (start === undefined || end === undefined) return start || end;
 
     // Handle the circular nature of bearings
@@ -174,7 +174,7 @@ export function smoothPoints(points: InterpolatedPoint[], windowSize: number = 3
     for (let i = 0; i < points.length; i++) {
         const start = Math.max(0, i - Math.floor(windowSize / 2));
         const end = Math.min(points.length - 1, i + Math.floor(windowSize / 2));
-        
+
         let latSum = 0;
         let lngSum = 0;
         let speedSum = 0;

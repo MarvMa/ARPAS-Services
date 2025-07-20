@@ -33,6 +33,8 @@ const App: React.FC = () => {
     const [profileService] = useState(() => new ProfileService());
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    // Ref for MapViewer to allow focusing/zooming
+    const mapViewerRef = useRef<any>(null);
 
     /**
      * Initialize app on mount only
@@ -368,6 +370,13 @@ const App: React.FC = () => {
         }
     }, [profileService, loadPredefinedProfiles]);
 
+    // Focus handler for SimulationControls
+    const handleFocusProfile = useCallback((profileId: string) => {
+        if (mapViewerRef.current && typeof mapViewerRef.current.focusProfile === 'function') {
+            mapViewerRef.current.focusProfile(profileId);
+        }
+    }, []);
+
     return (
         <div className="app">
             <header className="app-header">
@@ -430,6 +439,7 @@ const App: React.FC = () => {
                         onClearResults={handleClearResults}
                         onDeleteProfile={handleDeleteProfile}
                         onProfileVisibilityToggle={handleProfileVisibilityToggle}
+                        onFocusProfile={handleFocusProfile}
                     />
 
                     {storageServiceAvailable && (
@@ -469,6 +479,7 @@ const App: React.FC = () => {
                     </div>
 
                     <MapViewer
+                        ref={mapViewerRef}
                         profiles={profiles}
                         selectedProfiles={selectedProfiles}
                         simulationState={simulationState}
