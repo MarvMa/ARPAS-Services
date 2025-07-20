@@ -9,16 +9,21 @@ import {
     SimulationResults,
     Object3D
 } from '../types/simulation';
-import { DataCollector } from './dataCollector';
+import {DataCollector} from './dataCollector';
+
+interface PredictionResponse {
+    status: string;
+    message: string;
+    objectIds: (string | number | null)[];
+}
 
 export class SimulationService {
     private dataCollector: DataCollector;
     private simulationState: SimulationState | null = null;
     private simulationIntervalId: number | null = null;
     private profileWebSockets: Map<string, WebSocket> = new Map();
-    private downloadedObjects: Set<string> = new Set(); // Global cache for downloaded objects
+    private downloadedObjectsPerProfile: Map<string, Set<string>> = new Map(); // Per-profile tracking
     private availableObjects: Object3D[] = []; // Cache of all 3D objects for distance calculation
-
     constructor() {
         this.dataCollector = new DataCollector();
     }
@@ -42,7 +47,7 @@ export class SimulationService {
         console.log(`Starting ${config.optimized ? 'optimized' : 'unoptimized'} simulation: ${simulationId}`);
 
         // Clear previous data
-        this.downloadedObjects.clear();
+        this.downloadedObjectsPerProfile.clear();
         this.profileWebSockets.clear();
 
         // Calculate the earliest start time across all profiles for synchronized playback
@@ -61,12 +66,10 @@ export class SimulationService {
             profileStates: {}
         };
 
-        // Initialize profile states and WebSocket connections for optimized mode
-        for (const profile of config.profiles) {
-            if (profile.data.length === 0) continue;
+        // Initialize profile states and WebSocket connections in PARALLEL
+        const profileSetupPromises = config.profiles.map(async (profile) => {
+            if (profile.data.length === 0) return;
 
-            // Sort profile data by timestamp
-            const sortedData = [...profile.data].sort((a, b) => a.timestamp - b.timestamp);
 
             const profileState: ProfileSimulationState = {
                 profileId: profile.id,
@@ -75,12 +78,23 @@ export class SimulationService {
                 metrics: []
             };
 
-            if (config.optimized) {
-                await this.establishWebSocketConnection(profile.id, profile.name);
-            }
+            // Initialize per-profile download tracking
+            this.downloadedObjectsPerProfile.set(profile.id, new Set<string>());
 
-            this.simulationState.profileStates[profile.id] = profileState;
-        }
+            this.simulationState!.profileStates[profile.id] = profileState;
+
+            // Establish WebSocket connection if optimized mode
+            if (config.optimized) {
+                try {
+                    await this.establishWebSocketConnection(profile.id, profile.name);
+                } catch (error) {
+                    console.error(`Failed to establish WebSocket for profile ${profile.name}:`, error);
+                }
+            }
+        });
+
+        // Wait for all profiles to be set up in parallel
+        await Promise.all(profileSetupPromises);
 
         // Start real-time simulation loop
         this.startRealTimeSimulation(config, earliestStartTime, simulationStartTime);
@@ -116,6 +130,9 @@ export class SimulationService {
         const results = this.collectSimulationResults();
         await this.dataCollector.saveResults(results);
 
+        // Clear per-profile download tracking
+        this.downloadedObjectsPerProfile.clear();
+
         this.simulationState = null;
         return results;
     }
@@ -124,7 +141,7 @@ export class SimulationService {
      * Gets the current simulation state
      */
     getSimulationState(): SimulationState | null {
-        return this.simulationState ? { ...this.simulationState } : null;
+        return this.simulationState ? {...this.simulationState} : null;
     }
 
     /**
@@ -143,10 +160,30 @@ export class SimulationService {
 
             ws.onmessage = async (event) => {
                 try {
-                    const objectIds: string[] = JSON.parse(event.data);
-                    await this.processObjectIds(objectIds, profileId);
+                    const response = JSON.parse(event.data);
+
+                    let objectIds: string[] = [];
+
+                    if (response.objectIds && Array.isArray(response.objectIds)) {
+                        objectIds = (response as PredictionResponse).objectIds
+                            .filter((id): id is string | number => id !== null && id !== undefined)
+                            .map(id => String(id));
+                    } else if (Array.isArray(response)) {
+                        objectIds = (response as (string | number | null)[])
+                            .filter((id): id is string | number => id !== null && id !== undefined)
+                            .map(id => String(id));
+                    }
+
+                    // Only process if we have valid IDs
+                    if (objectIds.length > 0) {
+                        console.log(`Received ${objectIds.length} object IDs from prediction service for ${profileName}`);
+                        await this.processObjectIds(objectIds, profileId);
+                    } else {
+                        console.log(`No valid object IDs received from prediction service for ${profileName}`);
+                    }
                 } catch (error) {
                     console.error(`Error processing WebSocket message for ${profileName}:`, error);
+                    console.error('Raw WebSocket data:', event.data);
                 }
             };
 
@@ -205,7 +242,6 @@ export class SimulationService {
             });
         });
 
-        // Main simulation loop - runs at the specified interval
         this.simulationIntervalId = window.setInterval(async () => {
             if (!this.simulationState?.isRunning) {
                 if (this.simulationIntervalId) {
@@ -221,41 +257,85 @@ export class SimulationService {
             // Update current time in state
             this.simulationState.currentTime = currentRealTime;
 
-            // Process each profile based on real elapsed time
-            for (const [profileId, timing] of profileTimings) {
-                const profileState = this.simulationState.profileStates[profileId];
-                if (!profileState) continue;
+            // Process each profile in PARALLEL
+            const profileProcessingPromises = Array.from(profileTimings.entries()).map(
+                async ([profileId, timing]) => {
+                    const profileState = this.simulationState!.profileStates[profileId];
+                    if (!profileState) return;
 
-                // Calculate where we should be in the original timeline
-                const currentSimulationTime = earliestStartTime + elapsedRealTime;
+                    // Calculate where we should be in the original timeline
+                    const currentSimulationTime = timing.startTime + elapsedRealTime;
 
-                // Find the current segment based on simulation time
-                let newSegmentIndex = timing.currentSegmentIndex;
+                    // Find the current segment based on simulation time
+                    let currentSegmentIndex = timing.currentSegmentIndex;
 
-                // Advance through segments if we've passed their timestamps
-                while (newSegmentIndex < timing.sortedData.length - 1 &&
-                timing.sortedData[newSegmentIndex + 1].timestamp <= currentSimulationTime) {
-                    newSegmentIndex++;
-
-                    // Send data point for this segment
-                    const currentPoint = timing.sortedData[newSegmentIndex];
-
-                    if (config.optimized) {
-                        await this.sendPointToWebSocket(profileId, currentPoint);
-                    } else {
-                        await this.processUnoptimizedDetection(profileId, currentPoint);
+                    // Advance through segments if needed
+                    while (currentSegmentIndex < timing.sortedData.length - 1 &&
+                    timing.sortedData[currentSegmentIndex + 1].timestamp <= currentSimulationTime) {
+                        currentSegmentIndex++;
                     }
-                }
 
-                // Update profile state
-                timing.currentSegmentIndex = newSegmentIndex;
-                profileState.currentIndex = newSegmentIndex;
-                timing.lastUpdateTime = currentRealTime;
-            }
+                    // Update segment index
+                    timing.currentSegmentIndex = currentSegmentIndex;
+                    profileState.currentIndex = currentSegmentIndex;
+
+                    // Check if simulation is complete for this profile
+                    if (currentSegmentIndex >= timing.sortedData.length - 1) {
+                        // Send the last point if we haven't already
+                        if (timing.lastUpdateTime < currentRealTime - config.intervalMs) {
+                            const lastPoint = timing.sortedData[timing.sortedData.length - 1];
+                            if (config.optimized) {
+                                await this.sendPointToWebSocket(profileId, lastPoint);
+                            } else {
+                                await this.processUnoptimizedDetection(profileId, lastPoint);
+                            }
+                        }
+                        return;
+                    }
+
+                    // Calculate interpolated position for current time
+                    const currentPoint = timing.sortedData[currentSegmentIndex];
+                    const nextPoint = timing.sortedData[currentSegmentIndex + 1];
+
+                    // Calculate progress within current segment
+                    const segmentDuration = nextPoint.timestamp - currentPoint.timestamp;
+                    const segmentElapsed = currentSimulationTime - currentPoint.timestamp;
+                    const progress = segmentDuration > 0 ? Math.max(0, Math.min(1, segmentElapsed / segmentDuration)) : 0;
+
+                    // Interpolate current position
+                    const interpolatedPoint: DataPoint = {
+                        lat: currentPoint.lat + (nextPoint.lat - currentPoint.lat) * progress,
+                        lng: currentPoint.lng + (nextPoint.lng - currentPoint.lng) * progress,
+                        timestamp: currentSimulationTime,
+                        speed: currentPoint.speed && nextPoint.speed
+                            ? currentPoint.speed + (nextPoint.speed - currentPoint.speed) * progress
+                            : currentPoint.speed || nextPoint.speed,
+                        altitude: currentPoint.altitude && nextPoint.altitude
+                            ? currentPoint.altitude + (nextPoint.altitude - currentPoint.altitude) * progress
+                            : currentPoint.altitude || nextPoint.altitude,
+                        bearing: currentPoint.bearing !== undefined && nextPoint.bearing !== undefined
+                            ? currentPoint.bearing + ((nextPoint.bearing - currentPoint.bearing) * progress)
+                            : currentPoint.bearing || nextPoint.bearing
+                    };
+
+                    // Send the interpolated position every interval
+                    if (config.optimized) {
+                        await this.sendPointToWebSocket(profileId, interpolatedPoint);
+                    } else {
+                        await this.processUnoptimizedDetection(profileId, interpolatedPoint);
+                    }
+
+                    timing.lastUpdateTime = currentRealTime;
+                }
+            );
+
+            // Wait for all profiles to be processed
+            await Promise.all(profileProcessingPromises);
 
             // Check if all profiles have finished
             const allFinished = Array.from(profileTimings.values()).every(timing =>
-                timing.currentSegmentIndex >= timing.sortedData.length - 1
+                timing.currentSegmentIndex >= timing.sortedData.length - 1 &&
+                timing.lastUpdateTime < Date.now() - config.intervalMs
             );
 
             if (allFinished) {
@@ -273,14 +353,18 @@ export class SimulationService {
         const ws = this.profileWebSockets.get(profileId);
         if (ws && ws.readyState === WebSocket.OPEN) {
             try {
-                ws.send(JSON.stringify({
-                    lat: point.lat,
-                    lng: point.lng,
-                    timestamp: point.timestamp,
-                    speed: point.speed,
-                    altitude: point.altitude,
-                    bearing: point.bearing
-                }));
+                const data = {
+                    latitude: point.lat,  // Changed from lat
+                    longitude: point.lng, // Changed from lng
+                    timestamp: new Date(point.timestamp).toISOString(), // Convert to ISO string
+                    speed: point.speed || 0,
+                    altitude: point.altitude || 0,
+                    heading: point.bearing  // Map bearing to heading
+                };
+
+                console.log(`Sending data point for profile ${profileId}:`, data);
+
+                ws.send(JSON.stringify(data));
             } catch (error) {
                 console.error(`Failed to send data to WebSocket for profile ${profileId}:`, error);
             }
@@ -325,10 +409,10 @@ export class SimulationService {
         const dLat = (lat2 - lat1) * Math.PI / 180;
         const dLng = (lng2 - lng1) * Math.PI / 180;
         const a =
-            Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
             Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
 
@@ -339,11 +423,18 @@ export class SimulationService {
         const profileState = this.simulationState?.profileStates[profileId];
         if (!profileState) return;
 
+        // Get or create per-profile download cache
+        let profileDownloadCache = this.downloadedObjectsPerProfile.get(profileId);
+        if (!profileDownloadCache) {
+            profileDownloadCache = new Set<string>();
+            this.downloadedObjectsPerProfile.set(profileId, profileDownloadCache);
+        }
+
         const downloadPromises = objectIds.map(async (objectId) => {
-            // Check global cache first to avoid duplicate downloads
-            if (!this.downloadedObjects.has(objectId)) {
+            // Check per-profile cache instead of global cache
+            if (!profileDownloadCache!.has(objectId)) {
                 await this.downloadObject(objectId, profileId);
-                this.downloadedObjects.add(objectId);
+                profileDownloadCache!.add(objectId);
             }
 
             // Add to profile's downloaded list if not already there
@@ -407,7 +498,19 @@ export class SimulationService {
             allMetrics.push(...profileState.metrics);
         });
 
-        const uniqueObjects = new Set(allMetrics.map(m => m.objectId)).size;
+        // Calculate unique objects per profile and globally
+        const globalUniqueObjects = new Set<string>();
+        const profileStats = new Map<string, { downloads: number; unique: number }>();
+
+        Object.entries(this.simulationState.profileStates).forEach(([profileId, profileState]) => {
+            const profileUnique = new Set(profileState.downloadedObjects);
+            profileStats.set(profileId, {
+                downloads: profileState.downloadedObjects.length,
+                unique: profileUnique.size
+            });
+            profileUnique.forEach(id => globalUniqueObjects.add(id));
+        });
+
         const averageLatency = allMetrics.length > 0
             ? allMetrics.reduce((sum, m) => sum + m.downloadLatencyMs, 0) / allMetrics.length
             : 0;
@@ -415,15 +518,21 @@ export class SimulationService {
 
         const simulationType = this.profileWebSockets.size > 0 ? 'optimized' : 'unoptimized';
 
+        console.log('Simulation Results Summary:');
+        profileStats.forEach((stats, profileId) => {
+            console.log(`Profile ${profileId}: ${stats.downloads} downloads, ${stats.unique} unique objects`);
+        });
+        console.log(`Global unique objects: ${globalUniqueObjects.size}`);
+
         return {
             simulationId: this.getCurrentSimulationId(),
             simulationType,
             startTime: this.simulationState.startTime,
             endTime: Date.now(),
-            profiles: [], // We don't need to store full profile data in results
+            profiles: [],
             metrics: allMetrics,
             totalObjects: allMetrics.length,
-            uniqueObjects,
+            uniqueObjects: globalUniqueObjects.size,
             averageLatency,
             totalDataSize
         };

@@ -19,28 +19,23 @@ export default fp(async (app: FastifyInstance) => {
                     const sensorData = JSON.parse(message.toString());
                     const ids = await predictor.predict(sensorData);
 
-                    const cachePreloaded = cacheClient.preload(ids).catch(console.error);
-
-                    let status: string;
-                    let messageToSend: string;
-                    
-                    if (!cachePreloaded) {
-                        status = 'success';
-                        messageToSend = 'Cache preloaded successfully';
-
-                    } else {
-                        status = 'error';
-                        messageToSend = 'Cache preloading failed';
-                        console.error('Cache preloading failed');
+                    // Only call cache if we have IDs
+                    if (ids && ids.length > 0) {
+                        const cachePreloaded = await cacheClient.preload(ids).catch(console.error);
                     }
+                    
                     socket.send(JSON.stringify({
-                        status: status,
-                        message: messageToSend,
-                        objectIds: ids
-
+                        status: 'success',
+                        message: 'Prediction processed',
+                        objectIds: ids || []  // Ensure we always send an array
                     }));
                 } catch (error) {
                     console.error('Error processing message:', error);
+                    socket.send(JSON.stringify({
+                        status: 'error',
+                        message: 'Error processing prediction',
+                        objectIds: []
+                    }));
                 }
             });
             socket.on('error', (err: Error) => {
