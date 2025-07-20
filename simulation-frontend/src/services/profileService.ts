@@ -1,5 +1,23 @@
 import {Profile, DataPoint, RawLocationData} from '../types/simulation';
 
+// Enhanced type for the specific data format we're dealing with
+interface LocationEntry {
+    sensor?: string;
+    latitude?: string;
+    longitude?: string;
+    time?: string;
+    speed?: string;
+    bearing?: string;
+    altitude?: string;
+    altitudeAboveMeanSeaLevel?: string;
+    horizontalAccuracy?: string;
+    verticalAccuracy?: string;
+    bearingAccuracy?: string;
+    speedAccuracy?: string;
+
+    [key: string]: any;
+}
+
 export class ProfileService {
     private profiles: Profile[] = [];
     private colorPalette = [
@@ -69,7 +87,8 @@ export class ProfileService {
             id: this.generateProfileId(),
             name: profileName,
             data: dataPoints,
-            color: this.getNextColor()
+            color: this.getNextColor(),
+            isVisible: true
         };
 
         console.log(`Created profile "${profileName}" with ${dataPoints.length} points`);
@@ -84,31 +103,52 @@ export class ProfileService {
 
         for (const entry of rawArray) {
             try {
-                // Try different field names for latitude
-                const lat = this.extractCoordinate(entry, ['latitude', 'lat', 'Latitude', 'Lat', 'y']);
-                const lng = this.extractCoordinate(entry, ['longitude', 'lng', 'lon', 'Longitude', 'Lng', 'Lon', 'x']);
-
-                if (lat === null || lng === null) {
-                    continue; // Skip entries without valid coordinates
+                // Skip metadata entries
+                if (entry.sensor === 'Metadata' || entry.sensor === 'metadata') {
+                    continue;
                 }
 
-                // Try different field names for timestamp
-                const timestamp = this.extractTimestamp(entry, ['time', 'timestamp', 'Time', 'Timestamp', 'dateTime', 'DateTime']);
+                // Filter for location sensor entries
+                if (entry.sensor && entry.sensor !== 'Location') {
+                    continue;
+                }
+
+                const locationEntry = entry as LocationEntry;
+
+                // Extract latitude and longitude - handle string values
+                const lat = this.parseNumericValue(locationEntry.latitude);
+                const lng = this.parseNumericValue(locationEntry.longitude);
+
+                if (lat === null || lng === null) {
+                    console.warn('Entry missing valid coordinates, skipping:', entry);
+                    continue;
+                }
+
+                // Extract timestamp - handle the specific "time" field with nanosecond precision
+                const timestamp = this.parseTimestamp(locationEntry.time);
 
                 if (timestamp === null) {
                     console.warn('Entry missing timestamp, skipping:', entry);
                     continue;
                 }
 
+                // Parse optional numeric fields, treating "-1" as invalid
+                const speed = this.parseOptionalNumeric(locationEntry.speed);
+                const bearing = this.parseOptionalNumeric(locationEntry.bearing);
+                const altitude = this.parseOptionalNumeric(locationEntry.altitude) ||
+                    this.parseOptionalNumeric(locationEntry.altitudeAboveMeanSeaLevel);
+                const horizontalAccuracy = this.parseOptionalNumeric(locationEntry.horizontalAccuracy);
+                const verticalAccuracy = this.parseOptionalNumeric(locationEntry.verticalAccuracy);
+
                 const dataPoint: DataPoint = {
                     lat,
                     lng,
                     timestamp,
-                    speed: this.extractOptionalNumber(entry, ['speed', 'Speed', 'velocity', 'Velocity']),
-                    altitude: this.extractOptionalNumber(entry, ['altitude', 'Altitude', 'alt', 'Alt', 'elevation', 'Elevation', 'z']),
-                    bearing: this.extractOptionalNumber(entry, ['bearing', 'Bearing', 'heading', 'Heading', 'direction', 'Direction']),
-                    horizontalAccuracy: this.extractOptionalNumber(entry, ['horizontalAccuracy', 'HorizontalAccuracy', 'accuracy', 'Accuracy']),
-                    verticalAccuracy: this.extractOptionalNumber(entry, ['verticalAccuracy', 'VerticalAccuracy'])
+                    speed,
+                    altitude,
+                    bearing,
+                    horizontalAccuracy,
+                    verticalAccuracy
                 };
 
                 dataPoints.push(dataPoint);
@@ -117,78 +157,83 @@ export class ProfileService {
             }
         }
 
+        console.log(`Parsed ${dataPoints.length} valid location points from ${rawArray.length} entries`);
         return dataPoints;
     }
 
     /**
-     * Extracts a coordinate value from an entry trying multiple field names
+     * Parses a string value to number, handling edge cases
      */
-    private extractCoordinate(entry: any, fieldNames: string[]): number | null {
-        for (const field of fieldNames) {
-            if (field in entry) {
-                const value = parseFloat(entry[field]);
-                if (!isNaN(value)) {
-                    return value;
-                }
-            }
+    private parseNumericValue(value: string | number | undefined): number | null {
+        if (value === undefined || value === null || value === '') {
+            return null;
         }
-        return null;
+
+        const numValue = typeof value === 'string' ? parseFloat(value) : value;
+
+        if (isNaN(numValue)) {
+            return null;
+        }
+
+        return numValue;
     }
 
     /**
-     * Extracts a timestamp from an entry trying multiple field names
+     * Parses optional numeric values, treating "-1" and invalid values as undefined
      */
-    private extractTimestamp(entry: any, fieldNames: string[]): number | null {
-        for (const field of fieldNames) {
-            if (field in entry) {
-                let timestamp = entry[field];
+    private parseOptionalNumeric(value: string | number | undefined): number | undefined {
+        const parsed = this.parseNumericValue(value);
 
-                // Handle different timestamp formats
-                if (typeof timestamp === 'string') {
-                    // Try parsing as ISO date
-                    const date = new Date(timestamp);
-                    if (!isNaN(date.getTime())) {
-                        return date.getTime();
-                    }
-
-                    // Try parsing as number
-                    timestamp = parseInt(timestamp);
-                }
-
-                if (typeof timestamp === 'number') {
-                    // Check if it's in nanoseconds (very large number)
-                    if (timestamp > Date.now() * 1000000) {
-                        return Math.floor(timestamp / 1000000); // Convert nanoseconds to milliseconds
-                    }
-                    // Check if it's in microseconds
-                    else if (timestamp > Date.now() * 1000) {
-                        return Math.floor(timestamp / 1000); // Convert microseconds to milliseconds
-                    }
-                    // Check if it's in seconds (too small)
-                    else if (timestamp < Date.now() / 1000) {
-                        return timestamp * 1000; // Convert seconds to milliseconds
-                    }
-                    // Assume it's already in milliseconds
-                    return timestamp;
-                }
-            }
+        // Treat -1 as "no data" which is common in sensor data
+        if (parsed === null || parsed === -1) {
+            return undefined;
         }
-        return null;
+
+        return parsed;
     }
 
     /**
-     * Extracts an optional numeric value from an entry
+     * Parses timestamp from the specific format used in the data
      */
-    private extractOptionalNumber(entry: any, fieldNames: string[]): number | undefined {
-        for (const field of fieldNames) {
-            if (field in entry) {
-                const value = parseFloat(entry[field]);
-                if (!isNaN(value) && value !== -1) { // -1 often means "no data"
-                    return value;
-                }
-            }
+    private parseTimestamp(timeValue: string | number | undefined): number | null {
+        if (!timeValue) {
+            return null;
         }
-        return undefined;
+
+        let timestamp: number;
+
+        if (typeof timeValue === 'string') {
+            // Try parsing as ISO date first
+            const date = new Date(timeValue);
+            if (!isNaN(date.getTime())) {
+                return date.getTime();
+            }
+
+            // Parse as number
+            timestamp = parseInt(timeValue);
+        } else {
+            timestamp = timeValue;
+        }
+
+        if (isNaN(timestamp)) {
+            return null;
+        }
+
+        // Handle different timestamp formats
+        // Check if it's in nanoseconds (very large number like 1752938849970397000)
+        if (timestamp > Date.now() * 1000000) {
+            return Math.floor(timestamp / 1000000); // Convert nanoseconds to milliseconds
+        }
+        // Check if it's in microseconds
+        else if (timestamp > Date.now() * 1000) {
+            return Math.floor(timestamp / 1000); // Convert microseconds to milliseconds
+        }
+        // Check if it's in seconds (too small)
+        else if (timestamp < Date.now() / 1000) {
+            return timestamp * 1000; // Convert seconds to milliseconds
+        }
+        // Assume it's already in milliseconds
+        return timestamp;
     }
 
     /**
@@ -288,24 +333,6 @@ export class ProfileService {
      */
     getProfile(profileId: string): Profile | undefined {
         return this.profiles.find(p => p.id === profileId);
-    }
-
-    /**
-     * Validates location data format
-     */
-    validateLocationData(data: any[]): boolean {
-        if (!Array.isArray(data) || data.length === 0) {
-            return false;
-        }
-
-        // Check if at least some entries have recognizable location fields
-        const hasValidEntries = data.some(entry => {
-            const hasLat = this.extractCoordinate(entry, ['latitude', 'lat', 'Latitude', 'Lat']) !== null;
-            const hasLng = this.extractCoordinate(entry, ['longitude', 'lng', 'lon', 'Longitude', 'Lng', 'Lon']) !== null;
-            return hasLat && hasLng;
-        });
-
-        return hasValidEntries;
     }
 
     /**

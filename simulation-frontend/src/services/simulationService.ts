@@ -14,7 +14,7 @@ import { DataCollector } from './dataCollector';
 export class SimulationService {
     private dataCollector: DataCollector;
     private simulationState: SimulationState | null = null;
-    private intervalIds: Map<string, number> = new Map();
+    private intervalIds: Record<string, number> = {}; // Changed from Map to Record
 
     constructor() {
         this.dataCollector = new DataCollector();
@@ -34,7 +34,7 @@ export class SimulationService {
             isRunning: true,
             currentTime: Date.now(),
             startTime: Date.now(),
-            profileStates: new Map()
+            profileStates: {} // Changed from Map to plain object
         };
 
         // Initialize profile states
@@ -42,7 +42,7 @@ export class SimulationService {
             const profileState: ProfileSimulationState = {
                 profileId: profile.id,
                 currentIndex: 0,
-                downloadedObjects: new Set(),
+                downloadedObjects: [], // Changed from Set to array
                 metrics: []
             };
 
@@ -50,7 +50,7 @@ export class SimulationService {
                 await this.establishWebSocketConnection(profileState, profile);
             }
 
-            this.simulationState.profileStates.set(profile.id, profileState);
+            this.simulationState.profileStates[profile.id] = profileState; // Use object property
         }
 
         // Start simulation loops for each profile
@@ -70,11 +70,11 @@ export class SimulationService {
         }
 
         // Stop all intervals
-        this.intervalIds.forEach(intervalId => clearInterval(intervalId));
-        this.intervalIds.clear();
+        Object.values(this.intervalIds).forEach(intervalId => clearInterval(intervalId));
+        this.intervalIds = {};
 
         // Close WebSocket connections
-        this.simulationState.profileStates.forEach(profileState => {
+        Object.values(this.simulationState.profileStates).forEach(profileState => {
             if (profileState.websocket) {
                 profileState.websocket.close();
             }
@@ -93,7 +93,15 @@ export class SimulationService {
      * Gets the current simulation state
      */
     getSimulationState(): SimulationState | null {
-        return this.simulationState;
+        if (!this.simulationState) {
+            return null;
+        }
+
+        // Return a clean copy to avoid reference issues
+        return {
+            ...this.simulationState,
+            profileStates: { ...this.simulationState.profileStates }
+        };
     }
 
     /**
@@ -124,7 +132,6 @@ export class SimulationService {
 
             ws.onerror = (error) => {
                 console.error(`WebSocket error for profile ${profile.name}:`, error);
-                // Don't reject immediately, try to continue without WebSocket
                 console.warn(`Continuing simulation for ${profile.name} without WebSocket`);
                 resolve();
             };
@@ -138,7 +145,7 @@ export class SimulationService {
                 if (ws.readyState === WebSocket.CONNECTING) {
                     console.warn(`WebSocket connection timeout for ${profile.name}`);
                     ws.close();
-                    resolve(); // Continue without WebSocket
+                    resolve();
                 }
             }, 5000);
         });
@@ -152,7 +159,7 @@ export class SimulationService {
         profileState: ProfileSimulationState
     ): Promise<void> {
         const promises = objectIds.map(async (objectId) => {
-            if (!profileState.downloadedObjects.has(objectId)) {
+            if (!profileState.downloadedObjects.includes(objectId)) { // Changed from Set.has to array.includes
                 await this.downloadObject(objectId, profileState);
             }
         });
@@ -186,14 +193,14 @@ export class SimulationService {
                 downloadLatencyMs: latency,
                 sizeBytes,
                 timestamp: Date.now(),
-                simulationType: this.simulationState?.profileStates.get(profileState.profileId)?.websocket
+                simulationType: this.simulationState?.profileStates[profileState.profileId]?.websocket
                     ? 'optimized'
                     : 'unoptimized',
                 simulationId: this.getCurrentSimulationId()
             };
 
             profileState.metrics.push(metric);
-            profileState.downloadedObjects.add(objectId);
+            profileState.downloadedObjects.push(objectId); // Changed from Set.add to array.push
 
             console.log(`Downloaded object ${objectId} for profile ${profileState.profileId} in ${latency.toFixed(2)}ms`);
         } catch (error) {
@@ -215,12 +222,12 @@ export class SimulationService {
         const intervalId = window.setInterval(async () => {
             if (!this.simulationState?.isRunning || currentIndex >= interpolatedPoints.length) {
                 clearInterval(intervalId);
-                this.intervalIds.delete(profile.id);
+                delete this.intervalIds[profile.id]; // Use delete for object property
                 return;
             }
 
             const point = interpolatedPoints[currentIndex];
-            const profileState = this.simulationState.profileStates.get(profile.id);
+            const profileState = this.simulationState.profileStates[profile.id]; // Use object property
 
             if (profileState) {
                 // Send point to WebSocket if optimized mode and connection exists
@@ -237,7 +244,7 @@ export class SimulationService {
             currentIndex++;
         }, config.intervalMs);
 
-        this.intervalIds.set(profile.id, intervalId);
+        this.intervalIds[profile.id] = intervalId; // Use object property
     }
 
     /**
@@ -276,7 +283,7 @@ export class SimulationService {
         const allMetrics: ObjectMetric[] = [];
         const profiles: Profile[] = [];
 
-        this.simulationState.profileStates.forEach((profileState, profileId) => {
+        Object.values(this.simulationState.profileStates).forEach((profileState) => { // Use Object.values
             allMetrics.push(...profileState.metrics);
         });
 

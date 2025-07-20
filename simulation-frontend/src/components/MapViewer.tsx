@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useRef, useState, useMemo, useCallback} from 'react';
 import {MapContainer, TileLayer, Polyline, CircleMarker, Popup, Marker, useMapEvents} from 'react-leaflet';
 import {LatLngExpression, LatLngBoundsExpression, LatLngTuple, LeafletMouseEvent, DivIcon} from 'leaflet';
 import {Profile, InterpolatedPoint, SimulationState, Object3D} from '../types/simulation';
@@ -36,6 +36,8 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     const [currentPositions, setCurrentPositions] = useState<Map<string, InterpolatedPoint>>(new Map());
     const mapRef = useRef<any>(null);
 
+    const intervalMs = 200; // Default interval for interpolation
+
     /**
      * Custom map event handler component
      */
@@ -45,7 +47,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                 if (isAddingMode && onMapClick) {
                     onMapClick(e.latlng.lat, e.latlng.lng);
                 } else {
-                    onObjectSelect?.(null); // Deselect object when clicking on empty space
+                    onObjectSelect?.(null);
                 }
             }
         });
@@ -53,9 +55,9 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     };
 
     /**
-     * Custom 3D object icon
+     * Memoized 3D object icon creation
      */
-    const create3DObjectIcon = (isSelected: boolean = false): DivIcon => {
+    const create3DObjectIcon = useCallback((isSelected: boolean = false): DivIcon => {
         return new DivIcon({
             html: `<div class="object-marker ${isSelected ? 'selected' : ''}">
         <div class="object-icon">📦</div>
@@ -65,9 +67,20 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             iconSize: [24, 24],
             iconAnchor: [12, 12]
         });
-    };
+    }, []);
 
-    const intervalMs = 200; // Default interval for interpolation
+    /**
+     * Create stable profile identifiers for dependencies
+     */
+    const selectedProfileIds = useMemo(() =>
+            selectedProfiles.map(p => p.id).sort().join(','),
+        [selectedProfiles]
+    );
+
+    const selectedProfilesData = useMemo(() =>
+            selectedProfiles.map(p => ({ id: p.id, dataLength: p.data.length })),
+        [selectedProfiles]
+    );
 
     /**
      * Updates interpolated data when profiles change
@@ -76,20 +89,24 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         const newInterpolatedData = new Map<string, InterpolatedPoint[]>();
 
         selectedProfiles.forEach(profile => {
-            let interpolated = interpolatePoints(profile.data, intervalMs);
+            try {
+                let interpolated = interpolatePoints(profile.data, intervalMs);
 
-            if (smoothingEnabled) {
-                interpolated = smoothPoints(interpolated, 3);
+                if (smoothingEnabled) {
+                    interpolated = smoothPoints(interpolated, 3);
+                }
+
+                newInterpolatedData.set(profile.id, interpolated);
+            } catch (error) {
+                console.error(`Error interpolating profile ${profile.id}:`, error);
             }
-
-            newInterpolatedData.set(profile.id, interpolated);
         });
 
         setInterpolatedData(newInterpolatedData);
-    }, [selectedProfiles, showInterpolated, smoothingEnabled]);
+    }, [selectedProfileIds, smoothingEnabled]); // Use stable string instead of array
 
     /**
-     * Updates current positions during simulation
+     * Updates current positions during simulation - simplified
      */
     useEffect(() => {
         if (!simulationState?.isRunning) {
@@ -100,41 +117,49 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         const updateCurrentPositions = () => {
             const newPositions = new Map<string, InterpolatedPoint>();
 
-            simulationState.profileStates.forEach((profileState, profileId) => {
-                const interpolated = interpolatedData.get(profileId);
-                if (interpolated && profileState.currentIndex < interpolated.length) {
-                    newPositions.set(profileId, interpolated[profileState.currentIndex]);
-                }
-            });
+            try {
+                Object.entries(simulationState.profileStates).forEach(([profileId, profileState]) => {
+                    const interpolated = interpolatedData.get(profileId);
+                    if (interpolated && profileState.currentIndex < interpolated.length) {
+                        newPositions.set(profileId, interpolated[profileState.currentIndex]);
+                    }
+                });
 
-            setCurrentPositions(newPositions);
+                setCurrentPositions(newPositions);
+            } catch (error) {
+                console.error('Error updating current positions:', error);
+            }
         };
 
         updateCurrentPositions();
         const interval = setInterval(updateCurrentPositions, 100);
 
         return () => clearInterval(interval);
-    }, [simulationState, interpolatedData]);
+    }, [simulationState?.isRunning, simulationState?.currentTime]); // Simplified dependencies
 
     /**
-     * Calculates map bounds to fit all data including 3D objects
+     * Calculate visible profiles data for bounds/center - simplified
      */
-    const getMapBounds = (): LatLngBoundsExpression | undefined => {
+    const visibleProfilesData = useMemo(() => {
+        const visible = profiles.filter(profile => profile.isVisible);
+        return visible.map(profile => ({
+            id: profile.id,
+            data: showInterpolated ?
+                (interpolatedData.get(profile.id) || []) :
+                profile.data
+        }));
+    }, [profiles.map(p => `${p.id}:${p.isVisible}`).join(','), showInterpolated, interpolatedData.size]);
+
+    /**
+     * Memoized map bounds calculation - simplified
+     */
+    const mapBounds = useMemo((): LatLngBoundsExpression | undefined => {
         const allPoints: { lat: number; lng: number }[] = [];
 
         // Add profile data points from visible profiles
-        const visibleProfiles = profiles.filter(profile => profile.isVisible);
-
-        if (showInterpolated) {
-            visibleProfiles.forEach(profile => {
-                const points = interpolatedData.get(profile.id);
-                if (points) allPoints.push(...points);
-            });
-        } else {
-            visibleProfiles.forEach(profile => {
-                allPoints.push(...profile.data);
-            });
-        }
+        visibleProfilesData.forEach(({ data }) => {
+            allPoints.push(...data);
+        });
 
         // Add 3D object locations
         objects3D.forEach(obj => {
@@ -152,27 +177,18 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             [Math.min(...lats), Math.min(...lngs)] as LatLngTuple,
             [Math.max(...lats), Math.max(...lngs)] as LatLngTuple
         ];
-    };
+    }, [visibleProfilesData, objects3D.length]); // Simplified dependencies
 
     /**
-     * Calculates the center point for the map
+     * Memoized map center calculation - simplified
      */
-    const getMapCenter = (): LatLngExpression => {
+    const mapCenter = useMemo((): LatLngExpression => {
         const allPoints: { lat: number; lng: number }[] = [];
 
         // Add profile data points from visible profiles
-        const visibleProfiles = profiles.filter(profile => profile.isVisible);
-
-        if (showInterpolated) {
-            visibleProfiles.forEach(profile => {
-                const points = interpolatedData.get(profile.id);
-                if (points) allPoints.push(...points);
-            });
-        } else {
-            visibleProfiles.forEach(profile => {
-                allPoints.push(...profile.data);
-            });
-        }
+        visibleProfilesData.forEach(({ data }) => {
+            allPoints.push(...data);
+        });
 
         // Add 3D object locations
         objects3D.forEach(obj => {
@@ -192,7 +208,43 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
 
         return [centerLat, centerLng];
-    };
+    }, [visibleProfilesData, objects3D.length]); // Simplified dependencies
+
+    /**
+     * Downloads a 3D object
+     */
+    const downloadObject = useCallback(async (object: Object3D) => {
+        try {
+            const apiBase = (import.meta as any).env?.DEV ? '/api/storage' : 'http://localhost:8080/api/storage';
+            const response = await fetch(`${apiBase}/objects/${object.id}/download`);
+            if (!response.ok) throw new Error('Download failed');
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = object.original_filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Download failed:', error);
+            alert('Failed to download object');
+        }
+    }, []);
+
+    /**
+     * Formats file size for display
+     */
+    const formatFileSize = useCallback((bytes: number): string => {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }, []);
 
     /**
      * Renders 3D object markers on the map
@@ -242,7 +294,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        downloadObject(obj).then(r => console.log("Downloaded object:", r)).catch(err => console.error("Download error:", err));
+                                        downloadObject(obj);
                                     }}
                                     className="btn-secondary btn-tiny"
                                 >
@@ -253,42 +305,6 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                     </Popup>
                 </Marker>
             ));
-    };
-
-    /**
-     * Downloads a 3D object
-     */
-    const downloadObject = async (object: Object3D) => {
-        try {
-            const apiBase = (import.meta as any).env?.DEV ? '/api/storage' : 'http://localhost:8080/api/storage';
-            const response = await fetch(`${apiBase}/objects/${object.id}/download`);
-            if (!response.ok) throw new Error('Download failed');
-
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = object.original_filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error('Download failed:', error);
-            alert('Failed to download object');
-        }
-    };
-
-    /**
-     * Formats file size for display
-     */
-    const formatFileSize = (bytes: number): string => {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
     /**
@@ -321,7 +337,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     const renderOriginalMarkers = (profile: Profile) => {
         if (showInterpolated) return null;
 
-        return profile.data.map((point, index) => (
+        return profile.data.slice(0, 50).map((point, index) => ( // Limit to 50 markers for performance
             <CircleMarker
                 key={`marker-${profile.id}-${index}`}
                 center={[point.lat, point.lng]}
@@ -355,7 +371,8 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         const interpolated = interpolatedData.get(profile.id) || [];
 
         return interpolated
-            .filter(point => !point.isInterpolated) // Show only original points as markers
+            .filter(point => !point.isInterpolated)
+            .slice(0, 50) // Limit for performance
             .map((point, index) => (
                 <CircleMarker
                     key={`interpolated-marker-${profile.id}-${index}`}
@@ -418,10 +435,6 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             );
         });
     };
-
-    // Calculate bounds and center for the map
-    const bounds = getMapBounds();
-    const center = getMapCenter();
 
     return (
         <div className="map-viewer">
@@ -491,9 +504,9 @@ export const MapViewer: React.FC<MapViewerProps> = ({
 
             <MapContainer
                 ref={mapRef}
-                center={center}
+                center={mapCenter}
                 zoom={13}
-                bounds={bounds}
+                bounds={mapBounds}
                 style={{height: '600px', width: '100%'}}
                 className={`leaflet-map ${isAddingMode ? 'adding-mode' : ''}`}
             >

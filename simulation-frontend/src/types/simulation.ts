@@ -17,25 +17,51 @@ export interface DataPoint {
     verticalAccuracy?: number;
 }
 
+// Specific type for the raw location data format we're parsing
 export interface RawLocationData {
+    sensor?: string;
     latitude?: string | number;
     longitude?: string | number;
+    time?: string | number;
+    speed?: string | number;
+    altitude?: string | number;
+    altitudeAboveMeanSeaLevel?: string | number;
+    bearing?: string | number;
+    horizontalAccuracy?: string | number;
+    verticalAccuracy?: string | number;
+    bearingAccuracy?: string | number;
+    speedAccuracy?: string | number;
+    seconds_elapsed?: string | number;
+
+    // Fallback for generic parsing
     lat?: string | number;
     lng?: string | number;
     lon?: string | number;
-    time?: string | number;
     timestamp?: string | number;
-    speed?: string | number;
-    altitude?: string | number;
-    bearing?: string | number;
     heading?: string | number;
-    horizontalAccuracy?: string | number;
-    verticalAccuracy?: string | number;
     accuracy?: string | number;
-    sensor?: string;
 
     [key: string]: any; // Allow additional fields
 }
+
+// Metadata entry type
+export interface LocationMetadata {
+    "device id"?: string;
+    version?: string;
+    sensor: "Metadata" | "metadata";
+    "device name"?: string;
+    sampleRateMs?: string;
+    "recording epoch time"?: string;
+    "recording time"?: string;
+    platform?: string;
+    standardisation?: string;
+    "recording timezone"?: string;
+    appVersion?: string;
+    sensors?: string;
+}
+
+// Union type for entries in the JSON array
+export type LocationEntry = RawLocationData | LocationMetadata;
 
 export interface Object3D {
     id: string;
@@ -63,14 +89,14 @@ export interface SimulationState {
     isRunning: boolean;
     currentTime: number;
     startTime: number;
-    profileStates: Map<string, ProfileSimulationState>;
+    profileStates: Record<string, ProfileSimulationState>; 
 }
 
 export interface ProfileSimulationState {
     profileId: string;
     currentIndex: number;
     websocket?: WebSocket;
-    downloadedObjects: Set<string>;
+    downloadedObjects: string[];
     metrics: ObjectMetric[];
 }
 
@@ -95,4 +121,31 @@ export interface SimulationResults {
     uniqueObjects: number;
     averageLatency: number;
     totalDataSize: number;
+}
+
+
+// Validation types
+export interface ParsedLocationResult {
+    success: boolean;
+    dataPoints: DataPoint[];
+    errors: string[];
+    skippedEntries: number;
+    totalEntries: number;
+}
+
+export interface ProfileStatistics {
+    totalPoints: number;
+    duration: number; // in milliseconds
+    distance: number; // in meters
+    averageSpeed: number; // in m/s
+    bounds: {
+        minLat: number;
+        maxLat: number;
+        minLng: number;
+        maxLng: number;
+    };
+    timeRange: {
+        start: Date;
+        end: Date;
+    };
 }

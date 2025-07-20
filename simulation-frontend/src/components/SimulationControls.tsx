@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { Profile, SimulationState } from '../types/simulation';
 
 interface SimulationControlsProps {
@@ -33,39 +33,56 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
     const [isStarting, setIsStarting] = useState<boolean>(false);
 
     /**
+     * Memoized derived state
+     */
+    const derivedState = useMemo(() => {
+        const isRunning = simulationState?.isRunning || false;
+        const canStart = !isRunning && selectedProfiles.length > 0 && !isStarting;
+        const visibleProfilesCount = profiles.filter(p => p.isVisible).length;
+        const activeProfilesCount = simulationState ? Object.keys(simulationState.profileStates).length : 0;
+
+        return {
+            isRunning,
+            canStart,
+            visibleProfilesCount,
+            activeProfilesCount
+        };
+    }, [simulationState, selectedProfiles.length, isStarting, profiles]);
+
+    /**
      * Handles profile selection changes
      */
-    const handleProfileToggle = (profile: Profile) => {
+    const handleProfileToggle = useCallback((profile: Profile) => {
         const isSelected = selectedProfiles.some(p => p.id === profile.id);
         if (isSelected) {
             onProfileSelectionChange(selectedProfiles.filter(p => p.id !== profile.id));
         } else {
             onProfileSelectionChange([...selectedProfiles, profile]);
         }
-    };
+    }, [selectedProfiles, onProfileSelectionChange]);
 
     /**
      * Handles profile visibility toggle
      */
-    const handleVisibilityToggle = (profileId: string) => {
+    const handleVisibilityToggle = useCallback((profileId: string) => {
         if (onProfileVisibilityToggle) {
             onProfileVisibilityToggle(profileId);
         }
-    };
+    }, [onProfileVisibilityToggle]);
 
     /**
      * Handles focusing on a specific profile on the map
      */
-    const handleFocusProfile = (profileId: string) => {
+    const handleFocusProfile = useCallback((profileId: string) => {
         if (onFocusProfile) {
             onFocusProfile(profileId);
         }
-    };
+    }, [onFocusProfile]);
 
     /**
      * Handles simulation start
      */
-    const handleStartSimulation = async () => {
+    const handleStartSimulation = useCallback(async () => {
         if (selectedProfiles.length === 0) {
             alert('Please select at least one profile for simulation');
             return;
@@ -84,68 +101,64 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         } finally {
             setIsStarting(false);
         }
-    };
+    }, [selectedProfiles, optimized, intervalMs, onStartSimulation]);
 
     /**
      * Handles simulation stop
      */
-    const handleStopSimulation = async () => {
+    const handleStopSimulation = useCallback(async () => {
         try {
             await onStopSimulation();
         } catch (error) {
             console.error('Failed to stop simulation:', error);
             alert('Failed to stop simulation properly.');
         }
-    };
+    }, [onStopSimulation]);
 
     /**
      * Selects all profiles
      */
-    const selectAllProfiles = () => {
+    const selectAllProfiles = useCallback(() => {
         onProfileSelectionChange([...profiles]);
-    };
+    }, [profiles, onProfileSelectionChange]);
 
     /**
      * Deselects all profiles
      */
-    const deselectAllProfiles = () => {
+    const deselectAllProfiles = useCallback(() => {
         onProfileSelectionChange([]);
-    };
+    }, [onProfileSelectionChange]);
 
     /**
      * Shows all profiles on the map
      */
-    const showAllProfiles = () => {
+    const showAllProfiles = useCallback(() => {
         profiles.forEach(profile => {
             if (!profile.isVisible && onProfileVisibilityToggle) {
                 onProfileVisibilityToggle(profile.id);
             }
         });
-    };
+    }, [profiles, onProfileVisibilityToggle]);
 
     /**
      * Hides all profiles from the map
      */
-    const hideAllProfiles = () => {
+    const hideAllProfiles = useCallback(() => {
         profiles.forEach(profile => {
             if (profile.isVisible && onProfileVisibilityToggle) {
                 onProfileVisibilityToggle(profile.id);
             }
         });
-    };
-
-    const isRunning = simulationState?.isRunning || false;
-    const canStart = !isRunning && selectedProfiles.length > 0 && !isStarting;
-    const visibleProfilesCount = profiles.filter(p => p.isVisible).length;
+    }, [profiles, onProfileVisibilityToggle]);
 
     return (
         <div className="simulation-controls">
             <div className="controls-header">
                 <h2>Simulation Controls</h2>
                 <div className="status-indicator">
-                    <span className={`status-light ${isRunning ? 'running' : 'stopped'}`}></span>
+                    <span className={`status-light ${derivedState.isRunning ? 'running' : 'stopped'}`}></span>
                     <span className="status-text">
-            {isRunning ? 'Simulation Running' : 'Simulation Stopped'}
+            {derivedState.isRunning ? 'Simulation Running' : 'Simulation Stopped'}
           </span>
                 </div>
             </div>
@@ -153,7 +166,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             {/* Profile Management */}
             <div className="control-group">
                 <div className="profile-management-header">
-                    <h3>Profile Management ({profiles.length} total, {visibleProfilesCount} visible)</h3>
+                    <h3>Profile Management ({profiles.length} total, {derivedState.visibleProfilesCount} visible)</h3>
                     <div className="profile-management-actions">
                         <button
                             type="button"
@@ -188,7 +201,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => handleProfileToggle(profile)}
-                                            disabled={isRunning}
+                                            disabled={derivedState.isRunning}
                                             title="Select for simulation"
                                         />
                                     </div>
@@ -227,7 +240,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                                                 onDeleteProfile(profile.id);
                                             }}
                                             className="btn-danger btn-tiny"
-                                            disabled={isRunning}
+                                            disabled={derivedState.isRunning}
                                             title="Delete Profile"
                                         >
                                             🗑️
@@ -247,7 +260,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         type="checkbox"
                         checked={optimized}
                         onChange={(e) => setOptimized(e.target.checked)}
-                        disabled={isRunning}
+                        disabled={derivedState.isRunning}
                     />
                     <span className="toggle-slider"></span>
                     <span className="toggle-label">
@@ -274,7 +287,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                     step="50"
                     value={intervalMs}
                     onChange={(e) => setIntervalMs(Number(e.target.value))}
-                    disabled={isRunning}
+                    disabled={derivedState.isRunning}
                 />
                 <small>Lower values provide smoother interpolation but higher computational load.</small>
             </div>
@@ -287,7 +300,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         <button
                             type="button"
                             onClick={selectAllProfiles}
-                            disabled={isRunning}
+                            disabled={derivedState.isRunning}
                             className="btn-secondary btn-small"
                         >
                             Select All
@@ -295,7 +308,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         <button
                             type="button"
                             onClick={deselectAllProfiles}
-                            disabled={isRunning}
+                            disabled={derivedState.isRunning}
                             className="btn-secondary btn-small"
                         >
                             Clear Selection
@@ -313,7 +326,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                     <button
                         type="button"
                         onClick={handleStartSimulation}
-                        disabled={!canStart}
+                        disabled={!derivedState.canStart}
                         className={`btn-primary ${isStarting ? 'loading' : ''}`}
                     >
                         {isStarting ? 'Starting...' : 'Start Simulation'}
@@ -322,7 +335,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                     <button
                         type="button"
                         onClick={handleStopSimulation}
-                        disabled={!isRunning}
+                        disabled={!derivedState.isRunning}
                         className="btn-danger"
                     >
                         Stop Simulation
@@ -365,7 +378,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         </div>
                         <div className="stat">
                             <span className="stat-label">Active Profiles:</span>
-                            <span className="stat-value">{simulationState.profileStates.size}</span>
+                            <span className="stat-value">{derivedState.activeProfilesCount}</span>
                         </div>
                     </div>
                 </div>
