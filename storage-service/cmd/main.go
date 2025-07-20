@@ -34,7 +34,7 @@ func main() {
 	minioClient := InitMinIOClient(cfg)
 
 	objectRepo := repository.NewObjectRepository(db)
-	objectService := services.NewObjectService(objectRepo, minioClient, cfg.MinioBucket)
+	objectService := services.NewObjectService(objectRepo, minioClient, cfg.MinioBucket, cfg)
 	predictionHandler := handlers.NewPredictionHandler(objectService)
 
 	// Configure Swagger metadata
@@ -129,7 +129,7 @@ func InitConfig() *config.Config {
 func ConnectDatabase(cfg *config.Config) *gorm.DB {
 	db, err := config.ConnectDatabase(cfg)
 	if err != nil {
-		log.Fatalf("Database connection failed: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	return db
 }
@@ -137,14 +137,14 @@ func ConnectDatabase(cfg *config.Config) *gorm.DB {
 func MigrateDatabase(db *gorm.DB) {
 	err := db.AutoMigrate(&models.Object{})
 	if err != nil {
-		log.Fatalf("Database migration failed: %v", err)
+		log.Fatalf("Failed to migrate database: %v", err)
 	}
 }
 
 func InitMinIOClient(cfg *config.Config) *minio.Client {
 	minioClient, err := storage.NewMinioClient(cfg)
 	if err != nil {
-		log.Fatalf("MinIO client initialization failed: %v", err)
+		log.Fatalf("Failed to initialize MinIO client: %v", err)
 	}
 	return minioClient
 }

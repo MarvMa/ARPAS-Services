@@ -231,7 +231,7 @@ const App: React.FC = () => {
      */
     const handleMapClick = useCallback(async (lat: number, lng: number) => {
         if (!isAddingMode) return;
-
+        console.log(`Adding 3D object at ${lat.toFixed(6)}, ${lng.toFixed(6)}`);
         if (!storageServiceAvailable) {
             alert('Storage service is not available. Cannot add 3D objects.');
             return;
@@ -248,7 +248,7 @@ const App: React.FC = () => {
             if (!file) return;
 
             try {
-                const uploadedObject = await storageService.uploadObject(file, lat, lng);
+                const uploadedObject = await storageService.uploadObject(file, lat, lng, 52);
                 setObjects3D(prev => [...prev, uploadedObject]);
                 setIsAddingMode(false);
                 alert(`Successfully added 3D object at ${lat.toFixed(6)}, ${lng.toFixed(6)}`);

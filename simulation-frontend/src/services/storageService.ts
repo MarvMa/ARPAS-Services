@@ -1,5 +1,5 @@
 import axios from 'axios';
-import {Object3D} from '../types/simulation';
+import {Object3D, StorageObjectResponse, isValidStorageObject} from '../types/simulation';
 
 const STORAGE_API_BASE = 'http://localhost/api/storage';
 
@@ -10,9 +10,37 @@ export class StorageService {
     async getAllObjects(): Promise<Object3D[]> {
         try {
             const response = await axios.get(`${STORAGE_API_BASE}/objects`);
-            return response.data;
+
+            // Validate that response is an array
+            if (!Array.isArray(response.data)) {
+                throw new Error('Expected array response from storage service');
+            }
+
+            // Parse and validate each object in the response
+            const objects: Object3D[] = [];
+            const errors: string[] = [];
+
+            response.data.forEach((item: any, index: number) => {
+                if (isValidStorageObject(item)) {
+                    objects.push(item);
+                } else {
+                    errors.push(`Invalid object at index ${index}: ${JSON.stringify(item)}`);
+                    console.warn(`Invalid storage object at index ${index}:`, item);
+                }
+            });
+
+            if (errors.length > 0) {
+                console.warn(`Found ${errors.length} invalid objects out of ${response.data.length} total:`, errors);
+            }
+
+            console.log(`Successfully parsed ${objects.length} valid 3D objects from storage service`);
+            return objects;
         } catch (error) {
             console.error('Failed to fetch 3D objects:', error);
+            if (axios.isAxiosError(error)) {
+                const message = error.response?.data?.message || error.message;
+                throw new Error(`Failed to fetch 3D objects: ${message}`);
+            }
             throw new Error('Failed to fetch 3D objects from storage service');
         }
     }
@@ -23,9 +51,22 @@ export class StorageService {
     async getObject(id: string): Promise<Object3D> {
         try {
             const response = await axios.get(`${STORAGE_API_BASE}/objects/${id}`);
+
+            // Validate the response object
+            if (!isValidStorageObject(response.data)) {
+                throw new Error(`Invalid object response format: ${JSON.stringify(response.data)}`);
+            }
+
             return response.data;
         } catch (error) {
             console.error(`Failed to fetch 3D object ${id}:`, error);
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 404) {
+                    throw new Error(`3D object not found: ${id}`);
+                }
+                const message = error.response?.data?.message || error.message;
+                throw new Error(`Failed to fetch 3D object: ${message}`);
+            }
             throw new Error(`Failed to fetch 3D object: ${id}`);
         }
     }
@@ -67,6 +108,11 @@ export class StorageService {
                     timeout: 120000 // 2 minutes timeout for large files
                 }
             );
+
+            // Validate the upload response
+            if (!isValidStorageObject(response.data)) {
+                throw new Error(`Invalid upload response format: ${JSON.stringify(response.data)}`);
+            }
 
             return response.data;
         } catch (error) {

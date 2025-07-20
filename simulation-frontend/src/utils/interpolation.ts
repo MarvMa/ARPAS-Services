@@ -53,7 +53,10 @@ export function interpolatePoints(
                     endPoint,
                     currentTime
                 );
-                interpolatedPoints.push(interpolatedPoint);
+                
+                if (interpolatedPoint) {
+                    interpolatedPoints.push({ ...interpolatedPoint, isInterpolated: true });
+                }
             }
         }
 
@@ -70,137 +73,130 @@ export function interpolatePoints(
 }
 
 /**
- * Interpolates a single point between two given points at a specific timestamp
+ * Interpolates a single point between two data points at a specific time
  */
-function interpolateBetweenPoints(
+export function interpolateBetweenPoints(
     startPoint: DataPoint,
     endPoint: DataPoint,
-    targetTimestamp: number
-): InterpolatedPoint {
+    targetTime: number
+): InterpolatedPoint | null {
     const timeDiff = endPoint.timestamp - startPoint.timestamp;
-    const targetDiff = targetTimestamp - startPoint.timestamp;
-    const ratio = timeDiff > 0 ? targetDiff / timeDiff : 0;
+    if (timeDiff <= 0) return null;
 
-    // Clamp ratio between 0 and 1
+    const ratio = (targetTime - startPoint.timestamp) / timeDiff;
     const clampedRatio = Math.max(0, Math.min(1, ratio));
 
     return {
-        lat: lerp(startPoint.lat, endPoint.lat, clampedRatio),
-        lng: lerp(startPoint.lng, endPoint.lng, clampedRatio),
-        timestamp: targetTimestamp,
-        speed: interpolateOptional(startPoint.speed, endPoint.speed, clampedRatio),
-        altitude: interpolateOptional(startPoint.altitude, endPoint.altitude, clampedRatio),
+        lat: startPoint.lat + (endPoint.lat - startPoint.lat) * clampedRatio,
+        lng: startPoint.lng + (endPoint.lng - startPoint.lng) * clampedRatio,
+        timestamp: targetTime,
+        speed: startPoint.speed ? startPoint.speed + (endPoint.speed! - startPoint.speed) * clampedRatio : undefined,
+        altitude: startPoint.altitude ? startPoint.altitude + (endPoint.altitude! - startPoint.altitude) * clampedRatio : undefined,
+        bearing: interpolateBearing(startPoint.bearing, endPoint.bearing, clampedRatio),
         isInterpolated: true
     };
 }
 
 /**
- * Linear interpolation between two numbers
+ * Smooth real-time interpolation for simulation animation
+ * This creates smooth movement between route points based on elapsed time
  */
-function lerp(start: number, end: number, ratio: number): number {
-    return start + (end - start) * ratio;
+export function getRealTimePosition(
+    routePoints: DataPoint[],
+    currentIndex: number,
+    segmentProgress: number // 0 to 1, how far through the current segment
+): { lat: number; lng: number; bearing?: number } | null {
+    if (currentIndex >= routePoints.length - 1) {
+        // At or past the last point
+        const lastPoint = routePoints[routePoints.length - 1];
+        return {
+            lat: lastPoint.lat,
+            lng: lastPoint.lng,
+            bearing: lastPoint.bearing
+        };
+    }
+
+    const currentPoint = routePoints[currentIndex];
+    const nextPoint = routePoints[currentIndex + 1];
+
+    // Smooth interpolation between current and next point
+    const lat = currentPoint.lat + (nextPoint.lat - currentPoint.lat) * segmentProgress;
+    const lng = currentPoint.lng + (nextPoint.lng - currentPoint.lng) * segmentProgress;
+    const bearing = interpolateBearing(currentPoint.bearing, nextPoint.bearing, segmentProgress);
+
+    return { lat, lng, bearing };
 }
 
 /**
- * Interpolates optional numeric values
+ * Calculates segment progress based on timestamps and current time
  */
-function interpolateOptional(
-    start: number | undefined,
-    end: number | undefined,
-    ratio: number
-): number | undefined {
-    if (start === undefined || end === undefined) {
-        return start !== undefined ? start : end;
-    }
-    return lerp(start, end, ratio);
+export function calculateSegmentProgress(
+    currentPoint: DataPoint,
+    nextPoint: DataPoint,
+    currentTime: number
+): number {
+    const segmentDuration = nextPoint.timestamp - currentPoint.timestamp;
+    if (segmentDuration <= 0) return 1;
+
+    const elapsed = currentTime - currentPoint.timestamp;
+    return Math.max(0, Math.min(1, elapsed / segmentDuration));
 }
 
 /**
- * Smooths a series of points using a simple moving average
+ * Interpolates bearing/heading values handling circular nature (0-360 degrees)
  */
-export function smoothPoints(
-    points: InterpolatedPoint[],
-    windowSize: number = 3
-): InterpolatedPoint[] {
-    if (points.length <= windowSize) {
-        return points;
+function interpolateBearing(start?: number, end?: number, ratio: number): number | undefined {
+    if (start === undefined || end === undefined) return start || end;
+
+    // Handle the circular nature of bearings
+    let diff = end - start;
+    if (diff > 180) {
+        diff -= 360;
+    } else if (diff < -180) {
+        diff += 360;
     }
 
-    const smoothedPoints: InterpolatedPoint[] = [];
-    const halfWindow = Math.floor(windowSize / 2);
+    let result = start + diff * ratio;
+    if (result < 0) result += 360;
+    if (result >= 360) result -= 360;
+
+    return result;
+}
+
+/**
+ * Smooth interpolation for data point arrays with advanced smoothing
+ */
+export function smoothPoints(points: InterpolatedPoint[], windowSize: number = 3): InterpolatedPoint[] {
+    if (points.length < windowSize) return points;
+
+    const smoothed: InterpolatedPoint[] = [];
 
     for (let i = 0; i < points.length; i++) {
-        const windowStart = Math.max(0, i - halfWindow);
-        const windowEnd = Math.min(points.length - 1, i + halfWindow);
-        const windowPoints = points.slice(windowStart, windowEnd + 1);
+        const start = Math.max(0, i - Math.floor(windowSize / 2));
+        const end = Math.min(points.length - 1, i + Math.floor(windowSize / 2));
+        
+        let latSum = 0;
+        let lngSum = 0;
+        let speedSum = 0;
+        let altitudeSum = 0;
+        let count = 0;
 
-        if (windowPoints.length === 0) {
-            smoothedPoints.push(points[i]);
-            continue;
+        for (let j = start; j <= end; j++) {
+            latSum += points[j].lat;
+            lngSum += points[j].lng;
+            if (points[j].speed !== undefined) speedSum += points[j].speed!;
+            if (points[j].altitude !== undefined) altitudeSum += points[j].altitude!;
+            count++;
         }
 
-        const avgLat = windowPoints.reduce((sum, p) => sum + p.lat, 0) / windowPoints.length;
-        const avgLng = windowPoints.reduce((sum, p) => sum + p.lng, 0) / windowPoints.length;
-        const avgSpeed = windowPoints
-                .filter(p => p.speed !== undefined)
-                .reduce((sum, p) => sum + (p.speed || 0), 0) /
-            Math.max(1, windowPoints.filter(p => p.speed !== undefined).length);
-        const avgAltitude = windowPoints
-                .filter(p => p.altitude !== undefined)
-                .reduce((sum, p) => sum + (p.altitude || 0), 0) /
-            Math.max(1, windowPoints.filter(p => p.altitude !== undefined).length);
-
-        smoothedPoints.push({
+        smoothed.push({
             ...points[i],
-            lat: avgLat,
-            lng: avgLng,
-            speed: windowPoints.some(p => p.speed !== undefined) ? avgSpeed : undefined,
-            altitude: windowPoints.some(p => p.altitude !== undefined) ? avgAltitude : undefined
+            lat: latSum / count,
+            lng: lngSum / count,
+            speed: points[i].speed !== undefined ? speedSum / count : undefined,
+            altitude: points[i].altitude !== undefined ? altitudeSum / count : undefined,
         });
     }
 
-    return smoothedPoints;
-}
-
-/**
- * Calculates the distance between two geographic points in meters
- */
-export function calculateDistance(point1: DataPoint, point2: DataPoint): number {
-    const R = 6371000; // Earth's radius in meters
-    const lat1Rad = (point1.lat * Math.PI) / 180;
-    const lat2Rad = (point2.lat * Math.PI) / 180;
-    const deltaLatRad = ((point2.lat - point1.lat) * Math.PI) / 180;
-    const deltaLngRad = ((point2.lng - point1.lng) * Math.PI) / 180;
-
-    const a =
-        Math.sin(deltaLatRad / 2) * Math.sin(deltaLatRad / 2) +
-        Math.cos(lat1Rad) * Math.cos(lat2Rad) *
-        Math.sin(deltaLngRad / 2) * Math.sin(deltaLngRad / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
-}
-
-/**
- * Calculates speed between consecutive points
- */
-export function calculateSpeeds(points: InterpolatedPoint[]): InterpolatedPoint[] {
-    if (points.length < 2) return points;
-
-    const pointsWithSpeed = [...points];
-
-    for (let i = 1; i < pointsWithSpeed.length; i++) {
-        const prev = pointsWithSpeed[i - 1];
-        const curr = pointsWithSpeed[i];
-
-        const distance = calculateDistance(prev, curr);
-        const timeDiff = (curr.timestamp - prev.timestamp) / 1000; // Convert to seconds
-
-        if (timeDiff > 0) {
-            pointsWithSpeed[i].speed = distance / timeDiff; // meters per second
-        }
-    }
-
-    return pointsWithSpeed;
+    return smoothed;
 }

@@ -64,15 +64,45 @@ export interface LocationMetadata {
 export type LocationEntry = RawLocationData | LocationMetadata;
 
 export interface Object3D {
-    id: string;
-    original_filename: string;
-    content_type: string;
-    size: number;
-    storage_key: string;
-    uploaded_at: string;
+    ID: string;
+    OriginalFilename: string;
+    ContentType: string;
+    Size: number;
+    StorageKey: string;
+    UploadedAt: string;
     latitude?: number;
     longitude?: number;
     altitude?: number;
+}
+
+// Type for the raw API response from storage service
+export interface StorageObjectResponse {
+    ID: string;
+    OriginalFilename: string;
+    ContentType: string;
+    Size: number;
+    StorageKey: string;
+    UploadedAt: string;
+    latitude?: number;
+    longitude?: number;
+    altitude?: number;
+}
+
+// Type guard to validate storage object response
+export function isValidStorageObject(obj: any): obj is StorageObjectResponse {
+    return (
+        typeof obj === 'object' &&
+        obj !== null &&
+        typeof obj.ID === 'string' &&
+        typeof obj.OriginalFilename === 'string' &&
+        typeof obj.ContentType === 'string' &&
+        typeof obj.Size === 'number' &&
+        typeof obj.StorageKey === 'string' &&
+        typeof obj.UploadedAt === 'string' &&
+        (obj.latitude === undefined || typeof obj.latitude === 'number') &&
+        (obj.longitude === undefined || typeof obj.longitude === 'number') &&
+        (obj.altitude === undefined || typeof obj.altitude === 'number')
+    );
 }
 
 export interface InterpolatedPoint extends DataPoint {
@@ -89,7 +119,7 @@ export interface SimulationState {
     isRunning: boolean;
     currentTime: number;
     startTime: number;
-    profileStates: Record<string, ProfileSimulationState>; 
+    profileStates: Record<string, ProfileSimulationState>;
 }
 
 export interface ProfileSimulationState {

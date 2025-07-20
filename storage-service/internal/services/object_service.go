@@ -14,25 +14,27 @@ import (
 	"github.com/pkg/errors"
 	"mime/multipart"
 
+	"storage-service/internal/config"
 	"storage-service/internal/models"
 	"storage-service/internal/repository"
+	"storage-service/internal/utils"
 )
-
-const DEFAULT_RADIUS = 30.0
 
 // ObjectService provides methods for managing 3D objects in storage.
 type ObjectService struct {
 	Repo       *repository.ObjectRepositoryImpl
 	Minio      *minio.Client
 	BucketName string
+	Config     *config.Config
 }
 
 // NewObjectService creates a new ObjectService with the given repository and storage client.
-func NewObjectService(repo *repository.ObjectRepositoryImpl, minioClient *minio.Client, bucketName string) *ObjectService {
+func NewObjectService(repo *repository.ObjectRepositoryImpl, minioClient *minio.Client, bucketName string, cfg *config.Config) *ObjectService {
 	return &ObjectService{
 		Repo:       repo,
 		Minio:      minioClient,
 		BucketName: bucketName,
+		Config:     cfg,
 	}
 }
 
@@ -102,17 +104,43 @@ func (s *ObjectService) GetObject(id uuid.UUID) (*models.Object, error) {
 
 // GetPredictedModels returns a list of object IDs that are predicted to be visible based on the given prediction request.
 func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]uuid.UUID, error) {
+	// Use configurable radius from config, convert from meters to kilometers for the query
+	radiusKm := s.Config.PredictionRadius / 1000.0
+
 	objects, err := s.Repo.GetObjectsByLocation(
 		req.Position.Latitude,
 		req.Position.Longitude,
-		DEFAULT_RADIUS,
+		radiusKm,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	var objectIDs []uuid.UUID
+	var filteredObjects []models.Object
+
+	// Apply distance filtering with exact calculation
 	for _, obj := range objects {
+		if obj.Latitude == nil || obj.Longitude == nil {
+			continue // Skip objects without location data
+		}
+
+		distance := utils.HaversineDistance(
+			req.Position.Latitude, req.Position.Longitude,
+			*obj.Latitude, *obj.Longitude,
+		)
+
+		if distance <= s.Config.PredictionRadius {
+			filteredObjects = append(filteredObjects, obj)
+		}
+	}
+
+	//// Apply directional filtering if enabled
+	//if s.Config.UseDirectionalFilter {
+	//	filteredObjects = s.applyDirectionalFilter(req, filteredObjects)
+	//}
+
+	var objectIDs []uuid.UUID
+	for _, obj := range filteredObjects {
 		objectIDs = append(objectIDs, obj.ID)
 	}
 

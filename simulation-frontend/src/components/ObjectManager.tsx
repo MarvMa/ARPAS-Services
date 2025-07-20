@@ -1,4 +1,4 @@
-import React, {useState, useRef} from 'react';
+import React, {useRef, useState} from 'react';
 import {Object3D} from '../types/simulation';
 import {StorageService} from '../services/storageService';
 
@@ -28,67 +28,26 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
     } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    /**
-     * Handles file upload for 3D objects
-     */
-    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        if (!file.name.toLowerCase().endsWith('.glb')) {
-            setError('Only GLB files are supported');
-            return;
-        }
-
-        setIsUploading(true);
-        setError(null);
-        setUploadProgress(0);
-
-        try {
-            const uploadedObject = await storageService.uploadObject(
-                file,
-                newObjectLocation?.lat,
-                newObjectLocation?.lng,
-                newObjectLocation?.alt
-            );
-
-            const updatedObjects = [...objects, uploadedObject];
-            onObjectsChange(updatedObjects);
-
-            setIsAddingMode(false);
-            setNewObjectLocation(null);
-            alert(`Successfully uploaded: ${uploadedObject.original_filename}`);
-        } catch (error) {
-            console.error('Upload failed:', error);
-            setError(error instanceof Error ? error.message : 'Upload failed');
-        } finally {
-            setIsUploading(false);
-            setUploadProgress(0);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
-        }
-    };
 
     /**
      * Handles object deletion
      */
     const handleDeleteObject = async (objectId: string) => {
-        const objectToDelete = objects.find(obj => obj.id === objectId);
+        const objectToDelete = objects.find(obj => obj.ID === objectId);
         if (!objectToDelete) return;
 
         const confirmed = window.confirm(
-            `Are you sure you want to delete "${objectToDelete.original_filename}"? This action cannot be undone.`
+            `Are you sure you want to delete "${objectToDelete.OriginalFilename}"? This action cannot be undone.`
         );
 
         if (!confirmed) return;
 
         try {
             await storageService.deleteObject(objectId);
-            const updatedObjects = objects.filter(obj => obj.id !== objectId);
+            const updatedObjects = objects.filter(obj => obj.ID !== objectId);
             onObjectsChange(updatedObjects);
 
-            if (selectedObject?.id === objectId) {
+            if (selectedObject?.ID === objectId) {
                 onObjectSelect(null);
             }
 
@@ -104,12 +63,12 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
      */
     const handleDownloadObject = async (object: Object3D) => {
         try {
-            const blob = await storageService.downloadObject(object.id);
+            const blob = await storageService.downloadObject(object.ID);
             const url = URL.createObjectURL(blob);
 
             const link = document.createElement('a');
             link.href = url;
-            link.download = object.original_filename;
+            link.download = object.OriginalFilename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -119,18 +78,7 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
             setError(error instanceof Error ? error.message : 'Download failed');
         }
     };
-
-    /**
-     * Starts the process of adding a new object at a specific location
-     */
-    const startAddingObject = (lat: number, lng: number, alt?: number) => {
-        setNewObjectLocation({lat, lng, alt});
-        setIsAddingMode(true);
-        if (fileInputRef.current) {
-            fileInputRef.current.click();
-        }
-    };
-
+    
     /**
      * Cancels the adding process
      */
@@ -162,23 +110,6 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
         <div className="object-manager">
             <div className="object-manager-header">
                 <h3>3D Objects ({objects.length})</h3>
-                <div className="object-manager-actions">
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".glb"
-                        onChange={handleFileUpload}
-                        style={{display: 'none'}}
-                    />
-                    <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={isUploading}
-                        className="btn-primary btn-small"
-                    >
-                        {isUploading ? 'Uploading...' : 'Upload GLB'}
-                    </button>
-                </div>
             </div>
 
             {error && (
@@ -223,16 +154,16 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                 ) : (
                     objects.map((object) => (
                         <div
-                            key={object.id}
-                            className={`object-item ${selectedObject?.id === object.id ? 'selected' : ''}`}
+                            key={object.ID}
+                            className={`object-item ${selectedObject?.ID === object.ID ? 'selected' : ''}`}
                             onClick={() => onObjectSelect(object)}
                         >
                             <div className="object-info">
-                                <div className="object-name">{object.original_filename}</div>
+                                <div className="object-name">{object.OriginalFilename}</div>
                                 <div className="object-details">
-                                    <span className="object-size">{formatFileSize(object.size)}</span>
+                                    <span className="object-size">{formatFileSize(object.Size)}</span>
                                     <span className="object-date">
-                    {new Date(object.uploaded_at).toLocaleDateString()}
+                    {new Date(object.UploadedAt).toLocaleDateString()}
                   </span>
                                 </div>
                                 {(object.latitude !== undefined && object.longitude !== undefined) && (
@@ -257,7 +188,7 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        handleDeleteObject(object.id);
+                                        handleDeleteObject(object.ID);
                                     }}
                                     className="btn-danger btn-tiny"
                                     title="Delete"
@@ -276,23 +207,23 @@ export const ObjectManager: React.FC<ObjectManagerProps> = ({
                     <div className="detail-grid">
                         <div className="detail-item">
                             <label>Filename:</label>
-                            <span>{selectedObject.original_filename}</span>
+                            <span>{selectedObject.OriginalFilename}</span>
                         </div>
                         <div className="detail-item">
                             <label>ID:</label>
-                            <span className="object-id">{selectedObject.id}</span>
+                            <span className="object-id">{selectedObject.ID}</span>
                         </div>
                         <div className="detail-item">
                             <label>Size:</label>
-                            <span>{formatFileSize(selectedObject.size)}</span>
+                            <span>{formatFileSize(selectedObject.Size)}</span>
                         </div>
                         <div className="detail-item">
                             <label>Content Type:</label>
-                            <span>{selectedObject.content_type}</span>
+                            <span>{selectedObject.ContentType}</span>
                         </div>
                         <div className="detail-item">
                             <label>Uploaded:</label>
-                            <span>{new Date(selectedObject.uploaded_at).toLocaleString()}</span>
+                            <span>{new Date(selectedObject.UploadedAt).toLocaleString()}</span>
                         </div>
                         {selectedObject.latitude !== undefined && (
                             <div className="detail-item">

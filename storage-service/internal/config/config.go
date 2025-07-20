@@ -38,6 +38,7 @@ func LoadConfig() (*Config, error) {
 		}
 		minioSSL = val
 	}
+
 	predictionRadius := 30.0 // default value
 	if radiusEnv := os.Getenv("PREDICTION_RADIUS"); radiusEnv != "" {
 		val, err := strconv.ParseFloat(radiusEnv, 64)
@@ -52,31 +53,31 @@ func LoadConfig() (*Config, error) {
 			useDirectionalFilter = val
 		}
 	}
-	cfg := &Config{
-		AppPort:        os.Getenv("STORAGE_PORT"),
-		DBHost:         os.Getenv("DB_HOST"),
-		DBPort:         os.Getenv("DB_PORT"),
-		DBUser:         os.Getenv("DB_USER"),
-		DBPassword:     os.Getenv("DB_PASSWORD"),
-		DBName:         os.Getenv("DB_NAME"),
-		MinioEndpoint:  os.Getenv("MINIO_ENDPOINT"),
-		MinioAccessKey: os.Getenv("MINIO_ACCESS_KEY"),
-		MinioSecretKey: os.Getenv("MINIO_SECRET_KEY"),
-		MinioBucket:    os.Getenv("MINIO_BUCKET"),
-		MinioSSL:       minioSSL,
 
-		// Prediction settings
+	config := &Config{
+		AppPort:              getEnvWithDefault("APP_PORT", "8000"),
+		DBHost:               getEnvWithDefault("DB_HOST", "localhost"),
+		DBPort:               getEnvWithDefault("DB_PORT", "5432"),
+		DBUser:               getEnvWithDefault("DB_USER", "postgres"),
+		DBPassword:           getEnvWithDefault("DB_PASSWORD", ""),
+		DBName:               getEnvWithDefault("DB_NAME", "storage_db"),
+		MinioEndpoint:        getEnvWithDefault("MINIO_ENDPOINT", "localhost:9000"),
+		MinioAccessKey:       getEnvWithDefault("MINIO_ACCESS_KEY", "minioadmin"),
+		MinioSecretKey:       getEnvWithDefault("MINIO_SECRET_KEY", "minioadmin"),
+		MinioBucket:          getEnvWithDefault("MINIO_BUCKET", "storage-bucket"),
+		MinioSSL:             minioSSL,
 		PredictionRadius:     predictionRadius,
 		UseDirectionalFilter: useDirectionalFilter,
 	}
-	// Basic validation for required fields
-	if cfg.DBHost == "" || cfg.DBUser == "" || cfg.DBName == "" {
-		return nil, fmt.Errorf("database configuration is incomplete")
+
+	return config, nil
+}
+
+func getEnvWithDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
 	}
-	if cfg.MinioEndpoint == "" || cfg.MinioAccessKey == "" || cfg.MinioSecretKey == "" || cfg.MinioBucket == "" {
-		return nil, fmt.Errorf("minio configuration is incomplete")
-	}
-	return cfg, nil
+	return defaultValue
 }
 
 // ConnectDatabase initializes a GORM database connection to PostgreSQL.

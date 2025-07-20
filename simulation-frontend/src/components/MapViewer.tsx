@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState, useMemo, useCallback} from 'react';
 import {MapContainer, TileLayer, Polyline, CircleMarker, Popup, Marker, useMapEvents} from 'react-leaflet';
 import {LatLngExpression, LatLngBoundsExpression, LatLngTuple, LeafletMouseEvent, DivIcon} from 'leaflet';
 import {Profile, InterpolatedPoint, SimulationState, Object3D} from '../types/simulation';
-import {interpolatePoints, smoothPoints} from '../utils/interpolation';
+import {interpolatePoints, smoothPoints, getRealTimePosition, calculateSegmentProgress} from '../utils/interpolation';
 import 'leaflet/dist/leaflet.css';
 
 interface MapViewerProps {
@@ -103,7 +103,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     }, [allProfileIds, smoothingEnabled]);
 
     /**
-     * Updates current positions during simulation - simplified
+     * Updates current positions during simulation - with smooth animation
      */
     useEffect(() => {
         if (!simulationState?.isRunning) {
@@ -111,14 +111,58 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             return;
         }
 
+        let animationFrameId: number;
+
         const updateCurrentPositions = () => {
             const newPositions = new Map<string, InterpolatedPoint>();
+            const currentTime = Date.now();
 
             try {
                 Object.entries(simulationState.profileStates).forEach(([profileId, profileState]) => {
-                    const interpolated = interpolatedData.get(profileId);
-                    if (interpolated && profileState.currentIndex < interpolated.length) {
-                        newPositions.set(profileId, interpolated[profileState.currentIndex]);
+                    const profile = profiles.find(p => p.id === profileId);
+                    if (!profile || !profile.data || profile.data.length === 0) return;
+
+                    // Get current segment information
+                    const currentIndex = Math.min(profileState.currentIndex, profile.data.length - 1);
+                    
+                    if (currentIndex >= profile.data.length - 1) {
+                        // At the last point
+                        const lastPoint = profile.data[profile.data.length - 1];
+                        newPositions.set(profileId, {
+                            ...lastPoint,
+                            isInterpolated: false
+                        });
+                        return;
+                    }
+
+                    // Calculate smooth position between current and next point
+                    const currentPoint = profile.data[currentIndex];
+                    const nextPoint = profile.data[currentIndex + 1];
+                    
+                    // Calculate how far we are through this segment based on time
+                    const segmentProgress = calculateSegmentProgress(
+                        currentPoint,
+                        nextPoint,
+                        currentTime - (simulationState.startTime - currentPoint.timestamp)
+                    );
+
+                    // Get smooth interpolated position
+                    const smoothPosition = getRealTimePosition(
+                        profile.data,
+                        currentIndex,
+                        segmentProgress
+                    );
+
+                    if (smoothPosition) {
+                        newPositions.set(profileId, {
+                            lat: smoothPosition.lat,
+                            lng: smoothPosition.lng,
+                            timestamp: currentTime,
+                            bearing: smoothPosition.bearing,
+                            speed: currentPoint.speed,
+                            altitude: currentPoint.altitude,
+                            isInterpolated: true
+                        });
                     }
                 });
 
@@ -126,13 +170,22 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             } catch (error) {
                 console.error('Error updating current positions:', error);
             }
+
+            // Continue animation loop
+            if (simulationState?.isRunning) {
+                animationFrameId = requestAnimationFrame(updateCurrentPositions);
+            }
         };
 
+        // Start animation loop
         updateCurrentPositions();
-        const interval = setInterval(updateCurrentPositions, 100);
 
-        return () => clearInterval(interval);
-    }, [simulationState?.isRunning, simulationState?.currentTime]); // Simplified dependencies
+        return () => {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+        };
+    }, [simulationState?.isRunning, simulationState?.startTime, profiles]); // Dependencies for smooth animation
 
     /**
      * Calculate visible profiles data for bounds/center - simplified
@@ -213,7 +266,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
     const downloadObject = useCallback(async (object: Object3D) => {
         try {
             const apiBase = (import.meta as any).env?.DEV ? '/api/storage' : 'http://localhost:8080/api/storage';
-            const response = await fetch(`${apiBase}/objects/${object.id}/download`);
+            const response = await fetch(`${apiBase}/objects/${object.ID}/download`);
             if (!response.ok) throw new Error('Download failed');
 
             const blob = await response.blob();
@@ -221,7 +274,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
 
             const link = document.createElement('a');
             link.href = url;
-            link.download = object.original_filename;
+            link.download = object.OriginalFilename;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -251,9 +304,9 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             .filter(obj => obj.latitude !== undefined && obj.longitude !== undefined)
             .map((obj) => (
                 <Marker
-                    key={`object-${obj.id}`}
+                    key={`object-${obj.ID}`}
                     position={[obj.latitude!, obj.longitude!]}
-                    icon={create3DObjectIcon(selectedObject?.id === obj.id)}
+                    icon={create3DObjectIcon(selectedObject?.ID === obj.ID)}
                     eventHandlers={{
                         click: (e) => {
                             e.originalEvent.stopPropagation();
@@ -264,16 +317,16 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                     <Popup>
                         <div className="object-popup">
                             <div className="popup-header">
-                                <strong>📦 {obj.original_filename}</strong>
+                                <strong>📦 {obj.OriginalFilename}</strong>
                             </div>
                             <div className="popup-content">
                                 <div className="popup-field">
                                     <label>ID:</label>
-                                    <span className="object-id-short">{obj.id.substring(0, 8)}...</span>
+                                    <span className="object-id-short">{obj.ID.substring(0, 8)}...</span>
                                 </div>
                                 <div className="popup-field">
                                     <label>Size:</label>
-                                    <span>{formatFileSize(obj.size)}</span>
+                                    <span>{formatFileSize(obj.Size)}</span>
                                 </div>
                                 <div className="popup-field">
                                     <label>Location:</label>
@@ -284,7 +337,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                                 </div>
                                 <div className="popup-field">
                                     <label>Uploaded:</label>
-                                    <span>{new Date(obj.uploaded_at).toLocaleDateString()}</span>
+                                    <span>{new Date(obj.UploadedAt).toLocaleDateString()}</span>
                                 </div>
                             </div>
                             <div className="popup-actions">
