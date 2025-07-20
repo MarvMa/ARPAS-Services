@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState, useMemo, useCallback} from 'react';
+import React, {useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle} from 'react';
 import {MapContainer, TileLayer, Polyline, CircleMarker, Popup, Marker, useMapEvents} from 'react-leaflet';
 import {LatLngExpression, LatLngBoundsExpression, LatLngTuple, LeafletMouseEvent, DivIcon} from 'leaflet';
 import {Profile, InterpolatedPoint, SimulationState, Object3D} from '../types/simulation';
@@ -19,19 +19,19 @@ interface MapViewerProps {
     onProfileVisibilityToggle?: (profileId: string) => void;
 }
 
-export const MapViewer: React.FC<MapViewerProps> = ({
-                                                        profiles,
-                                                        selectedProfiles,
-                                                        simulationState,
-                                                        showInterpolated,
-                                                        smoothingEnabled,
-                                                        objects3D,
-                                                        selectedObject,
-                                                        onObjectSelect,
-                                                        onMapClick,
-                                                        isAddingMode = false,
-                                                        onProfileVisibilityToggle
-                                                    }) => {
+const MapViewer = forwardRef<any, MapViewerProps>(({
+                                                       profiles,
+                                                       selectedProfiles,
+                                                       simulationState,
+                                                       showInterpolated,
+                                                       smoothingEnabled,
+                                                       objects3D,
+                                                       selectedObject,
+                                                       onObjectSelect,
+                                                       onMapClick,
+                                                       isAddingMode = false,
+                                                       onProfileVisibilityToggle
+                                                   }, ref) => {
     const [interpolatedData, setInterpolatedData] = useState<Map<string, InterpolatedPoint[]>>(new Map());
     const [currentPositions, setCurrentPositions] = useState<Map<string, InterpolatedPoint>>(new Map());
     const mapRef = useRef<any>(null);
@@ -124,7 +124,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
 
                     // Get current segment information
                     const currentIndex = Math.min(profileState.currentIndex, profile.data.length - 1);
-                    
+
                     if (currentIndex >= profile.data.length - 1) {
                         // At the last point
                         const lastPoint = profile.data[profile.data.length - 1];
@@ -138,7 +138,7 @@ export const MapViewer: React.FC<MapViewerProps> = ({
                     // Calculate smooth position between current and next point
                     const currentPoint = profile.data[currentIndex];
                     const nextPoint = profile.data[currentIndex + 1];
-                    
+
                     // Calculate how far we are through this segment based on time
                     const segmentProgress = calculateSegmentProgress(
                         currentPoint,
@@ -486,6 +486,30 @@ export const MapViewer: React.FC<MapViewerProps> = ({
         });
     };
 
+    /**
+     * Focuses and zooms to a specific profile
+     */
+    const focusProfile = useCallback((profileId: string) => {
+        const profile = profiles.find(p => p.id === profileId);
+        if (!profile || !mapRef.current) return;
+
+        const data = showInterpolated
+            ? interpolatedData.get(profile.id) || []
+            : profile.data;
+
+        if (data.length === 0) return;
+
+        const bounds = data.map(point => [point.lat, point.lng]) as LatLngTuple[];
+
+        if (mapRef.current && mapRef.current.fitBounds) {
+            mapRef.current.fitBounds(bounds, {padding: [20, 20]});
+        }
+    }, [profiles, interpolatedData, showInterpolated]);
+
+    useImperativeHandle(ref, () => ({
+        focusProfile
+    }), [focusProfile]);
+
     return (
         <div className="map-viewer">
             <div className="map-controls">
@@ -584,4 +608,6 @@ export const MapViewer: React.FC<MapViewerProps> = ({
             </MapContainer>
         </div>
     );
-};
+});
+
+export {MapViewer};
