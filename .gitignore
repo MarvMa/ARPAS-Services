@@ -18,4 +18,4 @@ storage-service/example_files/
 
 /cache-service/node_modules/
 
-simulation-frontend/public/objects/3d-models/FLOWERPOT_GLB.glb
+example-data/3d-models/FLOWERPOT_GLB.glb
