@@ -17,20 +17,28 @@ interface PredictionResponse {
     objectIds: (string | number | null)[];
 }
 
+interface DockerStats {
+    cpu_usage: number;
+    memory_usage: number;
+    memory_limit: number;
+    network_rx_bytes: number;
+    network_tx_bytes: number;
+}
+
 export class SimulationService {
     private dataCollector: DataCollector;
     private simulationState: SimulationState | null = null;
     private simulationIntervalId: number | null = null;
     private profileWebSockets: Map<string, WebSocket> = new Map();
-    private downloadedObjectsPerProfile: Map<string, Set<string>> = new Map(); // Per-profile tracking
-    private availableObjects: Object3D[] = []; // Cache of all 3D objects for distance calculation
+    private downloadedObjectsPerProfile: Map<string, Set<string>> = new Map();
+    private availableObjects: Object3D[] = [];
+    private dockerStatsInterval: number | null = null;
+    private dockerStats: Map<string, DockerStats[]> = new Map();
+
     constructor() {
         this.dataCollector = new DataCollector();
     }
 
-    /**
-     * Sets the available 3D objects for distance-based detection
-     */
     setAvailableObjects(objects: Object3D[]): void {
         this.availableObjects = objects;
     }
@@ -49,8 +57,12 @@ export class SimulationService {
         // Clear previous data
         this.downloadedObjectsPerProfile.clear();
         this.profileWebSockets.clear();
+        this.dockerStats.clear();
 
-        // Calculate the earliest start time across all profiles for synchronized playback
+        // Start collecting Docker stats
+        this.startDockerStatsCollection();
+
+        // Calculate the earliest start time across all profiles
         const allStartTimes = config.profiles
             .filter(p => p.data.length > 0)
             .map(p => Math.min(...p.data.map(d => d.timestamp)));
@@ -63,13 +75,13 @@ export class SimulationService {
             isRunning: true,
             currentTime: simulationStartTime,
             startTime: simulationStartTime,
-            profileStates: {}
+            profileStates: {},
+            optimized: config.optimized // Add optimization mode to state
         };
 
-        // Initialize profile states and WebSocket connections in PARALLEL
+        // Initialize profile states and WebSocket connections
         const profileSetupPromises = config.profiles.map(async (profile) => {
             if (profile.data.length === 0) return;
-
 
             const profileState: ProfileSimulationState = {
                 profileId: profile.id,
@@ -78,12 +90,9 @@ export class SimulationService {
                 metrics: []
             };
 
-            // Initialize per-profile download tracking
             this.downloadedObjectsPerProfile.set(profile.id, new Set<string>());
-
             this.simulationState!.profileStates[profile.id] = profileState;
 
-            // Establish WebSocket connection if optimized mode
             if (config.optimized) {
                 try {
                     await this.establishWebSocketConnection(profile.id, profile.name);
@@ -93,7 +102,6 @@ export class SimulationService {
             }
         });
 
-        // Wait for all profiles to be set up in parallel
         await Promise.all(profileSetupPromises);
 
         // Start real-time simulation loop
@@ -102,9 +110,6 @@ export class SimulationService {
         return simulationId;
     }
 
-    /**
-     * Stops the current simulation and returns results
-     */
     async stopSimulation(): Promise<SimulationResults | null> {
         if (!this.simulationState) {
             return null;
@@ -118,6 +123,9 @@ export class SimulationService {
             this.simulationIntervalId = null;
         }
 
+        // Stop Docker stats collection
+        this.stopDockerStatsCollection();
+
         // Close all WebSocket connections
         this.profileWebSockets.forEach((ws, profileId) => {
             if (ws.readyState === WebSocket.OPEN) {
@@ -127,22 +135,52 @@ export class SimulationService {
         });
         this.profileWebSockets.clear();
 
-        const results = this.collectSimulationResults();
+        const results = await this.collectSimulationResults();
         await this.dataCollector.saveResults(results);
 
-        // Clear per-profile download tracking
         this.downloadedObjectsPerProfile.clear();
-
         this.simulationState = null;
         return results;
     }
 
-    /**
-     * Gets the current simulation state
-     */
-    getSimulationState(): SimulationState | null {
-        return this.simulationState ? {...this.simulationState} : null;
+    private startDockerStatsCollection(): void {
+        this.dockerStatsInterval = window.setInterval(async () => {
+            try {
+                const stats = await this.fetchDockerStats();
+                const timestamp = Date.now();
+
+                for (const [container, stat] of Object.entries(stats)) {
+                    if (!this.dockerStats.has(container)) {
+                        this.dockerStats.set(container, []);
+                    }
+                    this.dockerStats.get(container)!.push({
+                        ...stat,
+                        timestamp
+                    } as any);
+                }
+            } catch (error) {
+                console.error('Failed to collect Docker stats:', error);
+            }
+        }, 1000); // Collect every second
     }
+
+    private stopDockerStatsCollection(): void {
+        if (this.dockerStatsInterval) {
+            clearInterval(this.dockerStatsInterval);
+            this.dockerStatsInterval = null;
+        }
+    }
+
+    private async fetchDockerStats(): Promise<Record<string, DockerStats>> {
+        try {
+            const response = await axios.get('/api/docker/stats');
+            return response.data;
+        } catch (error) {
+            console.error('Failed to fetch Docker stats:', error);
+            return {};
+        }
+    }
+
 
     /**
      * Establishes WebSocket connection for a specific profile
@@ -455,11 +493,17 @@ export class SimulationService {
         if (!profileState) return;
 
         try {
+            const headers: any = {};
+            if (this.simulationState?.optimized) {
+                headers['X-Optimization-Mode'] = 'optimized';
+            }
+
             const response = await axios.get(
                 `http://localhost/api/storage/objects/${objectId}/download`,
                 {
                     responseType: 'blob',
-                    timeout: 30000 // 30 second timeout
+                    timeout: 30000,
+                    headers
                 }
             );
 
@@ -467,18 +511,25 @@ export class SimulationService {
             const latency = endTime - startTime;
             const sizeBytes = response.data.size || 0;
 
+            // Extract metrics from response headers
+            const downloadSource = response.headers['x-download-source'] || 'unknown';
+            const serverLatency = parseInt(response.headers['x-download-latency-ms'] || '0');
+
             const metric: ObjectMetric = {
                 objectId,
                 profileId,
                 downloadLatencyMs: latency,
+                serverLatencyMs: serverLatency,
+                clientLatencyMs: latency - serverLatency,
                 sizeBytes,
                 timestamp: Date.now(),
-                simulationType: this.profileWebSockets.has(profileId) ? 'optimized' : 'unoptimized',
-                simulationId: this.getCurrentSimulationId()
+                simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
+                simulationId: this.getCurrentSimulationId(),
+                downloadSource
             };
 
             profileState.metrics.push(metric);
-            console.log(`Downloaded object ${objectId} for profile ${profileId} in ${latency.toFixed(2)}ms (${(sizeBytes / 1024).toFixed(1)}KB)`);
+            console.log(`Downloaded object ${objectId} for profile ${profileId} in ${latency.toFixed(2)}ms (server: ${serverLatency}ms, client: ${(latency - serverLatency).toFixed(2)}ms) from ${downloadSource}`);
 
         } catch (error) {
             console.error(`Failed to download object ${objectId} for profile ${profileId}:`, error);
@@ -488,7 +539,7 @@ export class SimulationService {
     /**
      * Collects simulation results for export
      */
-    private collectSimulationResults(): SimulationResults {
+    private async collectSimulationResults(): Promise<SimulationResults> {
         if (!this.simulationState) {
             throw new Error('No simulation state available');
         }
@@ -498,7 +549,7 @@ export class SimulationService {
             allMetrics.push(...profileState.metrics);
         });
 
-        // Calculate unique objects per profile and globally
+        // Calculate statistics
         const globalUniqueObjects = new Set<string>();
         const profileStats = new Map<string, { downloads: number; unique: number }>();
 
@@ -514,15 +565,35 @@ export class SimulationService {
         const averageLatency = allMetrics.length > 0
             ? allMetrics.reduce((sum, m) => sum + m.downloadLatencyMs, 0) / allMetrics.length
             : 0;
+
+        const averageServerLatency = allMetrics.length > 0
+            ? allMetrics.reduce((sum, m) => sum + (m.serverLatencyMs || 0), 0) / allMetrics.length
+            : 0;
+
         const totalDataSize = allMetrics.reduce((sum, m) => sum + m.sizeBytes, 0);
 
-        const simulationType = this.profileWebSockets.size > 0 ? 'optimized' : 'unoptimized';
+        // Calculate cache hit rate for optimized mode
+        const cacheHits = allMetrics.filter(m => m.downloadSource === 'cache').length;
+        const cacheHitRate = this.simulationState.optimized && allMetrics.length > 0
+            ? (cacheHits / allMetrics.length) * 100
+            : 0;
 
-        console.log('Simulation Results Summary:');
-        profileStats.forEach((stats, profileId) => {
-            console.log(`Profile ${profileId}: ${stats.downloads} downloads, ${stats.unique} unique objects`);
-        });
-        console.log(`Global unique objects: ${globalUniqueObjects.size}`);
+        const simulationType = this.simulationState.optimized ? 'optimized' : 'unoptimized';
+
+        // Prepare Docker stats summary
+        const dockerStatsSummary: any = {};
+        for (const [container, stats] of this.dockerStats.entries()) {
+            if (stats.length > 0) {
+                dockerStatsSummary[container] = {
+                    avgCpuUsage: stats.reduce((sum, s) => sum + s.cpu_usage, 0) / stats.length,
+                    maxCpuUsage: Math.max(...stats.map(s => s.cpu_usage)),
+                    avgMemoryUsage: stats.reduce((sum, s) => sum + s.memory_usage, 0) / stats.length,
+                    maxMemoryUsage: Math.max(...stats.map(s => s.memory_usage)),
+                    totalNetworkRx: stats[stats.length - 1].network_rx_bytes - stats[0].network_rx_bytes,
+                    totalNetworkTx: stats[stats.length - 1].network_tx_bytes - stats[0].network_tx_bytes
+                };
+            }
+        }
 
         return {
             simulationId: this.getCurrentSimulationId(),
@@ -534,23 +605,25 @@ export class SimulationService {
             totalObjects: allMetrics.length,
             uniqueObjects: globalUniqueObjects.size,
             averageLatency,
-            totalDataSize
+            averageServerLatency,
+            totalDataSize,
+            cacheHitRate,
+            dockerStats: dockerStatsSummary,
+            detailedDockerStats: Object.fromEntries(this.dockerStats)
         };
     }
 
-    /**
-     * Generates a unique simulation ID
-     */
     private generateSimulationId(): string {
         return `sim_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
     }
 
-    /**
-     * Gets the current simulation ID
-     */
     private getCurrentSimulationId(): string {
         return this.simulationState
             ? `sim_${this.simulationState.startTime}_${Math.random().toString(36).substring(2, 11)}`
             : 'unknown';
+    }
+
+    public getSimulationState(): SimulationState | null {
+        return this.simulationState
     }
 }

@@ -13,3 +13,9 @@
 storage-service/example_files/
 */.idea/*
 .idea/*
+.run
+
+
+/cache-service/node_modules/
+
+simulation-frontend/public/objects/3d-models/FLOWERPOT_GLB.glb

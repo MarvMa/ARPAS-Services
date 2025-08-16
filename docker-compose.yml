@@ -28,33 +28,35 @@ services:
         condition: service_healthy
       cache-service:
         condition: service_healthy
-
-  simulation-service:
-    build: ./simulation-service
-    networks:
-      - backend-net
-    environment:
-      PORT: ${SIMULATION_BACKEND_PORT}
-      HOST: 0.0.0.0
-      UPLOAD_DIR: /app/uploads
-      RATE_LIMIT_WINDOW: 15
-      RATE_LIMIT_MAX: 100
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      PREDICTION_URL: http://prediction-service:8002
     volumes:
-      - simulation-uploads:/app/uploads
-      - simulation-logs:/app/logs
-      - ./simulation-service/data:/app/data
-    ports:
-      - "8003:8003"
-    expose:
-      - "${SIMULATION_BACKEND_PORT}"
-    healthcheck:
-      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:${SIMULATION_BACKEND_PORT}/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker stats
+
+  #  simulation-service:
+  #    build: ./simulation-service
+  #    networks:
+  #      - backend-net
+  #    environment:
+  #      PORT: ${SIMULATION_BACKEND_PORT}
+  #      HOST: 0.0.0.0
+  #      UPLOAD_DIR: /app/uploads
+  #      RATE_LIMIT_WINDOW: 15
+  #      RATE_LIMIT_MAX: 100
+  #      LOG_LEVEL: ${LOG_LEVEL:-info}
+  #      PREDICTION_URL: http://prediction-service:8002
+  #    volumes:
+  #      - simulation-uploads:/app/uploads
+  #      - simulation-logs:/app/logs
+  #      - ./simulation-service/data:/app/data
+  #    ports:
+  #      - "8003:8003"
+  #    expose:
+  #      - "${SIMULATION_BACKEND_PORT}"
+  #    healthcheck:
+  #      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:${SIMULATION_BACKEND_PORT}/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" ]
+  #      interval: 30s
+  #      timeout: 10s
+  #      retries: 3
+  #      start_period: 40s
 
   simulation-frontend:
     build: ./simulation-frontend
@@ -74,7 +76,10 @@ services:
       REACT_APP_PREDICTION_WS_URL: ${REACT_APP_PREDICTION_WS_URL}
       REACT_APP_API_BASE_URL: ${REACT_APP_API_BASE_URL}
       REACT_APP_MAPTILER_API_KEY: ${MAPTILER_API_KEY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker stats
 
+    # Cache Service with monitoring
   cache-service:
     build: ./cache-service
     networks:
@@ -88,12 +93,20 @@ services:
       REDIS_PORT: ${REDIS_PORT}
       OBJECT_TTL: ${OBJECT_TTL}
       STORAGE_URL: ${STORAGE_URL}
+    ports:
+      - "8001:${CACHE_PORT}"  # Expose for metrics
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://cache-service:${CACHE_PORT}/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 4G  # Increased for in-memory caching
+        reservations:
+          memory: 2G
 
   prediction-service:
     networks:
@@ -137,14 +150,12 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
     expose:
       - "${STORAGE_PORT}"
-    # Explicitly set memory limits for the storage service to prevent OOM errors
     deploy:
       resources:
         limits:
           memory: 2G
         reservations:
           memory: 512M
-    # Use tmpfs for /tmp to avoid disk I/O issues
     tmpfs:
       - /tmp:size=2G,noexec,nosuid
     healthcheck:
@@ -162,11 +173,20 @@ services:
       - type: volume
         source: redis-data
         target: /data
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"  # Expose for monitoring
     healthcheck:
       test: [ "CMD-SHELL", "redis-cli ping | grep PONG" ]
       interval: 10s
       timeout: 5s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 2G
 
   postgres:
     image: postgres:15-alpine
@@ -202,6 +222,19 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+  prometheus:
+    image: prom/prometheus:latest
+    networks:
+      - monitoring-net
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
 
   sonarqube:
     image: sonarqube:9.9-community

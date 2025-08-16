@@ -10,9 +10,11 @@ import {Profile, SimulationState, SimulationConfig, Object3D} from './types/simu
 
 // Define the profiles to be loaded automatically
 const PRELOADED_PROFILES: string[] = [
-    'Disseminat_Var_668-2025-07-19_15-27-54.json',
-    'Disseminat_Var_668-2025-07-20_19-47-25.json',
-    // Add more profile filenames here as needed
+    'Gaby-2025-07-27_18-54-39.json',
+    'Gio-2025-07-27_18-54-39.json',
+    'Liane-2025-07-27_18-54-40.json',
+    'Marcel-2025-07-27_18-54-39.json',
+    'Marvin-2025-07-27_18-54-40.json'
 ];
 
 const App: React.FC = () => {

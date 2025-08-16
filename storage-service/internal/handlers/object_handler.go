@@ -3,9 +3,11 @@ package handlers
 import (
 	"errors"
 	"github.com/minio/minio-go/v7"
+	"io"
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -245,12 +247,14 @@ func (h *ObjectHandler) DeleteObject(c *fiber.Ctx) error {
 }
 
 // DownloadObject handles GET /objects/:id/download to stream the GLB file content.
+// Now supports cache integration for optimized mode
 // @Summary Download a 3D object file
-// @Description Download the GLB file for a specific 3D object
+// @Description Download the GLB file for a specific 3D object (supports cache optimization)
 // @Tags objects
 // @Accept json
 // @Produce application/octet-stream
 // @Param id path string true "Object ID"
+// @Param X-Optimization-Mode header string false "Set to 'optimized' to use cache service"
 // @Success 200 {file} binary "GLB file"
 // @Failure 400 {object} map[string]interface{} "Invalid UUID"
 // @Failure 404 {object} map[string]interface{} "Object not found"
@@ -258,7 +262,11 @@ func (h *ObjectHandler) DeleteObject(c *fiber.Ctx) error {
 // @Router /objects/{id}/download [get]
 func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 	idStr := c.Params("id")
-	log.Printf("Downloading object - ID: %s, Method: %s, Path: %s, IP: %s", idStr, c.Method(), c.Path(), c.IP())
+	optimizationMode := c.Get("X-Optimization-Mode")
+
+	log.Printf("Downloading object - ID: %s, Mode: %s, Method: %s, Path: %s, IP: %s",
+		idStr, optimizationMode, c.Method(), c.Path(), c.IP())
+
 	objectID, err := uuid.Parse(idStr)
 	if err != nil {
 		log.Printf("Invalid UUID format for download: %s - Error: %v", idStr, err)
@@ -266,7 +274,8 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			"error": true, "message": InvalidUuidError,
 		})
 	}
-	// Get object metadata (to retrieve storage key and content type)
+
+	// Get object metadata
 	obj, err := h.Service.GetObject(objectID)
 	if err != nil {
 		log.Printf("Object not found for download: ID=%s", objectID)
@@ -280,27 +289,58 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			"error": true, "message": err.Error(),
 		})
 	}
-	log.Printf("Retrieving file from storage: StorageKey=%s", obj.StorageKey)
-	// Fetch the file from MinIO storage
-	object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
-	if err != nil {
-		log.Printf("Failed to retrieve file from MinIO: StorageKey=%s, Error=%v", obj.StorageKey, err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": true, "message": "unable to retrieve file",
-		})
-	}
-	stat, err := object.Stat()
-	if err != nil {
-		log.Printf("File not found in storage: StorageKey=%s, Error=%v", obj.StorageKey, err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": true, "message": "file not found in storage",
-		})
-	}
-	log.Printf("Successfully streaming file: ID=%s, Size=%d bytes", objectID, stat.Size)
 
-	// Set response headers for file download
+	// Measure download latency
+	startTime := time.Now()
+	var data []byte
+	var downloadSource string
+
+	// Use cache service if in optimized mode
+	if optimizationMode == "optimized" {
+		log.Printf("Attempting to retrieve from cache: ID=%s", obj.ID)
+		data, err = h.Service.GetFromCache(obj.ID)
+		if err == nil && data != nil {
+			downloadSource = "cache"
+			log.Printf("Successfully retrieved from cache: ID=%s, Size=%d bytes", obj.ID, len(data))
+		} else {
+			log.Printf("Cache miss or error for ID=%s, falling back to MinIO", obj.ID)
+		}
+	}
+
+	// If not using cache or cache miss, get from MinIO
+	if data == nil {
+		downloadSource = "minio"
+		log.Printf("Retrieving file from MinIO: StorageKey=%s", obj.StorageKey)
+
+		object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
+		if err != nil {
+			log.Printf("Failed to retrieve file from MinIO: StorageKey=%s, Error=%v", obj.StorageKey, err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": true, "message": "unable to retrieve file",
+			})
+		}
+		defer object.Close()
+
+		data, err = io.ReadAll(object)
+		if err != nil {
+			log.Printf("Failed to read object data: StorageKey=%s, Error=%v", obj.StorageKey, err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": true, "message": "failed to read object data",
+			})
+		}
+	}
+
+	// Calculate and log latency
+	latency := time.Since(startTime).Milliseconds()
+	log.Printf("Successfully retrieved file: ID=%s, Size=%d bytes, Source=%s, Latency=%dms",
+		obj.ID, len(data), downloadSource, latency)
+
+	// Set response headers
 	c.Set(fiber.HeaderContentType, obj.ContentType)
 	c.Set(fiber.HeaderContentDisposition, "attachment; filename=\""+obj.ID.String()+".glb\"")
-	// Stream the content to the response
-	return c.Status(fiber.StatusOK).SendStream(object, int(stat.Size))
+	c.Set("X-Download-Source", downloadSource)
+	c.Set("X-Download-Latency-Ms", strconv.FormatInt(latency, 10))
+
+	// Send the data
+	return c.Status(fiber.StatusOK).Send(data)
 }

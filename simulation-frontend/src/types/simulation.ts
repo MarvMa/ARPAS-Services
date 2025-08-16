@@ -60,8 +60,6 @@ export interface LocationMetadata {
     sensors?: string;
 }
 
-// Union type for entries in the JSON array
-export type LocationEntry = RawLocationData | LocationMetadata;
 
 export interface Object3D {
     ID: string;
@@ -178,4 +176,42 @@ export interface ProfileStatistics {
         start: Date;
         end: Date;
     };
+}
+
+export interface ObjectMetric {
+    objectId: string;
+    profileId: string;
+    downloadLatencyMs: number;
+    serverLatencyMs?: number;
+    clientLatencyMs?: number;
+    sizeBytes: number;
+    timestamp: number;
+    simulationType: 'optimized' | 'unoptimized';
+    simulationId: string;
+    downloadSource?: 'cache' | 'minio' | 'unknown';
+}
+
+export interface SimulationState {
+    isRunning: boolean;
+    currentTime: number;
+    startTime: number;
+    profileStates: Record<string, ProfileSimulationState>;
+    optimized?: boolean;
+}
+
+export interface SimulationResults {
+    simulationId: string;
+    simulationType: 'optimized' | 'unoptimized';
+    startTime: number;
+    endTime: number;
+    profiles: Profile[];
+    metrics: ObjectMetric[];
+    totalObjects: number;
+    uniqueObjects: number;
+    averageLatency: number;
+    averageServerLatency?: number;
+    totalDataSize: number;
+    cacheHitRate?: number;
+    dockerStats?: any;
+    detailedDockerStats?: any;
 }

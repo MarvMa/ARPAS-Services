@@ -23,9 +23,13 @@ type Config struct {
 	MinioBucket    string
 	MinioSSL       bool
 
+	// Cache configuration
+	CacheServiceURL string
+	CacheEnabled    bool
+
 	// Prediction settings
-	PredictionRadius     float64 // Default radius in meters for object prediction (default: 30)
-	UseDirectionalFilter bool    // Whether to apply directional/frustum filtering
+	PredictionRadius     float64
+	UseDirectionalFilter bool
 }
 
 // LoadConfig loads configuration from environment variables.
@@ -39,6 +43,14 @@ func LoadConfig() (*Config, error) {
 		minioSSL = val
 	}
 
+	cacheEnabled := true
+	if cacheEnv := os.Getenv("CACHE_ENABLED"); cacheEnv != "" {
+		val, err := strconv.ParseBool(cacheEnv)
+		if err == nil {
+			cacheEnabled = val
+		}
+	}
+
 	predictionRadius := 30.0 // default value
 	if radiusEnv := os.Getenv("PREDICTION_RADIUS"); radiusEnv != "" {
 		val, err := strconv.ParseFloat(radiusEnv, 64)
@@ -46,6 +58,7 @@ func LoadConfig() (*Config, error) {
 			predictionRadius = val
 		}
 	}
+
 	useDirectionalFilter := false
 	if filterEnv := os.Getenv("USE_DIRECTIONAL_FILTER"); filterEnv != "" {
 		val, err := strconv.ParseBool(filterEnv)
@@ -66,6 +79,8 @@ func LoadConfig() (*Config, error) {
 		MinioSecretKey:       getEnvWithDefault("MINIO_SECRET_KEY", "minioadmin"),
 		MinioBucket:          getEnvWithDefault("MINIO_BUCKET", "storage-bucket"),
 		MinioSSL:             minioSSL,
+		CacheServiceURL:      getEnvWithDefault("CACHE_URL", "http://cache-service:8001"),
+		CacheEnabled:         cacheEnabled,
 		PredictionRadius:     predictionRadius,
 		UseDirectionalFilter: useDirectionalFilter,
 	}

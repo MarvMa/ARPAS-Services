@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -134,11 +135,6 @@ func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]uuid
 		}
 	}
 
-	//// Apply directional filtering if enabled
-	//if s.Config.UseDirectionalFilter {
-	//	filteredObjects = s.applyDirectionalFilter(req, filteredObjects)
-	//}
-
 	var objectIDs []uuid.UUID
 	for _, obj := range filteredObjects {
 		objectIDs = append(objectIDs, obj.ID)
@@ -222,4 +218,44 @@ func (s *ObjectService) DeleteObject(id uuid.UUID) error {
 	}
 	_ = s.Minio.RemoveObject(context.Background(), s.BucketName, obj.StorageKey, minio.RemoveObjectOptions{})
 	return s.Repo.DeleteObject(id)
+}
+
+func (s *ObjectService) GetFromCache(objectID uuid.UUID) ([]byte, error) {
+	cacheURL := s.Config.CacheServiceURL
+	if cacheURL == "" {
+		cacheURL = "http://cache-service:8001"
+	}
+
+	// Use UUID directly as the cache service now handles UUID to ID conversion
+	url := fmt.Sprintf("%s/object/%s", cacheURL, objectID.String())
+
+	client := &http.Client{
+		Timeout: 2 * time.Second, // Quick timeout for cache
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("cache service request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("object not found in cache")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("cache service returned status %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read cache response: %w", err)
+	}
+
+	// Verify we got valid GLB data
+	if len(data) < 12 || string(data[0:4]) != "glTF" {
+		return nil, fmt.Errorf("invalid GLB data from cache")
+	}
+
+	return data, nil
 }

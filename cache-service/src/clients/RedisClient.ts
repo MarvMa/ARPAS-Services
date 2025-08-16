@@ -12,6 +12,7 @@ export class RedisClient {
                 return Math.min(times * 50, 2000);
             }
         });
+
         this.client.on('error', (err) => {
             console.error('Redis error:', err);
         });
@@ -47,5 +48,9 @@ export class RedisClient {
 
     async getBuffer(key: string): Promise<Buffer | null> {
         return this.client.getBuffer(key);
+    }
+
+    async keys(pattern: string): Promise<string[]> {
+        return this.client.keys(pattern);
     }
 }
