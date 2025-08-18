@@ -304,6 +304,7 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			log.Printf("Successfully retrieved from cache: ID=%s, Size=%d bytes", obj.ID, len(data))
 		} else {
 			log.Printf("Cache miss or error for ID=%s, falling back to MinIO", obj.ID)
+			log.Printf("Cache error: %v", err)
 		}
 	}
 

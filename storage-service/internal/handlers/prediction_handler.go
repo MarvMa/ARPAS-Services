@@ -51,6 +51,7 @@ func (h *PredictionHandler) GetPredictedModels(c *fiber.Ctx) error {
 		req.Position.Latitude, req.Position.Longitude, req.ViewingDirection.Heading)
 
 	modelIDs, err := h.objectService.GetPredictedModels(req)
+	log.Printf("------ Model IDs predicted: %v", modelIDs)
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to get predicted models",

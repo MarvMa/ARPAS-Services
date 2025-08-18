@@ -2,11 +2,18 @@ import {Request, Response, NextFunction} from "express";
 import {CacheManager} from "./manager";
 
 const cacheManager = new CacheManager();
+const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+function extractUuid(input: string | undefined): string | null {
+    if (!input) return null;
+    const m = input.match(UUID_REGEX);
+    return m ? m[0].toLowerCase() : null;
+}
 
 export const preloadObjects = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
         const {ids} = req.body;
-
+        console.info(`Received preload request for ${ids.length} objects ${ids.join(', ')}`);
         if (!Array.isArray(ids)) {
             res.status(400).json({
                 success: false,
@@ -15,32 +22,22 @@ export const preloadObjects = async (req: Request, res: Response, next: NextFunc
             return;
         }
 
-        // Convert UUIDs to numeric IDs for cache service
-        const numericIds = ids.map(id => {
-            // If it's already a number, use it
-            if (typeof id === 'number') return id;
+        const uuids = Array.from(
+            new Set(
+                ids
+                    .map((raw) => (typeof raw === "string" ? extractUuid(raw) : null))
+                    .filter((v): v is string => !!v)
+            )
+        );
 
-            // If it's a string that looks like a number, parse it
-            const parsed = parseInt(id);
-            if (!isNaN(parsed)) return parsed;
+        if (uuids.length === 0) {
+            res.status(400).json({success: false, message: "No valid UUIDs provided"});
+            return;
+        }
 
-            // For UUIDs, use a hash function to generate a consistent numeric ID
-            if (typeof id === 'string' && id.includes('-')) {
-                // Simple hash function for UUID to number conversion
-                let hash = 0;
-                for (let i = 0; i < id.length; i++) {
-                    const char = id.charCodeAt(i);
-                    hash = ((hash << 5) - hash) + char;
-                    hash = hash & hash; // Convert to 32bit integer
-                }
-                return Math.abs(hash);
-            }
 
-            return 0;
-        }).filter(id => id > 0);
-
-        console.info(`Received preload request for ${numericIds.length} objects`);
-        const success = await cacheManager.preloadObjects(numericIds);
+        console.info(`Received preload request for ${ids.length} objects`);
+        const success = await cacheManager.preloadObjects(ids);
 
         res.status(success ? 200 : 207).json({
             success,
@@ -59,32 +56,15 @@ export const preloadObjects = async (req: Request, res: Response, next: NextFunc
 
 export const getObject = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-        const idParam = req.params.id;
-        let id: number;
-
-        // Handle UUID to number conversion
-        if (idParam.includes('-')) {
-            // UUID format - convert to number
-            let hash = 0;
-            for (let i = 0; i < idParam.length; i++) {
-                const char = idParam.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-            id = Math.abs(hash);
-        } else {
-            id = parseInt(idParam, 10);
-        }
-
-        if (isNaN(id)) {
-            res.status(400).json({
-                success: false,
-                message: 'Invalid object ID'
-            });
+        const idParam: string = req.params.id;
+        const uuid = extractUuid(idParam);
+        if (!uuid) {
+            res.status(400).json({success: false, message: "Invalid object ID (expected UUID)"});
+            console.error(`Invalid object ID: ${idParam}`);
             return;
         }
 
-        const data = await cacheManager.getObject(id);
+        const data = await cacheManager.getObject(uuid);
 
         if (!data) {
             res.status(404).json({

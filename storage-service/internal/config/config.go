@@ -51,7 +51,7 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	predictionRadius := 30.0 // default value
+	predictionRadius := 20.0 // default value
 	if radiusEnv := os.Getenv("PREDICTION_RADIUS"); radiusEnv != "" {
 		val, err := strconv.ParseFloat(radiusEnv, 64)
 		if err == nil {

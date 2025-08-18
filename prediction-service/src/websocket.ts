@@ -23,7 +23,7 @@ export default fp(async (app: FastifyInstance) => {
                     if (ids && ids.length > 0) {
                         const cachePreloaded = await cacheClient.preload(ids).catch(console.error);
                     }
-                    
+
                     socket.send(JSON.stringify({
                         status: 'success',
                         message: 'Prediction processed',

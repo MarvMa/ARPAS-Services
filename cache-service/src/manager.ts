@@ -1,7 +1,9 @@
-import { RedisClient } from "./clients/redisClient";
-import { StorageClient } from "./clients/storageClient";
+import {RedisClient} from "./clients/redisClient";
+import {StorageClient} from "./clients/storageClient";
 import config from "./config";
-import { cacheHits, cacheMisses, cacheSize, cacheObjectCount, downloadLatency, cacheLatency } from "./metrics";
+import {cacheHits, cacheMisses, cacheSize, cacheObjectCount, downloadLatency, cacheLatency} from "./metrics";
+
+
 
 export class CacheManager {
     private redisClient: RedisClient;
@@ -14,6 +16,7 @@ export class CacheManager {
         this.startMetricsCollection();
     }
 
+    
     private startMetricsCollection() {
         // Update metrics every 10 seconds
         setInterval(async () => {
@@ -38,7 +41,7 @@ export class CacheManager {
         }, 10000);
     }
 
-    async preloadObjects(ids: number[]): Promise<boolean> {
+    async preloadObjects(ids: string[]): Promise<boolean> {
         try {
             console.info(`Preloading ${ids.length} objects to Redis memory`);
             const startTime = Date.now();
@@ -78,25 +81,27 @@ export class CacheManager {
         }
     }
 
-    async getObject(id: number): Promise<Buffer | null> {
+
+    async getObject(id: string): Promise<Buffer | null> {
         const retrievalStart = performance.now();
 
         try {
+            
             const objectData = await this.redisClient.getBuffer(`object:${id}:data`);
 
             if (!objectData) {
                 console.debug(`Object ${id} not found in Redis cache`);
-                cacheMisses.inc({ object_id: id.toString() });
+                cacheMisses.inc({object_id: id.toString()});
                 return null;
             }
-
+            console.log(`[FOUND] Object ${id} found in Redis cache`);
             // Update cache hit metrics
-            cacheHits.inc({ object_id: id.toString() });
+            cacheHits.inc({object_id: id.toString()});
 
             // Update access timestamp and statistics
             await this.redisClient.zadd('object:access', Date.now(), id.toString());
 
-            const stats = this.cacheStats.get(id.toString()) || { size: objectData.length, hits: 0, lastAccess: 0 };
+            const stats = this.cacheStats.get(id.toString()) || {size: objectData.length, hits: 0, lastAccess: 0};
             stats.hits++;
             stats.lastAccess = Date.now();
             this.cacheStats.set(id.toString(), stats);
@@ -153,12 +158,12 @@ export class CacheManager {
         return statistics;
     }
 
-    private async isObjectCached(id: number): Promise<boolean> {
+    private async isObjectCached(id: string): Promise<boolean> {
         const exists = await this.redisClient.exists(`object:${id}:data`);
         return exists === 1;
     }
 
-    private async cacheObject(id: number, data: Buffer): Promise<void> {
+    private async cacheObject(id: string, data: Buffer): Promise<void> {
         await this.redisClient.setBuffer(`object:${id}:data`, data);
         await this.redisClient.set(`object:${id}:size`, data.length.toString());
         await this.redisClient.set(`object:${id}:updated`, Date.now().toString());

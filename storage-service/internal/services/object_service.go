@@ -226,7 +226,6 @@ func (s *ObjectService) GetFromCache(objectID uuid.UUID) ([]byte, error) {
 		cacheURL = "http://cache-service:8001"
 	}
 
-	// Use UUID directly as the cache service now handles UUID to ID conversion
 	url := fmt.Sprintf("%s/object/%s", cacheURL, objectID.String())
 
 	client := &http.Client{
@@ -252,10 +251,10 @@ func (s *ObjectService) GetFromCache(objectID uuid.UUID) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read cache response: %w", err)
 	}
 
-	// Verify we got valid GLB data
-	if len(data) < 12 || string(data[0:4]) != "glTF" {
-		return nil, fmt.Errorf("invalid GLB data from cache")
-	}
+	// TODO Verify we got valid GLB data
+	//if len(data) < 12 || string(data[0:4]) != "glTF" {
+	//	return nil, fmt.Errorf("invalid GLB data from cache")
+	//}
 
 	return data, nil
 }
