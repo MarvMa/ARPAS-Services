@@ -21,12 +21,25 @@ import (
 	"storage-service/internal/utils"
 )
 
+func newCacheHTTPClient() *http.Client {
+	tr := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		MaxIdleConns:          256,
+		MaxIdleConnsPerHost:   128,
+		IdleConnTimeout:       90 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		DisableCompression:    true,
+	}
+	return &http.Client{Transport: tr, Timeout: 30 * time.Second}
+}
+
 // ObjectService provides methods for managing 3D objects in storage.
 type ObjectService struct {
 	Repo       *repository.ObjectRepositoryImpl
 	Minio      *minio.Client
 	BucketName string
 	Config     *config.Config
+	cacheHTTP  *http.Client
 }
 
 // NewObjectService creates a new ObjectService with the given repository and storage client.
@@ -36,6 +49,7 @@ func NewObjectService(repo *repository.ObjectRepositoryImpl, minioClient *minio.
 		Minio:      minioClient,
 		BucketName: bucketName,
 		Config:     cfg,
+		cacheHTTP:  newCacheHTTPClient(),
 	}
 }
 
@@ -106,12 +120,12 @@ func (s *ObjectService) GetObject(id uuid.UUID) (*models.Object, error) {
 // GetPredictedModels returns a list of object IDs that are predicted to be visible based on the given prediction request.
 func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]uuid.UUID, error) {
 	// Use configurable radius from config, convert from meters to kilometers for the query
-	radiusKm := s.Config.PredictionRadius / 1000.0
+	radiusMeter := s.Config.PredictionRadius
 
 	objects, err := s.Repo.GetObjectsByLocation(
 		req.Position.Latitude,
 		req.Position.Longitude,
-		radiusKm,
+		radiusMeter,
 	)
 	if err != nil {
 		return nil, err
@@ -221,40 +235,44 @@ func (s *ObjectService) DeleteObject(id uuid.UUID) error {
 }
 
 func (s *ObjectService) GetFromCache(objectID uuid.UUID) ([]byte, error) {
+	rc, _, err := s.GetFromCacheStream(objectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read cache response: %w", err)
+	}
+	return data, nil
+}
+
+func (s *ObjectService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
 	cacheURL := s.Config.CacheServiceURL
 	if cacheURL == "" {
 		cacheURL = "http://cache-service:8001"
 	}
 
-	url := fmt.Sprintf("%s/object/%s", cacheURL, objectID.String())
+	url := fmt.Sprintf("%s/object/%s", strings.TrimRight(cacheURL, "/"), objectID.String())
 
-	client := &http.Client{
-		Timeout: 2 * time.Second, // Quick timeout for cache
-	}
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Accept", "application/octet-stream")
 
-	resp, err := client.Get(url)
+	resp, err := s.cacheHTTP.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("cache service request failed: %w", err)
+		return nil, 0, fmt.Errorf("cache service request failed: %w", err)
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, fmt.Errorf("object not found in cache")
+		resp.Body.Close()
+		return nil, 0, fmt.Errorf("object not found in cache")
 	}
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("cache service returned status %d", resp.StatusCode)
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, 0, fmt.Errorf("cache service returned status %d: %s", resp.StatusCode, string(b))
 	}
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read cache response: %w", err)
-	}
-
-	// TODO Verify we got valid GLB data
-	//if len(data) < 12 || string(data[0:4]) != "glTF" {
-	//	return nil, fmt.Errorf("invalid GLB data from cache")
-	//}
-
-	return data, nil
+	return resp.Body, resp.ContentLength, nil
 }

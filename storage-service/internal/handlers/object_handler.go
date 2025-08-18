@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bufio"
 	"errors"
 	"github.com/minio/minio-go/v7"
 	"io"
@@ -295,23 +296,53 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 	var data []byte
 	var downloadSource string
 
-	// Use cache service if in optimized mode
 	if optimizationMode == "optimized" {
-		log.Printf("Attempting to retrieve from cache: ID=%s", obj.ID)
-		data, err = h.Service.GetFromCache(obj.ID)
-		if err == nil && data != nil {
+		log.Printf("Attempting to retrieve from cache (stream): ID=%s", obj.ID)
+		rc, clen, err := h.Service.GetFromCacheStream(obj.ID)
+		if err == nil && rc != nil {
 			downloadSource = "cache"
-			log.Printf("Successfully retrieved from cache: ID=%s, Size=%d bytes", obj.ID, len(data))
-		} else {
-			log.Printf("Cache miss or error for ID=%s, falling back to MinIO", obj.ID)
-			log.Printf("Cache error: %v", err)
+
+			ct := obj.ContentType
+			if ct == "" {
+				ct = "model/gltf-binary"
+			}
+			c.Set(fiber.HeaderContentType, ct)
+			c.Set(fiber.HeaderContentDisposition, "attachment; filename=\""+obj.ID.String()+".glb\"")
+			c.Set("X-Download-Source", downloadSource)
+			c.Set("X-Optimization-Mode", "optimized")
+
+			latency := time.Since(startTime).Milliseconds()
+			c.Set("X-Download-Latency-Ms", strconv.FormatInt(latency, 10))
+
+			if clen > 0 {
+				c.Set(fiber.HeaderContentLength, strconv.FormatInt(clen, 10))
+			}
+
+			c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+				defer rc.Close()
+				_, _ = io.Copy(w, rc)
+			})
+
+			return c.SendStatus(fiber.StatusOK)
 		}
+		if err != nil {
+			// Fallback auf MinIO beim Cache-Fehler
+			log.Printf("Cache miss/error for ID=%s, falling back to MinIO: %v", obj.ID, err)
+		} else {
+			log.Printf("Cache returned empty stream for ID=%s, falling back to MinIO", obj.ID)
+		}
+
 	}
 
 	// If not using cache or cache miss, get from MinIO
 	if data == nil {
 		downloadSource = "minio"
 		log.Printf("Retrieving file from MinIO: StorageKey=%s", obj.StorageKey)
+
+		statInfo, statErr := h.Service.Minio.StatObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.StatObjectOptions{})
+		if statErr != nil {
+			log.Printf("StatObject failed for %s: %v (continuing without size)", obj.StorageKey, statErr)
+		}
 
 		object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
 		if err != nil {
@@ -320,15 +351,29 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 				"error": true, "message": "unable to retrieve file",
 			})
 		}
-		defer object.Close()
 
-		data, err = io.ReadAll(object)
-		if err != nil {
-			log.Printf("Failed to read object data: StorageKey=%s, Error=%v", obj.StorageKey, err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": true, "message": "failed to read object data",
-			})
+		ct := obj.ContentType
+		if ct == "" {
+			ct = "model/gltf-binary"
 		}
+		c.Set(fiber.HeaderContentType, ct)
+		c.Set(fiber.HeaderContentDisposition, "attachment; filename=\""+obj.ID.String()+".glb\"")
+		c.Set("X-Download-Source", downloadSource)
+
+		// Time-to-first-byte
+		latency := time.Since(startTime).Milliseconds()
+		c.Set("X-Download-Latency-Ms", strconv.FormatInt(latency, 10))
+
+		if statErr == nil && statInfo.Size > 0 {
+			c.Set(fiber.HeaderContentLength, strconv.FormatInt(statInfo.Size, 10))
+		}
+
+		// Streamen + DANN schließen
+		c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
+			defer object.Close()
+			_, _ = io.Copy(w, object)
+		})
+		return c.SendStatus(fiber.StatusOK)
 	}
 
 	// Calculate and log latency

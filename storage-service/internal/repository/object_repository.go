@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"storage-service/internal/models"
+	"storage-service/internal/utils"
 )
 
 // ObjectRepository defines the interface for interacting with the Object model in the database.
@@ -55,17 +56,15 @@ func (r *ObjectRepositoryImpl) ListObjects() ([]models.Object, error) {
 }
 
 // GetObjectsByLocation retrieves Objects within a specified radius from a given latitude and longitude using the Haversine formula.
-func (r *ObjectRepositoryImpl) GetObjectsByLocation(lat, lon float64, radiusKm float64) ([]models.Object, error) {
+func (r *ObjectRepositoryImpl) GetObjectsByLocation(lat, lon float64, radiusMeter float64) ([]models.Object, error) {
 	var objects []models.Object
 
-	// Haversine formula for calculating distance
-	query := `
-		SELECT * FROM objects 
-		WHERE (6371 * acos(cos(radians(?)) * cos(radians(latitude)) * 
-			cos(radians(longitude) - radians(?)) + 
-			sin(radians(?)) * sin(radians(latitude)))) < ?
-	`
+	minLat, maxLat, minLon, maxLon := utils.CalculateBoundingBox(lat, lon, radiusMeter)
 
-	err := r.db.Raw(query, lat, lon, lat, radiusKm).Scan(&objects).Error
+	err := r.db.
+		Where("latitude IS NOT NULL AND longitude IS NOT NULL").
+		Where("latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?", minLat, maxLat, minLon, maxLon).
+		Find(&objects).Error
+
 	return objects, err
 }

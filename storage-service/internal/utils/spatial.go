@@ -1,4 +1,3 @@
-// Create: storage-service/internal/utils/spatial.go
 package utils
 
 import "math"

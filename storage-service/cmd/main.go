@@ -139,6 +139,10 @@ func MigrateDatabase(db *gorm.DB) {
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
+
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_objects_lat_lon ON objects (latitude, longitude)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_objects_lat ON objects (latitude)`)
+	db.Exec(`CREATE INDEX IF NOT EXISTS idx_objects_lon ON objects (longitude)`)
 }
 
 func InitMinIOClient(cfg *config.Config) *minio.Client {

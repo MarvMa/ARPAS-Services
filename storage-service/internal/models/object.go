@@ -17,7 +17,7 @@ type Object struct {
 	UploadedAt       time.Time `gorm:"autoCreateTime"`       // Timestamp of upload
 
 	// Location fields for spatial queries
-	Latitude  *float64 `gorm:"type:decimal(10,8)" json:"latitude,omitempty"`  // Object latitude position
-	Longitude *float64 `gorm:"type:decimal(11,8)" json:"longitude,omitempty"` // Object longitude position
-	Altitude  *float64 `gorm:"type:decimal(8,3)" json:"altitude,omitempty"`   // Object altitude in meters
+	Latitude  *float64 `gorm:"type:decimal(10,8);index:idx_objects_lat_lon,priority:1" json:"latitude,omitempty"`
+	Longitude *float64 `gorm:"type:decimal(11,8);index:idx_objects_lat_lon,priority:2" json:"longitude,omitempty"`
+	Altitude  *float64 `gorm:"type:decimal(8,3)" json:"altitude,omitempty"`
 }
