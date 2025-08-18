@@ -1,23 +1,37 @@
-import { SimulationResults, ObjectMetric } from '../types/simulation';
+import {
+    SimulationResults,
+    ObjectMetric,
+    PerformanceAnalysis,
+    StatisticalAnalysis,
+    ComparisonResults,
+    ChartData,
+    BenchmarkReport,
+    DockerContainerStats
+} from '../types/simulation';
 
 /**
- * Streamlined service for collecting and managing simulation results
- * Handles data persistence, export, and analysis
+ * Enhanced service for collecting, analyzing and managing simulation results
+ * with comprehensive scientific analysis capabilities
  */
 export class DataCollector {
     private results: SimulationResults[] = [];
-    private readonly STORAGE_KEY = 'simulation_results_v2';
+    private readonly STORAGE_KEY = 'simulation_results_v3';
+    private readonly VERSION = '3.0.0';
 
     /**
-     * Saves simulation results and automatically exports to file
+     * Saves simulation results and automatically generates analysis
      */
     async saveResults(results: SimulationResults): Promise<void> {
         try {
             this.results.push(results);
             this.saveToLocalStorage();
-            await this.downloadResultsAsJson(results);
 
-            console.log(`Saved and exported simulation results: ${results.simulationId} (${results.totalObjects} objects, ${results.averageLatency.toFixed(2)}ms avg latency)`);
+            // Generate immediate individual report
+            await this.downloadIndividualReport(results);
+
+            console.log(`Saved and analyzed simulation: ${results.simulationId} 
+                (${results.totalObjects} objects, ${results.averageLatency.toFixed(2)}ms avg latency, 
+                ${results.cacheHitRate?.toFixed(1) || 0}% cache hit rate)`);
         } catch (error) {
             console.error('Failed to save simulation results:', error);
             throw new Error('Failed to save simulation results');
@@ -25,228 +39,111 @@ export class DataCollector {
     }
 
     /**
-     * Gets all stored simulation results
+     * Generates comprehensive scientific benchmark report
      */
-    getAllResults(): SimulationResults[] {
-        return [...this.results];
+    async exportComprehensiveBenchmarkReport(): Promise<void> {
+        try {
+            console.log('Generating comprehensive benchmark report...');
+
+            const analysis = this.analyzeResults();
+            const report = this.generateBenchmarkReport(analysis);
+
+            // Export multiple formats
+            await Promise.all([
+                this.downloadJson(report, `benchmark_report_comprehensive_${this.generateTimestamp()}.json`),
+                this.downloadCsvData(analysis),
+                this.downloadExcelReport(report),
+                this.downloadMarkdownReport(report)
+            ]);
+
+            console.log('Comprehensive benchmark report exported successfully');
+        } catch (error) {
+            console.error('Failed to export comprehensive report:', error);
+            throw new Error('Failed to export comprehensive benchmark report');
+        }
     }
 
     /**
-     * Gets results filtered by simulation type
+     * Exports data in multiple scientific formats
      */
-    getResultsByType(type: 'optimized' | 'unoptimized'): SimulationResults[] {
-        return this.results.filter(result => result.simulationType === type);
+    async exportScientificData(): Promise<void> {
+        try {
+            const analysis = this.analyzeResults();
+
+            await Promise.all([
+                this.exportRawDataCsv(),
+                this.exportAggregatedStatsCsv(),
+                this.exportLatencyDistribution(),
+                this.exportCachePerformanceCsv(),
+                this.exportInfrastructureMetrics()
+            ]);
+
+            console.log('Scientific data exported in multiple formats');
+        } catch (error) {
+            console.error('Failed to export scientific data:', error);
+            throw error;
+        }
     }
 
     /**
-     * Analyzes and compares simulation performance
+     * Analyzes simulation results with comprehensive statistics
      */
-    analyzeResults(): AnalysisResults {
+    analyzeResults(): PerformanceAnalysis {
         const optimizedResults = this.getResultsByType('optimized');
         const unoptimizedResults = this.getResultsByType('unoptimized');
 
-        const optimizedAnalysis = this.calculateAnalysis(optimizedResults);
-        const unoptimizedAnalysis = this.calculateAnalysis(unoptimizedResults);
+        const optimizedAnalysis = this.calculateStatisticalAnalysis(optimizedResults);
+        const unoptimizedAnalysis = this.calculateStatisticalAnalysis(unoptimizedResults);
         const comparison = this.compareResults(optimizedAnalysis, unoptimizedAnalysis);
+        const charts = this.generateChartData(optimizedResults, unoptimizedResults);
 
         return {
             optimized: optimizedAnalysis,
             unoptimized: unoptimizedAnalysis,
             comparison,
             totalSimulations: this.results.length,
-            summary: this.generateSummary(optimizedAnalysis, unoptimizedAnalysis, comparison)
+            summary: this.generateExecutiveSummary(optimizedAnalysis, unoptimizedAnalysis, comparison),
+            charts
         };
     }
 
     /**
-     * Exports comprehensive analysis to JSON file
+     * Calculates comprehensive statistical analysis
      */
-    async exportAllResults(): Promise<void> {
-        try {
-            const analysis = this.analyzeResults();
-            const exportData = {
-                exportTimestamp: new Date().toISOString(),
-                version: '2.0',
-                analysis,
-                detailedResults: this.results.map(result => ({
-                    ...result,
-                    // Include only essential profile data to reduce file size
-                    profiles: result.profiles.map(p => ({ id: p.id, name: p.name, dataPoints: p.data.length }))
-                }))
-            };
-
-            const filename = `simulation_analysis_${new Date().toISOString().split('T')[0]}_${Date.now()}.json`;
-            await this.downloadJson(exportData, filename);
-
-            console.log(`Exported comprehensive analysis: ${filename}`);
-        } catch (error) {
-            console.error('Failed to export results:', error);
-            throw new Error('Failed to export analysis results');
-        }
-    }
-
-    /**
-     * Loads results from localStorage on initialization
-     */
-    loadFromLocalStorage(): void {
-        try {
-            const stored = localStorage.getItem(this.STORAGE_KEY);
-            if (stored) {
-                const parsedData = JSON.parse(stored);
-                // Validate stored data structure
-                if (Array.isArray(parsedData)) {
-                    this.results = parsedData.filter(this.isValidSimulationResult);
-                    console.log(`Loaded ${this.results.length} previous simulation results`);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to load simulation results from localStorage:', error);
-            // Clear corrupted data
-            localStorage.removeItem(this.STORAGE_KEY);
-        }
-    }
-
-    /**
-     * Clears all stored results
-     */
-    clearResults(): void {
-        this.results = [];
-        localStorage.removeItem(this.STORAGE_KEY);
-        console.log('Cleared all simulation results');
-    }
-
-    /**
-     * Gets latest simulation result
-     */
-    getLatestResult(): SimulationResults | null {
-        return this.results.length > 0 ? this.results[this.results.length - 1] : null;
-    }
-
-    /**
-     * Gets performance metrics summary
-     */
-    getPerformanceMetrics(): PerformanceMetrics {
-        const allMetrics = this.results.flatMap(r => r.metrics);
-
-        if (allMetrics.length === 0) {
-            return {
-                totalDownloads: 0,
-                averageLatency: 0,
-                minLatency: 0,
-                maxLatency: 0,
-                totalDataTransferred: 0,
-                uniqueObjectsDownloaded: 0
-            };
-        }
-
-        const latencies = allMetrics.map(m => m.downloadLatencyMs);
-        const totalData = allMetrics.reduce((sum, m) => sum + m.sizeBytes, 0);
-        const uniqueObjects = new Set(allMetrics.map(m => m.objectId)).size;
-
-        return {
-            totalDownloads: allMetrics.length,
-            averageLatency: latencies.reduce((sum, l) => sum + l, 0) / latencies.length,
-            minLatency: Math.min(...latencies),
-            maxLatency: Math.max(...latencies),
-            totalDataTransferred: totalData,
-            uniqueObjectsDownloaded: uniqueObjects
-        };
-    }
-
-    /**
-     * Private method to save results to localStorage
-     */
-    private saveToLocalStorage(): void {
-        try {
-            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.results));
-        } catch (error) {
-            console.error('Failed to save results to localStorage:', error);
-            // If storage is full, remove oldest results and try again
-            if (this.results.length > 10) {
-                this.results = this.results.slice(-10); // Keep only last 10 results
-                try {
-                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.results));
-                } catch (retryError) {
-                    console.error('Failed to save even after cleanup:', retryError);
-                }
-            }
-        }
-    }
-
-    /**
-     * Downloads individual simulation results as JSON
-     */
-    private async downloadResultsAsJson(results: SimulationResults): Promise<void> {
-        const filename = `simulation_${results.simulationType}_${results.simulationId}_${Date.now()}.json`;
-        await this.downloadJson(results, filename);
-    }
-
-    /**
-     * Generic JSON download utility
-     */
-    private async downloadJson(data: any, filename: string): Promise<void> {
-        try {
-            const jsonString = JSON.stringify(data, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = filename;
-            link.style.display = 'none';
-
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            URL.revokeObjectURL(url);
-        } catch (error) {
-            console.error(`Failed to download ${filename}:`, error);
-            throw error;
-        }
-    }
-
-    /**
-     * Calculates statistical analysis for a set of results
-     */
-    private calculateAnalysis(results: SimulationResults[]): StatisticalAnalysis {
+    private calculateStatisticalAnalysis(results: SimulationResults[]): StatisticalAnalysis {
         if (results.length === 0) {
-            return {
-                totalSimulations: 0,
-                averageLatency: 0,
-                minLatency: 0,
-                maxLatency: 0,
-                latencyStandardDeviation: 0,
-                totalObjects: 0,
-                uniqueObjects: 0,
-                totalDataSize: 0,
-                averageDataSize: 0,
-                cacheHitRate: 0
-            };
+            return this.getEmptyStatisticalAnalysis();
         }
 
-        const allMetrics = results.flatMap(r => r.metrics);
+        const allMetrics = results.flatMap(r => r.metrics.filter(m => !m.isBaseline));
         const latencies = allMetrics.map(m => m.downloadLatencyMs);
+        const serverLatencies = allMetrics.map(m => m.serverLatencyMs || 0);
         const sizes = allMetrics.map(m => m.sizeBytes);
 
-        const averageLatency = latencies.reduce((sum, l) => sum + l, 0) / latencies.length;
-        const variance = latencies.reduce((sum, l) => sum + Math.pow(l - averageLatency, 2), 0) / latencies.length;
-
+        const totalDuration = results.reduce((sum, r) => sum + (r.duration || 0), 0) / 1000; // seconds
         const totalObjects = allMetrics.length;
         const uniqueObjects = new Set(allMetrics.map(m => m.objectId)).size;
-        const cacheHitRate = totalObjects > 0 ? ((totalObjects - uniqueObjects) / totalObjects) * 100 : 0;
+        const cacheHits = allMetrics.filter(m => m.cacheHit).length;
+        const errors = allMetrics.filter(m => m.error).length;
 
         return {
             totalSimulations: results.length,
-            averageLatency,
+            averageLatency: this.calculateMean(latencies),
             minLatency: latencies.length > 0 ? Math.min(...latencies) : 0,
             maxLatency: latencies.length > 0 ? Math.max(...latencies) : 0,
-            latencyStandardDeviation: Math.sqrt(variance),
+            medianLatency: this.calculateMedian(latencies),
+            p95Latency: this.calculatePercentile(latencies, 95),
+            p99Latency: this.calculatePercentile(latencies, 99),
+            latencyStandardDeviation: this.calculateStandardDeviation(latencies),
             totalObjects,
             uniqueObjects,
             totalDataSize: sizes.reduce((sum, s) => sum + s, 0),
-            averageDataSize: sizes.length > 0 ? sizes.reduce((sum, s) => sum + s, 0) / sizes.length : 0,
-            cacheHitRate
+            averageDataSize: this.calculateMean(sizes),
+            cacheHitRate: totalObjects > 0 ? (cacheHits / totalObjects) * 100 : 0,
+            throughput: totalDuration > 0 ? totalObjects / totalDuration : 0,
+            requestsPerSecond: totalDuration > 0 ? results.reduce((sum, r) => sum + (r.totalRequests || 0), 0) / totalDuration : 0,
+            errorRate: totalObjects > 0 ? (errors / totalObjects) * 100 : 0,
+            successRate: totalObjects > 0 ? ((totalObjects - errors) / totalObjects) * 100 : 0
         };
     }
 
@@ -258,99 +155,541 @@ export class DataCollector {
             ? ((unoptimized.averageLatency - optimized.averageLatency) / unoptimized.averageLatency) * 100
             : 0;
 
+        const throughputImprovement = unoptimized.throughput > 0
+            ? ((optimized.throughput - unoptimized.throughput) / unoptimized.throughput) * 100
+            : 0;
+
         const dataSizeReduction = unoptimized.totalDataSize > 0
             ? ((unoptimized.totalDataSize - optimized.totalDataSize) / unoptimized.totalDataSize) * 100
             : 0;
 
+        let performanceGain: ComparisonResults['performanceGain'] = 'no_improvement';
+        if (latencyImprovement > 25 && throughputImprovement > 20) {
+            performanceGain = 'significant_improvement';
+        } else if (latencyImprovement > 10 && throughputImprovement > 5) {
+            performanceGain = 'moderate_improvement';
+        } else if (latencyImprovement < -5 || throughputImprovement < -10) {
+            performanceGain = 'regression';
+        }
+
         return {
             latencyImprovementPercent: latencyImprovement,
-            dataSizeReductionPercent: dataSizeReduction,
+            throughputImprovementPercent: throughputImprovement,
             cacheEffectiveness: optimized.cacheHitRate,
-            performanceGain: latencyImprovement > 5 ? 'significant_improvement' :
-                latencyImprovement > 0 ? 'moderate_improvement' : 'no_improvement'
+            dataSizeReductionPercent: dataSizeReduction,
+            performanceGain,
+            recommendation: this.generateRecommendation(performanceGain, latencyImprovement, optimized.cacheHitRate)
         };
     }
 
     /**
-     * Generates human-readable summary
+     * Generates chart data for visualization
      */
-    private generateSummary(
-        optimized: StatisticalAnalysis,
-        unoptimized: StatisticalAnalysis,
-        comparison: ComparisonResults
-    ): string {
+    private generateChartData(optimizedResults: SimulationResults[], unoptimizedResults: SimulationResults[]): ChartData[] {
+        const charts: ChartData[] = [];
+
+        // Latency comparison chart
+        charts.push({
+            type: 'bar',
+            title: 'Average Latency Comparison',
+            description: 'Comparison of average download latencies between optimized and unoptimized modes',
+            data: [
+                {
+                    label: 'Optimized',
+                    value: this.calculateAverageLatency(optimizedResults),
+                    color: '#4CAF50'
+                },
+                {
+                    label: 'Unoptimized',
+                    value: this.calculateAverageLatency(unoptimizedResults),
+                    color: '#f44336'
+                }
+            ]
+        });
+
+        // Cache hit rate chart
+        const cacheData = this.calculateCacheStats(optimizedResults);
+        charts.push({
+            type: 'pie',
+            title: 'Cache Performance (Optimized Mode)',
+            description: 'Distribution of cache hits vs misses in optimized mode',
+            data: [
+                { label: 'Cache Hits', value: cacheData.hits, color: '#4CAF50' },
+                { label: 'Cache Misses', value: cacheData.misses, color: '#ff9800' }
+            ]
+        });
+
+        // Latency distribution histogram
+        const allLatencies = [...optimizedResults, ...unoptimizedResults]
+            .flatMap(r => r.metrics.filter(m => !m.isBaseline && !m.error))
+            .map(m => m.downloadLatencyMs);
+
+        charts.push({
+            type: 'histogram',
+            title: 'Latency Distribution',
+            description: 'Distribution of download latencies across all simulations',
+            data: this.createHistogramData(allLatencies, 20)
+        });
+
+        // Throughput over time
+        charts.push({
+            type: 'line',
+            title: 'Throughput Over Time',
+            description: 'Download throughput comparison between modes',
+            data: this.createThroughputTimelineData(optimizedResults, unoptimizedResults)
+        });
+
+        // Infrastructure utilization
+        const dockerStats = this.aggregateDockerStats();
+        if (Object.keys(dockerStats).length > 0) {
+            charts.push({
+                type: 'bar',
+                title: 'Infrastructure Utilization',
+                description: 'Average CPU and memory usage across services',
+                data: this.createInfrastructureChart(dockerStats)
+            });
+        }
+
+        return charts;
+    }
+
+    /**
+     * Generates comprehensive benchmark report
+     */
+    private generateBenchmarkReport(analysis: PerformanceAnalysis): BenchmarkReport {
+        const metadata = {
+            generatedAt: new Date().toISOString(),
+            version: this.VERSION,
+            totalSimulations: analysis.totalSimulations,
+            optimizedSimulations: this.getResultsByType('optimized').length,
+            unoptimizedSimulations: this.getResultsByType('unoptimized').length
+        };
+
+        const executive = {
+            summary: analysis.summary,
+            keyFindings: this.generateKeyFindings(analysis),
+            recommendations: this.generateRecommendations(analysis),
+            performanceGain: this.formatPerformanceGain(analysis.comparison.performanceGain)
+        };
+
+        return {
+            metadata,
+            executive,
+            analysis,
+            rawData: {
+                simulations: this.results,
+                aggregatedMetrics: this.results.flatMap(r => r.metrics)
+            },
+            charts: analysis.charts,
+            infrastructure: {
+                dockerStats: this.aggregateDockerStats(),
+                systemResource: this.calculateSystemResourceSummary()
+            }
+        };
+    }
+
+    /**
+     * Downloads individual simulation report
+     */
+    private async downloadIndividualReport(results: SimulationResults): Promise<void> {
+        const report = {
+            simulation: results,
+            analysis: {
+                summary: this.generateIndividualSummary(results),
+                performance: this.analyzeIndividualPerformance(results),
+                infrastructure: this.extractInfrastructureData(results)
+            },
+            charts: this.generateIndividualCharts(results),
+            timestamp: new Date().toISOString()
+        };
+
+        const filename = `simulation_${results.simulationType}_${results.simulationId}_${Date.now()}.json`;
+        await this.downloadJson(report, filename);
+    }
+
+    /**
+     * Export raw data as CSV
+     */
+    private async exportRawDataCsv(): Promise<void> {
+        const headers = [
+            'simulationId', 'simulationType', 'profileId', 'objectId', 'downloadLatencyMs',
+            'serverLatencyMs', 'clientLatencyMs', 'sizeBytes', 'downloadSource', 'cacheHit',
+            'timestamp', 'error', 'isBaseline'
+        ];
+
+        const rows = this.results.flatMap(sim =>
+            sim.metrics.map(metric => [
+                sim.simulationId,
+                sim.simulationType,
+                metric.profileId,
+                metric.objectId,
+                metric.downloadLatencyMs,
+                metric.serverLatencyMs || 0,
+                metric.clientLatencyMs || 0,
+                metric.sizeBytes,
+                metric.downloadSource || 'unknown',
+                metric.cacheHit || false,
+                new Date(metric.timestamp).toISOString(),
+                metric.error || '',
+                metric.isBaseline || false
+            ])
+        );
+
+        const csvContent = [headers, ...rows].map(row =>
+            row.map(cell => `"${cell}"`).join(',')
+        ).join('\n');
+
+        await this.downloadCsv(csvContent, `raw_metrics_${this.generateTimestamp()}.csv`);
+    }
+
+    /**
+     * Export aggregated statistics as CSV
+     */
+    private async exportAggregatedStatsCsv(): Promise<void> {
+        const analysis = this.analyzeResults();
+
+        const headers = [
+            'simulationType', 'totalSimulations', 'averageLatency', 'medianLatency', 'p95Latency',
+            'totalObjects', 'uniqueObjects', 'cacheHitRate', 'throughput', 'successRate'
+        ];
+
+        const rows = [
+            ['optimized', analysis.optimized.totalSimulations, analysis.optimized.averageLatency,
+                analysis.optimized.medianLatency, analysis.optimized.p95Latency, analysis.optimized.totalObjects,
+                analysis.optimized.uniqueObjects, analysis.optimized.cacheHitRate, analysis.optimized.throughput,
+                analysis.optimized.successRate],
+            ['unoptimized', analysis.unoptimized.totalSimulations, analysis.unoptimized.averageLatency,
+                analysis.unoptimized.medianLatency, analysis.unoptimized.p95Latency, analysis.unoptimized.totalObjects,
+                analysis.unoptimized.uniqueObjects, analysis.unoptimized.cacheHitRate, analysis.unoptimized.throughput,
+                analysis.unoptimized.successRate]
+        ];
+
+        const csvContent = [headers, ...rows].map(row =>
+            row.map(cell => `"${cell}"`).join(',')
+        ).join('\n');
+
+        await this.downloadCsv(csvContent, `aggregated_stats_${this.generateTimestamp()}.csv`);
+    }
+
+    // Utility methods for statistical calculations
+    private calculateMean(values: number[]): number {
+        return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+    }
+
+    private calculateMedian(values: number[]): number {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    }
+
+    private calculatePercentile(values: number[], percentile: number): number {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const index = Math.ceil((percentile / 100) * sorted.length) - 1;
+        return sorted[Math.max(0, index)];
+    }
+
+    private calculateStandardDeviation(values: number[]): number {
+        if (values.length <= 1) return 0;
+        const mean = this.calculateMean(values);
+        const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+        return Math.sqrt(variance);
+    }
+
+    private createHistogramData(values: number[], bins: number): any[] {
+        if (values.length === 0) return [];
+
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const binSize = (max - min) / bins;
+
+        const histogram = Array(bins).fill(0).map((_, i) => ({
+            range: `${(min + i * binSize).toFixed(0)}-${(min + (i + 1) * binSize).toFixed(0)}ms`,
+            count: 0
+        }));
+
+        values.forEach(value => {
+            const binIndex = Math.min(Math.floor((value - min) / binSize), bins - 1);
+            histogram[binIndex].count++;
+        });
+
+        return histogram;
+    }
+
+    // Additional helper methods...
+    private getEmptyStatisticalAnalysis(): StatisticalAnalysis {
+        return {
+            totalSimulations: 0,
+            averageLatency: 0,
+            minLatency: 0,
+            maxLatency: 0,
+            medianLatency: 0,
+            p95Latency: 0,
+            p99Latency: 0,
+            latencyStandardDeviation: 0,
+            totalObjects: 0,
+            uniqueObjects: 0,
+            totalDataSize: 0,
+            averageDataSize: 0,
+            cacheHitRate: 0,
+            throughput: 0,
+            requestsPerSecond: 0,
+            errorRate: 0,
+            successRate: 0
+        };
+    }
+
+    private generateExecutiveSummary(optimized: StatisticalAnalysis, unoptimized: StatisticalAnalysis, comparison: ComparisonResults): string {
         if (optimized.totalSimulations === 0 && unoptimized.totalSimulations === 0) {
             return 'No simulation data available for analysis.';
         }
 
-        if (optimized.totalSimulations === 0) {
-            return `Only unoptimized simulations available (${unoptimized.totalSimulations} runs). Average latency: ${unoptimized.averageLatency.toFixed(2)}ms.`;
-        }
+        const improvement = comparison.latencyImprovementPercent;
+        const cacheRate = optimized.cacheHitRate;
 
-        if (unoptimized.totalSimulations === 0) {
-            return `Only optimized simulations available (${optimized.totalSimulations} runs). Average latency: ${optimized.averageLatency.toFixed(2)}ms, cache hit rate: ${optimized.cacheHitRate.toFixed(1)}%.`;
-        }
-
-        const improvementText = comparison.latencyImprovementPercent > 0
-            ? `${comparison.latencyImprovementPercent.toFixed(1)}% faster`
-            : `${Math.abs(comparison.latencyImprovementPercent).toFixed(1)}% slower`;
-
-        return `Comparison of ${optimized.totalSimulations} optimized vs ${unoptimized.totalSimulations} unoptimized simulations: ` +
-            `Optimized mode is ${improvementText} (${optimized.averageLatency.toFixed(2)}ms vs ${unoptimized.averageLatency.toFixed(2)}ms average latency). ` +
-            `Cache hit rate: ${optimized.cacheHitRate.toFixed(1)}%. Data efficiency: ${comparison.dataSizeReductionPercent.toFixed(1)}% reduction.`;
+        return `Performance analysis of ${optimized.totalSimulations + unoptimized.totalSimulations} simulations shows ` +
+            `${improvement > 0 ? `${improvement.toFixed(1)}% latency improvement` : 'no significant improvement'} ` +
+            `with optimization enabled. Cache hit rate: ${cacheRate.toFixed(1)}%. ` +
+            `Recommendation: ${comparison.recommendation}`;
     }
 
-    /**
-     * Validates simulation result structure
-     */
-    private isValidSimulationResult(result: any): result is SimulationResults {
-        return (
-            result &&
-            typeof result.simulationId === 'string' &&
-            typeof result.simulationType === 'string' &&
-            typeof result.startTime === 'number' &&
-            typeof result.endTime === 'number' &&
-            Array.isArray(result.metrics) &&
-            typeof result.totalObjects === 'number' &&
-            typeof result.averageLatency === 'number'
-        );
+    private generateKeyFindings(analysis: PerformanceAnalysis): string[] {
+        const findings: string[] = [];
+
+        if (analysis.comparison.latencyImprovementPercent > 10) {
+            findings.push(`Significant latency reduction: ${analysis.comparison.latencyImprovementPercent.toFixed(1)}%`);
+        }
+
+        if (analysis.optimized.cacheHitRate > 70) {
+            findings.push(`High cache efficiency: ${analysis.optimized.cacheHitRate.toFixed(1)}% hit rate`);
+        }
+
+        if (analysis.comparison.throughputImprovementPercent > 20) {
+            findings.push(`Substantial throughput increase: ${analysis.comparison.throughputImprovementPercent.toFixed(1)}%`);
+        }
+
+        if (findings.length === 0) {
+            findings.push('Optimization showed minimal performance impact');
+        }
+
+        return findings;
     }
-}
 
-// Type definitions for analysis results
-interface StatisticalAnalysis {
-    totalSimulations: number;
-    averageLatency: number;
-    minLatency: number;
-    maxLatency: number;
-    latencyStandardDeviation: number;
-    totalObjects: number;
-    uniqueObjects: number;
-    totalDataSize: number;
-    averageDataSize: number;
-    cacheHitRate: number;
-}
+    private generateRecommendations(analysis: PerformanceAnalysis): string[] {
+        const recommendations: string[] = [];
 
-interface ComparisonResults {
-    latencyImprovementPercent: number;
-    dataSizeReductionPercent: number;
-    cacheEffectiveness: number;
-    performanceGain: 'significant_improvement' | 'moderate_improvement' | 'no_improvement';
-}
+        if (analysis.optimized.cacheHitRate < 50) {
+            recommendations.push('Improve cache preloading strategy to increase hit rate');
+        }
 
-interface AnalysisResults {
-    optimized: StatisticalAnalysis;
-    unoptimized: StatisticalAnalysis;
-    comparison: ComparisonResults;
-    totalSimulations: number;
-    summary: string;
-}
+        if (analysis.optimized.errorRate > 5) {
+            recommendations.push('Investigate and resolve network connectivity issues');
+        }
 
-interface PerformanceMetrics {
-    totalDownloads: number;
-    averageLatency: number;
-    minLatency: number;
-    maxLatency: number;
-    totalDataTransferred: number;
-    uniqueObjectsDownloaded: number;
+        if (analysis.comparison.latencyImprovementPercent < 5) {
+            recommendations.push('Consider alternative optimization strategies');
+        } else {
+            recommendations.push('Continue using optimized mode for production workloads');
+        }
+
+        return recommendations;
+    }
+
+    // Download utility methods
+    private async downloadJson(data: any, filename: string): Promise<void> {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        this.downloadBlob(blob, filename);
+    }
+
+    private async downloadCsv(content: string, filename: string): Promise<void> {
+        const blob = new Blob([content], { type: 'text/csv' });
+        this.downloadBlob(blob, filename);
+    }
+
+    private downloadBlob(blob: Blob, filename: string): void {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    private generateTimestamp(): string {
+        return new Date().toISOString().split('T')[0].replace(/-/g, '') + '_' + Date.now();
+    }
+
+    // Storage methods
+    private saveToLocalStorage(): void {
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.results));
+        } catch (error) {
+            console.error('Failed to save to localStorage:', error);
+            if (this.results.length > 20) {
+                this.results = this.results.slice(-20);
+                try {
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.results));
+                } catch (retryError) {
+                    console.error('Failed to save even after cleanup:', retryError);
+                }
+            }
+        }
+    }
+
+    public loadFromLocalStorage(): void {
+        try {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            if (stored) {
+                this.results = JSON.parse(stored);
+                console.log(`Loaded ${this.results.length} previous simulation results`);
+            }
+        } catch (error) {
+            console.error('Failed to load from localStorage:', error);
+            localStorage.removeItem(this.STORAGE_KEY);
+        }
+    }
+
+    public getAllResults(): SimulationResults[] {
+        return [...this.results];
+    }
+
+    public getResultsByType(type: 'optimized' | 'unoptimized'): SimulationResults[] {
+        return this.results.filter(result => result.simulationType === type);
+    }
+
+    public clearResults(): void {
+        this.results = [];
+        localStorage.removeItem(this.STORAGE_KEY);
+    }
+
+    // Placeholder methods for additional functionality
+    private async exportLatencyDistribution(): Promise<void> {
+        // Implementation for latency distribution export
+    }
+
+    private async exportCachePerformanceCsv(): Promise<void> {
+        // Implementation for cache performance metrics
+    }
+
+    private async exportInfrastructureMetrics(): Promise<void> {
+        // Implementation for infrastructure metrics export
+    }
+
+    private async downloadCsvData(analysis: PerformanceAnalysis): Promise<void> {
+        await this.exportRawDataCsv();
+        await this.exportAggregatedStatsCsv();
+    }
+
+    private async downloadExcelReport(report: BenchmarkReport): Promise<void> {
+        // Implementation for Excel export (would require additional library)
+        console.log('Excel export would be implemented with additional library');
+    }
+
+    private async downloadMarkdownReport(report: BenchmarkReport): Promise<void> {
+        const markdown = this.generateMarkdownReport(report);
+        const blob = new Blob([markdown], { type: 'text/markdown' });
+        this.downloadBlob(blob, `benchmark_report_${this.generateTimestamp()}.md`);
+    }
+
+    private generateMarkdownReport(report: BenchmarkReport): string {
+        return `# Benchmark Report
+
+## Executive Summary
+${report.executive.summary}
+
+## Key Findings
+${report.executive.keyFindings.map(finding => `- ${finding}`).join('\n')}
+
+## Performance Analysis
+- **Latency Improvement**: ${report.analysis.comparison.latencyImprovementPercent.toFixed(1)}%
+- **Cache Hit Rate**: ${report.analysis.optimized.cacheHitRate.toFixed(1)}%
+- **Throughput**: ${report.analysis.optimized.throughput.toFixed(2)} objects/sec
+
+## Recommendations
+${report.executive.recommendations.map(rec => `- ${rec}`).join('\n')}
+
+Generated at: ${report.metadata.generatedAt}
+`;
+    }
+
+    // Helper methods for chart generation
+    private calculateAverageLatency(results: SimulationResults[]): number {
+        const allMetrics = results.flatMap(r => r.metrics.filter(m => !m.isBaseline && !m.error));
+        return allMetrics.length > 0 ? this.calculateMean(allMetrics.map(m => m.downloadLatencyMs)) : 0;
+    }
+
+    private calculateCacheStats(results: SimulationResults[]): { hits: number, misses: number } {
+        const allMetrics = results.flatMap(r => r.metrics.filter(m => !m.isBaseline && !m.error));
+        const hits = allMetrics.filter(m => m.cacheHit).length;
+        const misses = allMetrics.length - hits;
+        return { hits, misses };
+    }
+
+    private createThroughputTimelineData(optimized: SimulationResults[], unoptimized: SimulationResults[]): any[] {
+        // Implementation for throughput timeline
+        return [];
+    }
+
+    private aggregateDockerStats(): Record<string, DockerContainerStats> {
+        // Implementation for Docker stats aggregation
+        return {};
+    }
+
+    private createInfrastructureChart(dockerStats: Record<string, DockerContainerStats>): any[] {
+        // Implementation for infrastructure chart
+        return [];
+    }
+
+    private calculateSystemResourceSummary(): any {
+        return {
+            averageCpuUsage: 0,
+            peakMemoryUsage: 0,
+            networkThroughput: 0
+        };
+    }
+
+    private generateIndividualSummary(results: SimulationResults): string {
+        return `${results.simulationType} simulation completed with ${results.totalObjects} objects downloaded in ${(results.duration || 0) / 1000}s`;
+    }
+
+    private analyzeIndividualPerformance(results: SimulationResults): any {
+        return {
+            latency: results.averageLatency,
+            throughput: results.throughput || 0,
+            cacheHitRate: results.cacheHitRate || 0
+        };
+    }
+
+    private extractInfrastructureData(results: SimulationResults): any {
+        return results.dockerStats || {};
+    }
+
+    private generateIndividualCharts(results: SimulationResults): ChartData[] {
+        return [];
+    }
+
+    private formatPerformanceGain(gain: string): string {
+        switch (gain) {
+            case 'significant_improvement': return 'Significant Performance Improvement';
+            case 'moderate_improvement': return 'Moderate Performance Improvement';
+            case 'no_improvement': return 'No Significant Improvement';
+            case 'regression': return 'Performance Regression';
+            default: return 'Unknown';
+        }
+    }
+
+    private generateRecommendation(gain: string, latencyImprovement: number, cacheHitRate: number): string {
+        if (gain === 'significant_improvement') {
+            return 'Optimization highly recommended for production use';
+        } else if (gain === 'moderate_improvement') {
+            return 'Optimization recommended with further tuning';
+        } else if (cacheHitRate < 30) {
+            return 'Improve cache strategy before enabling optimization';
+        } else {
+            return 'Evaluate cost-benefit of optimization implementation';
+        }
+    }
 }

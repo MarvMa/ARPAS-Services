@@ -60,7 +60,6 @@ export interface LocationMetadata {
     sensors?: string;
 }
 
-
 export interface Object3D {
     ID: string;
     OriginalFilename: string;
@@ -118,6 +117,10 @@ export interface SimulationState {
     currentTime: number;
     startTime: number;
     profileStates: Record<string, ProfileSimulationState>;
+    optimized?: boolean;
+    totalDataPoints?: number;
+    processedDataPoints?: number;
+    interval?: number;
 }
 
 export interface ProfileSimulationState {
@@ -126,16 +129,29 @@ export interface ProfileSimulationState {
     websocket?: WebSocket;
     downloadedObjects: string[];
     metrics: ObjectMetric[];
+    totalRequests?: number;
+    successfulRequests?: number;
+    failedRequests?: number;
+    cacheHits?: number;
+    cacheMisses?: number;
 }
 
 export interface ObjectMetric {
     objectId: string;
     profileId: string;
     downloadLatencyMs: number;
+    serverLatencyMs?: number;
+    clientLatencyMs?: number;
     sizeBytes: number;
     timestamp: number;
     simulationType: 'optimized' | 'unoptimized';
     simulationId: string;
+    downloadSource?: 'cache' | 'minio' | 'unknown' | 'baseline' | 'error';
+    cacheHit?: boolean;
+    networkLatencyMs?: number;
+    compressionRatio?: number;
+    error?: string;
+    isBaseline?: boolean;
 }
 
 export interface SimulationResults {
@@ -143,14 +159,64 @@ export interface SimulationResults {
     simulationType: 'optimized' | 'unoptimized';
     startTime: number;
     endTime: number;
+    duration?: number;
     profiles: Profile[];
     metrics: ObjectMetric[];
+
+    // Basic counters
     totalObjects: number;
     uniqueObjects: number;
-    averageLatency: number;
-    totalDataSize: number;
-}
+    totalRequests?: number;
+    successfulRequests?: number;
+    failedRequests?: number;
+    baselineRequests?: number;
 
+    // Latency statistics
+    averageLatency: number;
+    averageServerLatency?: number;
+    averageClientLatency?: number;
+    minLatency?: number;
+    maxLatency?: number;
+    medianLatency?: number;
+    p95Latency?: number;
+    p99Latency?: number;
+    latencyStandardDeviation?: number;
+
+    // Cache performance
+    cacheHitRate?: number;
+    cacheHits?: number;
+    cacheMisses?: number;
+    cacheEfficiency?: number;
+
+    // Data transfer
+    totalDataSize: number;
+    averageObjectSize?: number;
+    totalDataTransferred?: number;
+
+    // Success rates
+    successRate?: number;
+    errorRate?: number;
+
+    // Performance insights
+    throughput?: number;
+    requestsPerSecond?: number;
+
+    // Infrastructure metrics
+    dockerStats?: any;
+    detailedDockerStats?: any;
+
+    // Profile-specific statistics
+    profileStatistics?: Record<string, any>;
+
+    // Configuration
+    configuration?: {
+        optimized: boolean;
+        interval: number;
+        profileCount: number;
+        totalDataPoints: number;
+        processedDataPoints: number;
+    };
+}
 
 // Validation types
 export interface ParsedLocationResult {
@@ -178,40 +244,108 @@ export interface ProfileStatistics {
     };
 }
 
-export interface ObjectMetric {
-    objectId: string;
-    profileId: string;
-    downloadLatencyMs: number;
-    serverLatencyMs?: number;
-    clientLatencyMs?: number;
-    sizeBytes: number;
-    timestamp: number;
-    simulationType: 'optimized' | 'unoptimized';
-    simulationId: string;
-    downloadSource?: 'cache' | 'minio' | 'unknown';
+// Performance Analysis Types
+export interface PerformanceAnalysis {
+    optimized: StatisticalAnalysis;
+    unoptimized: StatisticalAnalysis;
+    comparison: ComparisonResults;
+    totalSimulations: number;
+    summary: string;
+    charts: ChartData[];
 }
 
-export interface SimulationState {
-    isRunning: boolean;
-    currentTime: number;
-    startTime: number;
-    profileStates: Record<string, ProfileSimulationState>;
-    optimized?: boolean;
-}
-
-export interface SimulationResults {
-    simulationId: string;
-    simulationType: 'optimized' | 'unoptimized';
-    startTime: number;
-    endTime: number;
-    profiles: Profile[];
-    metrics: ObjectMetric[];
+export interface StatisticalAnalysis {
+    totalSimulations: number;
+    averageLatency: number;
+    minLatency: number;
+    maxLatency: number;
+    medianLatency: number;
+    p95Latency: number;
+    p99Latency: number;
+    latencyStandardDeviation: number;
     totalObjects: number;
     uniqueObjects: number;
-    averageLatency: number;
-    averageServerLatency?: number;
     totalDataSize: number;
-    cacheHitRate?: number;
-    dockerStats?: any;
-    detailedDockerStats?: any;
+    averageDataSize: number;
+    cacheHitRate: number;
+    throughput: number;
+    requestsPerSecond: number;
+    errorRate: number;
+    successRate: number;
+}
+
+export interface ComparisonResults {
+    latencyImprovementPercent: number;
+    throughputImprovementPercent: number;
+    cacheEffectiveness: number;
+    dataSizeReductionPercent: number;
+    performanceGain: 'significant_improvement' | 'moderate_improvement' | 'no_improvement' | 'regression';
+    recommendation: string;
+}
+
+export interface ChartData {
+    type: 'line' | 'bar' | 'pie' | 'scatter' | 'histogram';
+    title: string;
+    description: string;
+    data: any[];
+    labels?: string[];
+    datasets?: any[];
+    options?: any;
+}
+
+// Docker Statistics Types
+export interface DockerContainerStats {
+    sampleCount: number;
+    cpu: {
+        average: number;
+        min: number;
+        max: number;
+        median: number;
+        standardDeviation: number;
+    };
+    memory: {
+        average: number;
+        min: number;
+        max: number;
+        median: number;
+        peak: number;
+        limit: number;
+    };
+    network: {
+        totalRx: number;
+        totalTx: number;
+        avgRxRate: number;
+        avgTxRate: number;
+    };
+}
+
+// Benchmark Report Types
+export interface BenchmarkReport {
+    metadata: {
+        generatedAt: string;
+        version: string;
+        totalSimulations: number;
+        optimizedSimulations: number;
+        unoptimizedSimulations: number;
+    };
+    executive: {
+        summary: string;
+        keyFindings: string[];
+        recommendations: string[];
+        performanceGain: string;
+    };
+    analysis: PerformanceAnalysis;
+    rawData: {
+        simulations: SimulationResults[];
+        aggregatedMetrics: ObjectMetric[];
+    };
+    charts: ChartData[];
+    infrastructure: {
+        dockerStats: Record<string, DockerContainerStats>;
+        systemResource: {
+            averageCpuUsage: number;
+            peakMemoryUsage: number;
+            networkThroughput: number;
+        };
+    };
 }

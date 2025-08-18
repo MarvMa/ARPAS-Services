@@ -23,6 +23,25 @@ interface DockerStats {
     memory_limit: number;
     network_rx_bytes: number;
     network_tx_bytes: number;
+    timestamp: number;
+}
+
+interface ContainerStats {
+    id: string;
+    name: string;
+    state: string;
+    cpu_percent: number;
+    mem_usage: number;
+    mem_limit: number;
+    mem_percent: number;
+    net_rx_bytes: number;
+    net_tx_bytes: number;
+    block_read_bytes: number;
+    block_write_bytes: number;
+}
+
+interface DockerStatsResponse {
+    containers: ContainerStats[];
 }
 
 export class SimulationService {
@@ -34,6 +53,7 @@ export class SimulationService {
     private availableObjects: Object3D[] = [];
     private dockerStatsInterval: number | null = null;
     private dockerStats: Map<string, DockerStats[]> = new Map();
+    private baselineMetrics: Map<string, ObjectMetric[]> = new Map();
 
     constructor() {
         this.dataCollector = new DataCollector();
@@ -41,10 +61,11 @@ export class SimulationService {
 
     setAvailableObjects(objects: Object3D[]): void {
         this.availableObjects = objects;
+        console.log(`Available objects for simulation: ${objects.length}`);
     }
 
     /**
-     * Starts a new real-time simulation with the given configuration
+     * Starts a new real-time simulation with enhanced metrics collection
      */
     async startSimulation(config: SimulationConfig): Promise<string> {
         if (this.simulationState?.isRunning) {
@@ -53,16 +74,18 @@ export class SimulationService {
 
         const simulationId = this.generateSimulationId();
         console.log(`Starting ${config.optimized ? 'optimized' : 'unoptimized'} simulation: ${simulationId}`);
+        console.log(`Configuration: ${config.profiles.length} profiles, ${config.intervalMs}ms interval`);
 
         // Clear previous data
         this.downloadedObjectsPerProfile.clear();
         this.profileWebSockets.clear();
         this.dockerStats.clear();
+        this.baselineMetrics.clear();
 
-        // Start collecting Docker stats
-        this.startDockerStatsCollection();
+        // Start enhanced Docker stats collection
+        this.startEnhancedDockerStatsCollection();
 
-        // Calculate the earliest start time across all profiles
+        // Calculate timing
         const allStartTimes = config.profiles
             .filter(p => p.data.length > 0)
             .map(p => Math.min(...p.data.map(d => d.timestamp)));
@@ -70,16 +93,19 @@ export class SimulationService {
         const earliestStartTime = allStartTimes.length > 0 ? Math.min(...allStartTimes) : Date.now();
         const simulationStartTime = Date.now();
 
-        // Initialize simulation state
+        // Initialize enhanced simulation state
         this.simulationState = {
             isRunning: true,
             currentTime: simulationStartTime,
             startTime: simulationStartTime,
             profileStates: {},
-            optimized: config.optimized // Add optimization mode to state
+            optimized: config.optimized,
+            totalDataPoints: config.profiles.reduce((sum, p) => sum + p.data.length, 0),
+            processedDataPoints: 0,
+            interval: config.intervalMs
         };
 
-        // Initialize profile states and WebSocket connections
+        // Initialize profile states and connections
         const profileSetupPromises = config.profiles.map(async (profile) => {
             if (profile.data.length === 0) return;
 
@@ -87,10 +113,16 @@ export class SimulationService {
                 profileId: profile.id,
                 currentIndex: 0,
                 downloadedObjects: [],
-                metrics: []
+                metrics: [],
+                totalRequests: 0,
+                successfulRequests: 0,
+                failedRequests: 0,
+                cacheHits: 0,
+                cacheMisses: 0
             };
 
             this.downloadedObjectsPerProfile.set(profile.id, new Set<string>());
+            this.baselineMetrics.set(profile.id, []);
             this.simulationState!.profileStates[profile.id] = profileState;
 
             if (config.optimized) {
@@ -104,7 +136,7 @@ export class SimulationService {
 
         await Promise.all(profileSetupPromises);
 
-        // Start real-time simulation loop
+        // Start simulation with enhanced monitoring
         this.startRealTimeSimulation(config, earliestStartTime, simulationStartTime);
 
         return simulationId;
@@ -115,7 +147,7 @@ export class SimulationService {
             return null;
         }
 
-        console.log('Stopping simulation...');
+        console.log('Stopping simulation and collecting comprehensive results...');
 
         // Stop simulation loop
         if (this.simulationIntervalId) {
@@ -126,80 +158,136 @@ export class SimulationService {
         // Stop Docker stats collection
         this.stopDockerStatsCollection();
 
-        // Close all WebSocket connections
+        // Close WebSocket connections
         this.profileWebSockets.forEach((ws, profileId) => {
             if (ws.readyState === WebSocket.OPEN) {
                 ws.close();
-                console.log(`Closed WebSocket for profile: ${profileId}`);
             }
         });
         this.profileWebSockets.clear();
 
-        const results = await this.collectSimulationResults();
+        const results = await this.collectEnhancedSimulationResults();
         await this.dataCollector.saveResults(results);
 
         this.downloadedObjectsPerProfile.clear();
+        this.baselineMetrics.clear();
         this.simulationState = null;
         return results;
     }
 
-    private startDockerStatsCollection(): void {
+    /**
+     * Enhanced Docker stats collection with error handling
+     */
+    private startEnhancedDockerStatsCollection(): void {
+        console.log('Starting enhanced Docker stats collection...');
+
         this.dockerStatsInterval = window.setInterval(async () => {
             try {
                 const stats = await this.fetchDockerStats();
                 const timestamp = Date.now();
 
-                for (const [container, stat] of Object.entries(stats)) {
-                    if (!this.dockerStats.has(container)) {
-                        this.dockerStats.set(container, []);
+                Object.entries(stats).forEach(([containerName, containerStats]) => {
+                    if (!this.dockerStats.has(containerName)) {
+                        this.dockerStats.set(containerName, []);
                     }
-                    this.dockerStats.get(container)!.push({
-                        ...stat,
+
+                    const enhancedStats: DockerStats = {
+                        ...containerStats,
                         timestamp
-                    } as any);
-                }
+                    };
+
+                    this.dockerStats.get(containerName)!.push(enhancedStats);
+
+                    // Keep only last 1000 entries to prevent memory issues
+                    const statsArray = this.dockerStats.get(containerName)!;
+                    if (statsArray.length > 1000) {
+                        statsArray.splice(0, statsArray.length - 1000);
+                    }
+                });
+
+                console.log(`Collected Docker stats for ${Object.keys(stats).length} containers`);
             } catch (error) {
-                console.error('Failed to collect Docker stats:', error);
+                console.warn('Failed to collect Docker stats:', error);
+                // Continue simulation even if Docker stats fail
             }
-        }, 1000); // Collect every second
+        }, 1000);
     }
 
     private stopDockerStatsCollection(): void {
         if (this.dockerStatsInterval) {
             clearInterval(this.dockerStatsInterval);
             this.dockerStatsInterval = null;
+            console.log('Stopped Docker stats collection');
         }
     }
-
-    private async fetchDockerStats(): Promise<Record<string, DockerStats>> {
-        try {
-            const response = await axios.get('/api/docker/stats');
-            return response.data;
-        } catch (error) {
-            console.error('Failed to fetch Docker stats:', error);
-            return {};
-        }
-    }
-
 
     /**
-     * Establishes WebSocket connection for a specific profile
+     * Enhanced Docker stats fetching with retry logic
+     */
+    private async fetchDockerStats(): Promise<Record<string, DockerStats>> {
+        const maxRetries = 3;
+        let lastError: Error | null = null;
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                const response = await axios.get<DockerStatsResponse>('/api/docker/stats', {
+                    timeout: 5000
+                });
+
+                // Transform the response to our expected format
+                const transformedStats: Record<string, DockerStats> = {};
+
+                if (response.data && response.data.containers) {
+                    response.data.containers.forEach(container => {
+                        transformedStats[container.name] = {
+                            cpu_usage: container.cpu_percent,
+                            memory_usage: container.mem_usage,
+                            memory_limit: container.mem_limit,
+                            network_rx_bytes: container.net_rx_bytes,
+                            network_tx_bytes: container.net_tx_bytes,
+                            timestamp: Date.now()
+                        };
+                    });
+                }
+
+                return transformedStats;
+            } catch (error) {
+                lastError = error as Error;
+                if (attempt < maxRetries) {
+                    console.warn(`Docker stats fetch attempt ${attempt} failed, retrying...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                }
+            }
+        }
+
+        throw new Error(`Failed to fetch Docker stats after ${maxRetries} attempts: ${lastError?.message}`);
+    }
+
+    /**
+     * Enhanced WebSocket connection with better error handling
      */
     private async establishWebSocketConnection(profileId: string, profileName: string): Promise<void> {
         return new Promise((resolve) => {
             const wsUrl = 'ws://localhost/ws/predict';
             const ws = new WebSocket(wsUrl);
+            let connectionTimeout: number;
+
+            const cleanup = () => {
+                if (connectionTimeout) {
+                    clearTimeout(connectionTimeout);
+                }
+            };
 
             ws.onopen = () => {
                 console.log(`WebSocket connected for profile: ${profileName} (${profileId})`);
                 this.profileWebSockets.set(profileId, ws);
+                cleanup();
                 resolve();
             };
 
             ws.onmessage = async (event) => {
                 try {
                     const response = JSON.parse(event.data);
-
                     let objectIds: string[] = [];
 
                     if (response.objectIds && Array.isArray(response.objectIds)) {
@@ -212,50 +300,55 @@ export class SimulationService {
                             .map(id => String(id));
                     }
 
-                    // Only process if we have valid IDs
-                    if (objectIds.length > 0) {
-                        console.log(`Received ${objectIds.length} object IDs from prediction service for ${profileName}`);
-                        await this.processObjectIds(objectIds, profileId);
-                    } else {
-                        console.log(`No valid object IDs received from prediction service for ${profileName}`);
+                    const profileState = this.simulationState?.profileStates[profileId];
+                    if (profileState) {
+                        profileState.totalRequests++;
+                        if (objectIds.length > 0) {
+                            profileState.successfulRequests++;
+                            console.log(`Received ${objectIds.length} object IDs for ${profileName}`);
+                            await this.processObjectIds(objectIds, profileId);
+                        } else {
+                            // Record baseline metric for requests with no objects
+                            await this.recordBaselineMetric(profileId);
+                        }
                     }
                 } catch (error) {
                     console.error(`Error processing WebSocket message for ${profileName}:`, error);
-                    console.error('Raw WebSocket data:', event.data);
+                    const profileState = this.simulationState?.profileStates[profileId];
+                    if (profileState) {
+                        profileState.failedRequests++;
+                    }
                 }
             };
 
             ws.onerror = (error) => {
                 console.error(`WebSocket error for profile ${profileName}:`, error);
-                console.warn(`Continuing simulation for ${profileName} without WebSocket`);
+                cleanup();
                 resolve();
             };
 
             ws.onclose = () => {
                 console.log(`WebSocket closed for profile: ${profileName}`);
                 this.profileWebSockets.delete(profileId);
+                cleanup();
             };
 
-            // Connection timeout
-            setTimeout(() => {
-                if (ws.readyState === WebSocket.CONNECTING) {
-                    console.warn(`WebSocket connection timeout for ${profileName}`);
-                    ws.close();
-                    resolve();
-                }
-            }, 5000);
+            connectionTimeout = window.setTimeout(() => {
+                console.warn(`WebSocket connection timeout for ${profileName}`);
+                ws.close();
+                resolve();
+            }, 10000);
         });
     }
 
     /**
-     * Starts the real-time simulation loop that respects original timing exactly
+     * Enhanced real-time simulation with better tracking
      */
     private startRealTimeSimulation(
         config: SimulationConfig,
         earliestStartTime: number,
         simulationStartTime: number
     ): void {
-        // Prepare profile timing data
         const profileTimings = new Map<string, {
             profile: Profile;
             sortedData: DataPoint[];
@@ -265,7 +358,7 @@ export class SimulationService {
             lastUpdateTime: number;
         }>();
 
-        // Initialize timing data for each profile
+        // Initialize timing data
         config.profiles.forEach(profile => {
             if (profile.data.length < 1) return;
 
@@ -280,6 +373,9 @@ export class SimulationService {
             });
         });
 
+        let processedDataPoints = 0;
+        const totalDataPoints = this.simulationState!.totalDataPoints;
+
         this.simulationIntervalId = window.setInterval(async () => {
             if (!this.simulationState?.isRunning) {
                 if (this.simulationIntervalId) {
@@ -291,35 +387,30 @@ export class SimulationService {
 
             const currentRealTime = Date.now();
             const elapsedRealTime = currentRealTime - simulationStartTime;
-
-            // Update current time in state
             this.simulationState.currentTime = currentRealTime;
 
-            // Process each profile in PARALLEL
             const profileProcessingPromises = Array.from(profileTimings.entries()).map(
                 async ([profileId, timing]) => {
                     const profileState = this.simulationState!.profileStates[profileId];
                     if (!profileState) return;
 
-                    // Calculate where we should be in the original timeline
                     const currentSimulationTime = timing.startTime + elapsedRealTime;
-
-                    // Find the current segment based on simulation time
                     let currentSegmentIndex = timing.currentSegmentIndex;
 
-                    // Advance through segments if needed
+                    // Advance segments
                     while (currentSegmentIndex < timing.sortedData.length - 1 &&
                     timing.sortedData[currentSegmentIndex + 1].timestamp <= currentSimulationTime) {
                         currentSegmentIndex++;
+                        processedDataPoints++;
                     }
 
-                    // Update segment index
                     timing.currentSegmentIndex = currentSegmentIndex;
                     profileState.currentIndex = currentSegmentIndex;
 
-                    // Check if simulation is complete for this profile
+                    // Update progress
+                    this.simulationState!.processedDataPoints = processedDataPoints;
+
                     if (currentSegmentIndex >= timing.sortedData.length - 1) {
-                        // Send the last point if we haven't already
                         if (timing.lastUpdateTime < currentRealTime - config.intervalMs) {
                             const lastPoint = timing.sortedData[timing.sortedData.length - 1];
                             if (config.optimized) {
@@ -327,20 +418,18 @@ export class SimulationService {
                             } else {
                                 await this.processUnoptimizedDetection(profileId, lastPoint);
                             }
+                            timing.lastUpdateTime = currentRealTime;
                         }
                         return;
                     }
 
-                    // Calculate interpolated position for current time
+                    // Interpolate current position
                     const currentPoint = timing.sortedData[currentSegmentIndex];
                     const nextPoint = timing.sortedData[currentSegmentIndex + 1];
-
-                    // Calculate progress within current segment
                     const segmentDuration = nextPoint.timestamp - currentPoint.timestamp;
                     const segmentElapsed = currentSimulationTime - currentPoint.timestamp;
                     const progress = segmentDuration > 0 ? Math.max(0, Math.min(1, segmentElapsed / segmentDuration)) : 0;
 
-                    // Interpolate current position
                     const interpolatedPoint: DataPoint = {
                         lat: currentPoint.lat + (nextPoint.lat - currentPoint.lat) * progress,
                         lng: currentPoint.lng + (nextPoint.lng - currentPoint.lng) * progress,
@@ -356,7 +445,6 @@ export class SimulationService {
                             : currentPoint.bearing || nextPoint.bearing
                     };
 
-                    // Send the interpolated position every interval
                     if (config.optimized) {
                         await this.sendPointToWebSocket(profileId, interpolatedPoint);
                     } else {
@@ -367,10 +455,9 @@ export class SimulationService {
                 }
             );
 
-            // Wait for all profiles to be processed
             await Promise.all(profileProcessingPromises);
 
-            // Check if all profiles have finished
+            // Check completion
             const allFinished = Array.from(profileTimings.values()).every(timing =>
                 timing.currentSegmentIndex >= timing.sortedData.length - 1 &&
                 timing.lastUpdateTime < Date.now() - config.intervalMs
@@ -385,107 +472,64 @@ export class SimulationService {
     }
 
     /**
-     * Sends a data point to the appropriate WebSocket
-     */
-    private async sendPointToWebSocket(profileId: string, point: DataPoint): Promise<void> {
-        const ws = this.profileWebSockets.get(profileId);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            try {
-                const data = {
-                    latitude: point.lat,  // Changed from lat
-                    longitude: point.lng, // Changed from lng
-                    timestamp: new Date(point.timestamp).toISOString(), // Convert to ISO string
-                    speed: point.speed || 0,
-                    altitude: point.altitude || 0,
-                    heading: point.bearing  // Map bearing to heading
-                };
-
-                console.log(`Sending data point for profile ${profileId}:`, data);
-
-                ws.send(JSON.stringify(data));
-            } catch (error) {
-                console.error(`Failed to send data to WebSocket for profile ${profileId}:`, error);
-            }
-        }
-    }
-
-    /**
-     * Processes unoptimized object detection (distance-based, 10m radius)
+     * Enhanced unoptimized detection with baseline metrics
      */
     private async processUnoptimizedDetection(profileId: string, currentPoint: DataPoint): Promise<void> {
-        const nearbyObjects = this.findObjectsWithinDistance(currentPoint, 10); // 10 meters
+        const detectionStartTime = performance.now();
+        const nearbyObjects = this.findObjectsWithinDistance(currentPoint, 10);
+        const detectionEndTime = performance.now();
+        const detectionLatency = detectionEndTime - detectionStartTime;
+
+        const profileState = this.simulationState?.profileStates[profileId];
+        if (profileState) {
+            profileState.totalRequests++;
+        }
 
         if (nearbyObjects.length > 0) {
             const objectIds = nearbyObjects.map(obj => obj.ID);
             await this.processObjectIds(objectIds, profileId);
+            if (profileState) {
+                profileState.successfulRequests++;
+            }
+            console.log(`Unoptimized detection found ${nearbyObjects.length} objects within 10m for profile ${profileId}`);
+        } else {
+            // CRITICAL FIX: Record baseline metric even when no objects found
+            await this.recordBaselineMetric(profileId, detectionLatency);
+            console.log(`Unoptimized detection found 0 objects within 10m for profile ${profileId} (detection took ${detectionLatency.toFixed(2)}ms)`);
         }
     }
 
     /**
-     * Finds 3D objects within a specified distance of a point
+     * Record baseline metrics for scientific comparison
      */
-    private findObjectsWithinDistance(point: DataPoint, maxDistanceMeters: number): Object3D[] {
-        return this.availableObjects.filter(obj => {
-            if (obj.latitude === undefined || obj.longitude === undefined) {
-                return false;
-            }
+    private async recordBaselineMetric(profileId: string, detectionLatency: number = 0): Promise<void> {
+        const baselineMetric: ObjectMetric = {
+            objectId: 'BASELINE_NO_OBJECTS',
+            profileId,
+            downloadLatencyMs: detectionLatency,
+            serverLatencyMs: 0,
+            clientLatencyMs: detectionLatency,
+            sizeBytes: 0,
+            timestamp: Date.now(),
+            simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
+            simulationId: this.getCurrentSimulationId(),
+            downloadSource: 'baseline',
+            isBaseline: true
+        };
 
-            const distance = this.calculateDistance(
-                point.lat, point.lng,
-                obj.latitude, obj.longitude
-            );
-
-            return distance <= maxDistanceMeters;
-        });
-    }
-
-    /**
-     * Calculates distance between two geographic points using Haversine formula
-     */
-    private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-        const R = 6371000; // Earth's radius in meters
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLng = (lng2 - lng1) * Math.PI / 180;
-        const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng / 2) * Math.sin(dLng / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-    }
-
-    /**
-     * Processes object IDs received from WebSocket or distance detection
-     */
-    private async processObjectIds(objectIds: string[], profileId: string): Promise<void> {
         const profileState = this.simulationState?.profileStates[profileId];
-        if (!profileState) return;
-
-        // Get or create per-profile download cache
-        let profileDownloadCache = this.downloadedObjectsPerProfile.get(profileId);
-        if (!profileDownloadCache) {
-            profileDownloadCache = new Set<string>();
-            this.downloadedObjectsPerProfile.set(profileId, profileDownloadCache);
+        if (profileState) {
+            profileState.metrics.push(baselineMetric);
         }
 
-        const downloadPromises = objectIds.map(async (objectId) => {
-            // Check per-profile cache instead of global cache
-            if (!profileDownloadCache!.has(objectId)) {
-                await this.downloadObject(objectId, profileId);
-                profileDownloadCache!.add(objectId);
-            }
-
-            // Add to profile's downloaded list if not already there
-            if (!profileState.downloadedObjects.includes(objectId)) {
-                profileState.downloadedObjects.push(objectId);
-            }
-        });
-
-        await Promise.all(downloadPromises);
+        const baselineArray = this.baselineMetrics.get(profileId);
+        if (baselineArray) {
+            baselineArray.push(baselineMetric);
+        }
     }
 
     /**
-     * Downloads a 3D object and measures latency
+     * Enhanced object download with comprehensive metrics
      */
     private async downloadObject(objectId: string, profileId: string): Promise<void> {
         const startTime = performance.now();
@@ -508,109 +552,374 @@ export class SimulationService {
             );
 
             const endTime = performance.now();
-            const latency = endTime - startTime;
+            const totalLatency = endTime - startTime;
             const sizeBytes = response.data.size || 0;
 
-            // Extract metrics from response headers
+            // Extract enhanced metrics from response headers
             const downloadSource = response.headers['x-download-source'] || 'unknown';
             const serverLatency = parseInt(response.headers['x-download-latency-ms'] || '0');
+            const cacheHit = downloadSource === 'cache';
+
+            // Update cache statistics
+            if (cacheHit) {
+                profileState.cacheHits++;
+            } else {
+                profileState.cacheMisses++;
+            }
 
             const metric: ObjectMetric = {
                 objectId,
                 profileId,
-                downloadLatencyMs: latency,
+                downloadLatencyMs: totalLatency,
                 serverLatencyMs: serverLatency,
-                clientLatencyMs: latency - serverLatency,
+                clientLatencyMs: totalLatency - serverLatency,
                 sizeBytes,
                 timestamp: Date.now(),
                 simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
                 simulationId: this.getCurrentSimulationId(),
-                downloadSource
+                downloadSource,
+                cacheHit,
+                networkLatencyMs: totalLatency - serverLatency,
+                compressionRatio: sizeBytes > 0 ? 1.0 : 0,
+                isBaseline: false
             };
 
             profileState.metrics.push(metric);
-            console.log(`Downloaded object ${objectId} for profile ${profileId} in ${latency.toFixed(2)}ms (server: ${serverLatency}ms, client: ${(latency - serverLatency).toFixed(2)}ms) from ${downloadSource}`);
+            console.log(`Downloaded ${objectId} for ${profileId}: ${totalLatency.toFixed(2)}ms total (server: ${serverLatency}ms, client: ${(totalLatency - serverLatency).toFixed(2)}ms) from ${downloadSource}, cache hit: ${cacheHit}`);
 
         } catch (error) {
+            const endTime = performance.now();
+            const latency = endTime - startTime;
+
+            profileState.failedRequests++;
+
+            // Record failed download metric
+            const failureMetric: ObjectMetric = {
+                objectId,
+                profileId,
+                downloadLatencyMs: latency,
+                serverLatencyMs: 0,
+                clientLatencyMs: latency,
+                sizeBytes: 0,
+                timestamp: Date.now(),
+                simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
+                simulationId: this.getCurrentSimulationId(),
+                downloadSource: 'error',
+                error: error instanceof Error ? error.message : 'Unknown error',
+                isBaseline: false
+            };
+
+            profileState.metrics.push(failureMetric);
             console.error(`Failed to download object ${objectId} for profile ${profileId}:`, error);
         }
     }
 
     /**
-     * Collects simulation results for export
+     * Enhanced simulation results collection
      */
-    private async collectSimulationResults(): Promise<SimulationResults> {
+    private async collectEnhancedSimulationResults(): Promise<SimulationResults> {
         if (!this.simulationState) {
             throw new Error('No simulation state available');
         }
 
+        console.log('Collecting enhanced simulation results...');
+
         const allMetrics: ObjectMetric[] = [];
-        Object.values(this.simulationState.profileStates).forEach((profileState) => {
-            allMetrics.push(...profileState.metrics);
-        });
+        const profileStats = new Map<string, any>();
 
-        // Calculate statistics
-        const globalUniqueObjects = new Set<string>();
-        const profileStats = new Map<string, { downloads: number; unique: number }>();
-
+        // Collect all metrics including baseline
         Object.entries(this.simulationState.profileStates).forEach(([profileId, profileState]) => {
+            allMetrics.push(...profileState.metrics);
+
             const profileUnique = new Set(profileState.downloadedObjects);
+            const totalRequests = profileState.totalRequests || 0;
+            const successfulRequests = profileState.successfulRequests || 0;
+            const cacheHits = profileState.cacheHits || 0;
+            const cacheMisses = profileState.cacheMisses || 0;
+
             profileStats.set(profileId, {
                 downloads: profileState.downloadedObjects.length,
-                unique: profileUnique.size
+                unique: profileUnique.size,
+                totalRequests,
+                successfulRequests,
+                failedRequests: profileState.failedRequests || 0,
+                successRate: totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0,
+                cacheHits,
+                cacheMisses,
+                cacheHitRate: (cacheHits + cacheMisses) > 0 ? (cacheHits / (cacheHits + cacheMisses)) * 100 : 0
             });
-            profileUnique.forEach(id => globalUniqueObjects.add(id));
         });
 
-        const averageLatency = allMetrics.length > 0
-            ? allMetrics.reduce((sum, m) => sum + m.downloadLatencyMs, 0) / allMetrics.length
-            : 0;
+        // Calculate comprehensive statistics
+        const realMetrics = allMetrics.filter(m => !m.isBaseline);
+        const baselineMetrics = allMetrics.filter(m => m.isBaseline);
+        const successfulMetrics = realMetrics.filter(m => !m.error);
+        const failedMetrics = realMetrics.filter(m => !!m.error);
 
-        const averageServerLatency = allMetrics.length > 0
-            ? allMetrics.reduce((sum, m) => sum + (m.serverLatencyMs || 0), 0) / allMetrics.length
-            : 0;
+        const totalRequests = allMetrics.length;
+        const successfulDownloads = successfulMetrics.length;
+        const globalUniqueObjects = new Set(successfulMetrics.map(m => m.objectId));
 
-        const totalDataSize = allMetrics.reduce((sum, m) => sum + m.sizeBytes, 0);
+        // Latency statistics
+        const latencies = successfulMetrics.map(m => m.downloadLatencyMs);
+        const serverLatencies = successfulMetrics.map(m => m.serverLatencyMs || 0);
+        const clientLatencies = successfulMetrics.map(m => m.clientLatencyMs || 0);
 
-        // Calculate cache hit rate for optimized mode
-        const cacheHits = allMetrics.filter(m => m.downloadSource === 'cache').length;
-        const cacheHitRate = this.simulationState.optimized && allMetrics.length > 0
-            ? (cacheHits / allMetrics.length) * 100
-            : 0;
+        const averageLatency = latencies.length > 0 ? latencies.reduce((sum, l) => sum + l, 0) / latencies.length : 0;
+        const averageServerLatency = serverLatencies.length > 0 ? serverLatencies.reduce((sum, l) => sum + l, 0) / serverLatencies.length : 0;
+        const averageClientLatency = clientLatencies.length > 0 ? clientLatencies.reduce((sum, l) => sum + l, 0) / clientLatencies.length : 0;
+
+        // Cache statistics
+        const cacheHits = successfulMetrics.filter(m => m.cacheHit).length;
+        const cacheMisses = successfulMetrics.filter(m => !m.cacheHit && !m.error).length;
+        const cacheHitRate = (cacheHits + cacheMisses) > 0 ? (cacheHits / (cacheHits + cacheMisses)) * 100 : 0;
+
+        // Data transfer statistics
+        const totalDataSize = successfulMetrics.reduce((sum, m) => sum + m.sizeBytes, 0);
+        const averageObjectSize = successfulMetrics.length > 0 ? totalDataSize / successfulMetrics.length : 0;
+
+        // Performance metrics
+        const minLatency = latencies.length > 0 ? Math.min(...latencies) : 0;
+        const maxLatency = latencies.length > 0 ? Math.max(...latencies) : 0;
+        const medianLatency = this.calculateMedian(latencies);
+        const p95Latency = this.calculatePercentile(latencies, 95);
+        const p99Latency = this.calculatePercentile(latencies, 99);
+
+        // Docker statistics summary
+        const dockerStatsSummary = this.processDockerStats();
 
         const simulationType = this.simulationState.optimized ? 'optimized' : 'unoptimized';
 
-        // Prepare Docker stats summary
-        const dockerStatsSummary: any = {};
-        for (const [container, stats] of this.dockerStats.entries()) {
-            if (stats.length > 0) {
-                dockerStatsSummary[container] = {
-                    avgCpuUsage: stats.reduce((sum, s) => sum + s.cpu_usage, 0) / stats.length,
-                    maxCpuUsage: Math.max(...stats.map(s => s.cpu_usage)),
-                    avgMemoryUsage: stats.reduce((sum, s) => sum + s.memory_usage, 0) / stats.length,
-                    maxMemoryUsage: Math.max(...stats.map(s => s.memory_usage)),
-                    totalNetworkRx: stats[stats.length - 1].network_rx_bytes - stats[0].network_rx_bytes,
-                    totalNetworkTx: stats[stats.length - 1].network_tx_bytes - stats[0].network_tx_bytes
-                };
-            }
-        }
-
-        return {
+        const enhancedResults: SimulationResults = {
             simulationId: this.getCurrentSimulationId(),
             simulationType,
             startTime: this.simulationState.startTime,
             endTime: Date.now(),
-            profiles: [],
+            duration: Date.now() - this.simulationState.startTime,
+            profiles: [], // Simplified for export
             metrics: allMetrics,
-            totalObjects: allMetrics.length,
+
+            // Basic counters
+            totalObjects: successfulDownloads,
             uniqueObjects: globalUniqueObjects.size,
+            totalRequests,
+            successfulRequests: successfulDownloads,
+            failedRequests: failedMetrics.length,
+            baselineRequests: baselineMetrics.length,
+
+            // Latency statistics
             averageLatency,
             averageServerLatency,
-            totalDataSize,
+            averageClientLatency,
+            minLatency,
+            maxLatency,
+            medianLatency,
+            p95Latency,
+            p99Latency,
+            latencyStandardDeviation: this.calculateStandardDeviation(latencies),
+
+            // Cache performance
             cacheHitRate,
+            cacheHits,
+            cacheMisses,
+            cacheEfficiency: cacheHitRate / 100,
+
+            // Data transfer
+            totalDataSize,
+            averageObjectSize,
+            totalDataTransferred: totalDataSize,
+
+            // Success rates
+            successRate: totalRequests > 0 ? (successfulDownloads / totalRequests) * 100 : 0,
+            errorRate: totalRequests > 0 ? (failedMetrics.length / totalRequests) * 100 : 0,
+
+            // Performance insights
+            throughput: this.calculateThroughput(),
+            requestsPerSecond: this.calculateRequestsPerSecond(),
+
+            // Infrastructure metrics
             dockerStats: dockerStatsSummary,
-            detailedDockerStats: Object.fromEntries(this.dockerStats)
+            detailedDockerStats: Object.fromEntries(this.dockerStats),
+
+            // Profile-specific statistics
+            profileStatistics: Object.fromEntries(profileStats),
+
+            // Configuration
+            configuration: {
+                optimized: this.simulationState.optimized,
+                interval: this.simulationState.interval,
+                profileCount: Object.keys(this.simulationState.profileStates).length,
+                totalDataPoints: this.simulationState.totalDataPoints,
+                processedDataPoints: this.simulationState.processedDataPoints
+            }
         };
+
+        console.log(`Enhanced results collected: ${successfulDownloads} successful downloads, ${cacheHitRate.toFixed(1)}% cache hit rate, ${averageLatency.toFixed(2)}ms avg latency`);
+        return enhancedResults;
+    }
+
+    /**
+     * Process Docker statistics for analysis
+     */
+    private processDockerStats(): any {
+        const summary: any = {};
+
+        for (const [container, stats] of this.dockerStats.entries()) {
+            if (stats.length === 0) continue;
+
+            const cpuValues = stats.map(s => s.cpu_usage);
+            const memoryValues = stats.map(s => s.memory_usage);
+            const networkRxValues = stats.map(s => s.network_rx_bytes);
+            const networkTxValues = stats.map(s => s.network_tx_bytes);
+
+            summary[container] = {
+                sampleCount: stats.length,
+                cpu: {
+                    average: this.calculateAverage(cpuValues),
+                    min: Math.min(...cpuValues),
+                    max: Math.max(...cpuValues),
+                    median: this.calculateMedian(cpuValues),
+                    standardDeviation: this.calculateStandardDeviation(cpuValues)
+                },
+                memory: {
+                    average: this.calculateAverage(memoryValues),
+                    min: Math.min(...memoryValues),
+                    max: Math.max(...memoryValues),
+                    median: this.calculateMedian(memoryValues),
+                    peak: Math.max(...memoryValues),
+                    limit: stats[0]?.memory_limit || 0
+                },
+                network: {
+                    totalRx: Math.max(...networkRxValues) - Math.min(...networkRxValues),
+                    totalTx: Math.max(...networkTxValues) - Math.min(...networkTxValues),
+                    avgRxRate: this.calculateNetworkRate(networkRxValues, stats),
+                    avgTxRate: this.calculateNetworkRate(networkTxValues, stats)
+                }
+            };
+        }
+
+        return summary;
+    }
+
+    // Utility methods for statistical calculations
+    private calculateAverage(values: number[]): number {
+        return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+    }
+
+    private calculateMedian(values: number[]): number {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    }
+
+    private calculatePercentile(values: number[], percentile: number): number {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const index = Math.ceil((percentile / 100) * sorted.length) - 1;
+        return sorted[Math.max(0, index)];
+    }
+
+    private calculateStandardDeviation(values: number[]): number {
+        if (values.length <= 1) return 0;
+        const avg = this.calculateAverage(values);
+        const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
+        return Math.sqrt(variance);
+    }
+
+    private calculateThroughput(): number {
+        if (!this.simulationState) return 0;
+        const duration = (Date.now() - this.simulationState.startTime) / 1000; // seconds
+        const totalObjects = Object.values(this.simulationState.profileStates)
+            .reduce((sum, state) => sum + state.downloadedObjects.length, 0);
+        return duration > 0 ? totalObjects / duration : 0;
+    }
+
+    private calculateRequestsPerSecond(): number {
+        if (!this.simulationState) return 0;
+        const duration = (Date.now() - this.simulationState.startTime) / 1000;
+        const totalRequests = Object.values(this.simulationState.profileStates)
+            .reduce((sum, state) => sum + (state.totalRequests || 0), 0);
+        return duration > 0 ? totalRequests / duration : 0;
+    }
+
+    private calculateNetworkRate(values: number[], stats: DockerStats[]): number {
+        if (values.length < 2 || stats.length < 2) return 0;
+        const timeDiff = (stats[stats.length - 1].timestamp - stats[0].timestamp) / 1000; // seconds
+        const dataDiff = Math.max(...values) - Math.min(...values);
+        return timeDiff > 0 ? dataDiff / timeDiff : 0;
+    }
+
+    // Existing methods (sendPointToWebSocket, processObjectIds, etc.) remain unchanged
+    private async sendPointToWebSocket(profileId: string, point: DataPoint): Promise<void> {
+        const ws = this.profileWebSockets.get(profileId);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            try {
+                const data = {
+                    latitude: point.lat,
+                    longitude: point.lng,
+                    timestamp: new Date(point.timestamp).toISOString(),
+                    speed: point.speed || 0,
+                    altitude: point.altitude || 0,
+                    heading: point.bearing
+                };
+
+                ws.send(JSON.stringify(data));
+            } catch (error) {
+                console.error(`Failed to send data to WebSocket for profile ${profileId}:`, error);
+            }
+        }
+    }
+
+    private async processObjectIds(objectIds: string[], profileId: string): Promise<void> {
+        const profileState = this.simulationState?.profileStates[profileId];
+        if (!profileState) return;
+
+        let profileDownloadCache = this.downloadedObjectsPerProfile.get(profileId);
+        if (!profileDownloadCache) {
+            profileDownloadCache = new Set<string>();
+            this.downloadedObjectsPerProfile.set(profileId, profileDownloadCache);
+        }
+
+        const downloadPromises = objectIds.map(async (objectId) => {
+            if (!profileDownloadCache!.has(objectId)) {
+                await this.downloadObject(objectId, profileId);
+                profileDownloadCache!.add(objectId);
+            }
+
+            if (!profileState.downloadedObjects.includes(objectId)) {
+                profileState.downloadedObjects.push(objectId);
+            }
+        });
+
+        await Promise.all(downloadPromises);
+    }
+
+    private findObjectsWithinDistance(point: DataPoint, maxDistanceMeters: number): Object3D[] {
+        return this.availableObjects.filter(obj => {
+            if (obj.latitude === undefined || obj.longitude === undefined) {
+                return false;
+            }
+
+            const distance = this.calculateDistance(
+                point.lat, point.lng,
+                obj.latitude, obj.longitude
+            );
+
+            return distance <= maxDistanceMeters;
+        });
+    }
+
+    private calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+        const R = 6371000; // Earth's radius in meters
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLng = (lng2 - lng1) * Math.PI / 180;
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     private generateSimulationId(): string {
@@ -624,6 +933,6 @@ export class SimulationService {
     }
 
     public getSimulationState(): SimulationState | null {
-        return this.simulationState
+        return this.simulationState;
     }
 }
