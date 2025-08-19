@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -260,10 +259,7 @@ func (s *ObjectService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, i
 	req, _ := http.NewRequest("GET", url, nil)
 	req.Header.Set("Accept", "application/octet-stream")
 
-	startTime := time.Now()
 	resp, err := s.cacheHTTP.Do(req)
-	latency := time.Since(startTime).Milliseconds()
-	log.Printf("[DOWNLOAD CACHE]]:  Latency=%dms", latency)
 	if err != nil {
 		return nil, 0, fmt.Errorf("cache service request failed: %w", err)
 	}

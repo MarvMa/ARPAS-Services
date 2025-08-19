@@ -295,9 +295,10 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 	startTime := time.Now()
 	var data []byte
 	var downloadSource string
-
 	if optimizationMode == "optimized" {
 		log.Printf("Attempting to retrieve from cache (stream): ID=%s", obj.ID)
+		log.Printf("[MEASURE][CACHE] T0 before cache request: id=%s", obj.ID)
+		tCacheStart := time.Now()
 		rc, clen, err := h.Service.GetFromCacheStream(obj.ID)
 		if err == nil && rc != nil {
 			downloadSource = "cache"
@@ -321,7 +322,9 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 
 			c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 				defer rc.Close()
-				_, _ = io.Copy(w, rc)
+				n, _ := io.Copy(w, rc)
+				log.Printf("[MEASURE][CACHE] Tdone full stream: id=%s bytes=%d dur=%dms",
+					obj.ID, n, time.Since(tCacheStart).Milliseconds())
 			})
 
 			return c.SendStatus(fiber.StatusOK)
@@ -344,10 +347,9 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 		if statErr != nil {
 			log.Printf("StatObject failed for %s: %v (continuing without size)", obj.StorageKey, statErr)
 		}
-
+		log.Printf("[MEASURE][MINIO] T0 before GetObject: key=%s", obj.StorageKey)
+		tMinioStart := time.Now()
 		object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
-		latencyMinIO := time.Since(startTime).Milliseconds()
-		log.Printf("[DOWNLOAD MINIO]]:  Latency=%dms", latencyMinIO)
 		if err != nil {
 			log.Printf("Failed to retrieve file from MinIO: StorageKey=%s, Error=%v", obj.StorageKey, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -373,8 +375,11 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 
 		c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 			defer object.Close()
-			_, _ = io.Copy(w, object)
+			n, _ := io.Copy(w, object)
+			log.Printf("[MEASURE][MINIO] Tdone full stream: key=%s bytes=%d dur=%dms",
+				obj.StorageKey, n, time.Since(tMinioStart).Milliseconds())
 		})
+
 		return c.SendStatus(fiber.StatusOK)
 	}
 

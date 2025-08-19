@@ -19,3 +19,4 @@ storage-service/example_files/
 /cache-service/node_modules/
 
 example-data/3d-models/FLOWERPOT_GLB.glb
+/cache-service/dist/
