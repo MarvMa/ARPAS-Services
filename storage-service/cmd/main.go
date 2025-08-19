@@ -32,10 +32,13 @@ func main() {
 	MigrateDatabase(db)
 
 	minioClient := InitMinIOClient(cfg)
+	redisClient := InitRedisClient(cfg)
 
 	objectRepo := repository.NewObjectRepository(db)
 	objectService := services.NewObjectService(objectRepo, minioClient, cfg.MinioBucket, cfg)
+	cacheService := services.NewCacheService(redisClient, minioClient, cfg.MinioBucket, cfg.CacheTTL)
 	predictionHandler := handlers.NewPredictionHandler(objectService)
+	cacheHandler := handlers.NewCacheHandler(cacheService, objectService)
 
 	// Configure Swagger metadata
 	docs.SwaggerInfo.Title = "Storage Service API"
@@ -86,6 +89,12 @@ func main() {
 	api.Post("/objects/upload", objHandler.UploadObject)
 	api.Delete("/objects/:id", objHandler.DeleteObject)
 	api.Get("/objects/:id/download", objHandler.DownloadObject)
+
+	// Cache routes
+	cacheGroup := app.Group("/cache")
+
+	cacheGroup.Post("/preload", cacheHandler.PreloadObjects)
+	//cacheGroup.Get("/stats", cacheHandler.GetCacheStats)
 
 	// Swagger documentation
 	// Configure swagger to serve the pre-generated docs
@@ -151,4 +160,12 @@ func InitMinIOClient(cfg *config.Config) *minio.Client {
 		log.Fatalf("Failed to initialize MinIO client: %v", err)
 	}
 	return minioClient
+}
+
+func InitRedisClient(cfg *config.Config) *storage.RedisClient {
+	redisClient, err := storage.NewRedisClient(cfg.RedisHost, cfg.RedisPort)
+	if err != nil {
+		log.Fatalf("Failed to initialize Redis client: %v", err)
+	}
+	return redisClient
 }

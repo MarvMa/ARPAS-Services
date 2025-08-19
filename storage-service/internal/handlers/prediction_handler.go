@@ -1,11 +1,12 @@
 package handlers
 
 import (
-	"github.com/gofiber/fiber/v2"
 	"log"
 	"net/http"
 	"storage-service/internal/models"
 	"storage-service/internal/services"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type PredictionHandler struct {
@@ -31,10 +32,9 @@ func NewPredictionHandler(objectService *services.ObjectService) *PredictionHand
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /predictions [post]
 func (h *PredictionHandler) GetPredictedModels(c *fiber.Ctx) error {
-	log.Printf("Processing prediction request - Method: %s, Path: %s, IP: %s", c.Method(), c.Path(), c.IP())
 
 	if c.Method() != fiber.MethodPost {
-		log.Printf("Method not allowed: %s for prediction endpoint", c.Method())
+		log.Fatalf("Method not allowed: %s for prediction endpoint", c.Method())
 		return c.Status(http.StatusMethodNotAllowed).JSON(fiber.Map{
 			"error": "Method not allowed, use POST",
 		})
@@ -42,22 +42,19 @@ func (h *PredictionHandler) GetPredictedModels(c *fiber.Ctx) error {
 
 	var req models.PredictionRequest
 	if err := c.BodyParser(&req); err != nil {
-		log.Printf("Invalid prediction request format: %v", err)
+		log.Fatalf("Invalid prediction request format: %v", err)
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request format",
 		})
 	}
-	log.Printf("Processing prediction request: lat=%f, lon=%f, heading=%f",
-		req.Position.Latitude, req.Position.Longitude, req.ViewingDirection.Heading)
 
 	modelIDs, err := h.objectService.GetPredictedModels(req)
-	log.Printf("------ Model IDs predicted: %v", modelIDs)
+
 	if err != nil {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to get predicted models",
 		})
 	}
 
-	log.Printf("Prediction returned %d model IDs", len(modelIDs))
 	return c.JSON(modelIDs)
 }

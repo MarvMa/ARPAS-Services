@@ -1,10 +1,11 @@
 package repository
 
 import (
-	"github.com/google/uuid"
-	"gorm.io/gorm"
 	"storage-service/internal/models"
 	"storage-service/internal/utils"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // ObjectRepository defines the interface for interacting with the Object model in the database.

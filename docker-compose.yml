@@ -37,8 +37,6 @@ services:
     depends_on:
       storage-service:
         condition: service_healthy
-      cache-service:
-        condition: service_healthy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker stats
 
@@ -90,34 +88,34 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker stats
 
-    # Cache Service with monitoring
-  cache-service:
-    build: ./cache-service
-    networks:
-      - backend-net
-    depends_on:
-      redis:
-        condition: service_healthy
-    environment:
-      CACHE_PORT: ${CACHE_PORT}
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
-      OBJECT_TTL: ${OBJECT_TTL}
-      STORAGE_URL: ${STORAGE_URL}
-    ports:
-      - "8001:${CACHE_PORT}"  # Expose for metrics
-    healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://cache-service:${CACHE_PORT}/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          memory: 4G  # Increased for in-memory caching
-        reservations:
-          memory: 2G
+  #    # Cache Service with monitoring
+  #  cache-service:
+  #    build: ./cache-service
+  #    networks:
+  #      - backend-net
+  #    depends_on:
+  #      redis:
+  #        condition: service_healthy
+  #    environment:
+  #      CACHE_PORT: ${CACHE_PORT}
+  #      REDIS_HOST: ${REDIS_HOST}
+  #      REDIS_PORT: ${REDIS_PORT}
+  #      OBJECT_TTL: ${OBJECT_TTL}
+  #      STORAGE_URL: ${STORAGE_URL}
+  #    ports:
+  #      - "8001:${CACHE_PORT}"  # Expose for metrics
+  #    healthcheck:
+  #      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://cache-service:${CACHE_PORT}/health" ]
+  #      interval: 30s
+  #      timeout: 10s
+  #      retries: 3
+  #      start_period: 40s
+  #    deploy:
+  #      resources:
+  #        limits:
+  #          memory: 4G  # Increased for in-memory caching
+  #        reservations:
+  #          memory: 2G
 
   prediction-service:
     networks:
@@ -128,8 +126,6 @@ services:
         PORT: ${PREDICTION_PORT}
     depends_on:
       storage-service:
-        condition: service_healthy
-      cache-service:
         condition: service_healthy
     
     environment:
@@ -149,6 +145,7 @@ services:
       minio:
         condition: service_healthy
     environment:
+      STORAGE_URL: ${STORAGE_URL}
       STORAGE_PORT: ${STORAGE_PORT}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
@@ -162,14 +159,17 @@ services:
       CACHE_ENABLED: ${CACHE_ENABLED}
       PREDICTION_RADIUS: ${PREDICTION_RADIUS}
       USE_DIRECTIONAL_FILTER: ${USE_DIRECTIONAL_FILTER}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      CACHE_TTL: ${CACHE_TTL}
     expose:
       - "${STORAGE_PORT}"
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 10G
         reservations:
-          memory: 512M
+          memory: 2G
     tmpfs:
       - /tmp:size=2G,noexec,nosuid
     healthcheck:
@@ -187,7 +187,15 @@ services:
       - type: volume
         source: redis-data
         target: /data
-    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    #    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --io-threads 6
+      --io-threads-do-reads yes
+      --maxmemory 6gb
+      --appendonly no       
+      --save ""
+      --tcp-keepalive 300
     ports:
       - "6379:6379"  # Expose for monitoring
     healthcheck:

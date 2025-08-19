@@ -5,12 +5,13 @@ export class CacheClient {
     private readonly baseUrl: string;
 
     constructor() {
-        this.baseUrl = config.cacheUrl;
+        this.baseUrl = config.storageUrl;
     }
 
     async preload(ids: number[]): Promise<Boolean> {
         try {
-            const response = await axios.post(`${this.baseUrl}/preload`, {ids});
+            console.log(`PATH ${this.baseUrl}/cache/preload`)
+            const response = await axios.post(`${this.baseUrl}/cache/preload`, {ids});
             return response.status === 200;
         } catch (error) {
             console.error('Error preloading cache:', error);

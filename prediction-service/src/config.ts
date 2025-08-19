@@ -11,7 +11,7 @@ export interface EnvConfig {
 export const config: EnvConfig = {
     port: parseInt(process.env.PREDICTION_PORT || '3000', 10),
     storageUrl: process.env.STORAGE_URL || 'http://localhost',
-    cacheUrl: process.env.CACHE_URL || 'http://localhost',
+    cacheUrl: process.env.STORAGE_URL || 'http://localhost',
 };
 console.log('Configuration loaded:', config);
 

@@ -99,7 +99,7 @@ export class CacheManager {
             cacheHits.inc({object_id: id.toString()});
 
             // Update access timestamp and statistics
-            await this.redisClient.zadd('object:access', Date.now(), id.toString());
+            // await this.redisClient.zadd('object:access', Date.now(), id.toString());
 
             const stats = this.cacheStats.get(id.toString()) || {size: objectData.length, hits: 0, lastAccess: 0};
             stats.hits++;
