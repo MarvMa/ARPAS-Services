@@ -10,6 +10,12 @@ import {
     Object3D
 } from '../types/simulation';
 import {DataCollector} from './dataCollector';
+import {
+    calculateAverage,
+    calculateMedian, calculateNetworkRate,
+    calculatePercentile, calculateRequestsPerSecond,
+    calculateStandardDeviation, calculateThroughput
+} from "../utils/statisticUtils.ts";
 
 interface PredictionResponse {
     status: string;
@@ -17,7 +23,7 @@ interface PredictionResponse {
     objectIds: (string | number | null)[];
 }
 
-interface DockerStats {
+export interface DockerStats {
     cpu_usage: number;
     memory_usage: number;
     memory_limit: number;
@@ -179,7 +185,7 @@ export class SimulationService {
      * Enhanced Docker stats collection with error handling
      */
     private startEnhancedDockerStatsCollection(): void {
-        console.log('Starting enhanced Docker stats collection...');
+        console.log(`Starting Docker stats collection for ${this.simulationState?.optimized ? 'OPTIMIZED' : 'UNOPTIMIZED'} simulation...`);
 
         this.dockerStatsInterval = window.setInterval(async () => {
             try {
@@ -198,17 +204,17 @@ export class SimulationService {
 
                     this.dockerStats.get(containerName)!.push(enhancedStats);
 
-                    // Keep only last 1000 entries to prevent memory issues
-                    const statsArray = this.dockerStats.get(containerName)!;
-                    if (statsArray.length > 1000) {
-                        statsArray.splice(0, statsArray.length - 1000);
+                    // Log für Debugging
+                    if (this.dockerStats.get(containerName)!.length === 1) {
+                        console.log(`Started collecting stats for container: ${containerName}`);
                     }
                 });
 
-                console.log(`Collected Docker stats for ${Object.keys(stats).length} containers`);
+                if (Object.keys(stats).length > 0) {
+                    console.log(`Collected Docker stats for ${Object.keys(stats).length} containers (${this.simulationState?.optimized ? 'OPTIMIZED' : 'UNOPTIMIZED'} mode)`);
+                }
             } catch (error) {
                 console.warn('Failed to collect Docker stats:', error);
-                // Continue simulation even if Docker stats fail
             }
         }, 1000);
     }
@@ -225,20 +231,32 @@ export class SimulationService {
      * Enhanced Docker stats fetching with retry logic
      */
     private async fetchDockerStats(): Promise<Record<string, DockerStats>> {
-        const maxRetries = 3;
-        let lastError: Error | null = null;
+        try {
+            const response = await axios.get<DockerStatsResponse>('http://localhost/api/docker/stats', {
+                timeout: 5000,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
 
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                const response = await axios.get<DockerStatsResponse>('/api/docker/stats', {
-                    timeout: 5000
-                });
+            const transformedStats: Record<string, DockerStats> = {};
 
-                // Transform the response to our expected format
-                const transformedStats: Record<string, DockerStats> = {};
+            if (response.data && response.data.containers) {
+                response.data.containers.forEach(container => {
+                    // Nur relevante Container filtern basierend auf Simulationstyp
+                    const isRelevantOptimized = this.simulationState?.optimized && (
+                        container.name.includes('storage-service') ||
+                        container.name.includes('cache-service') ||
+                        container.name.includes('minio') ||
+                        container.name.includes('prediction-service')
+                    );
 
-                if (response.data && response.data.containers) {
-                    response.data.containers.forEach(container => {
+                    const isRelevantUnoptimized = !this.simulationState?.optimized && (
+                        container.name.includes('storage-service') ||
+                        container.name.includes('minio')
+                    );
+
+                    if (isRelevantOptimized || isRelevantUnoptimized) {
                         transformedStats[container.name] = {
                             cpu_usage: container.cpu_percent,
                             memory_usage: container.mem_usage,
@@ -247,20 +265,15 @@ export class SimulationService {
                             network_tx_bytes: container.net_tx_bytes,
                             timestamp: Date.now()
                         };
-                    });
-                }
-
-                return transformedStats;
-            } catch (error) {
-                lastError = error as Error;
-                if (attempt < maxRetries) {
-                    console.warn(`Docker stats fetch attempt ${attempt} failed, retrying...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-                }
+                    }
+                });
             }
-        }
 
-        throw new Error(`Failed to fetch Docker stats after ${maxRetries} attempts: ${lastError?.message}`);
+            return transformedStats;
+        } catch (error) {
+            console.warn('Failed to fetch Docker stats:', error);
+            return {};
+        }
     }
 
     /**
@@ -681,9 +694,9 @@ export class SimulationService {
         // Performance metrics
         const minLatency = latencies.length > 0 ? Math.min(...latencies) : 0;
         const maxLatency = latencies.length > 0 ? Math.max(...latencies) : 0;
-        const medianLatency = this.calculateMedian(latencies);
-        const p95Latency = this.calculatePercentile(latencies, 95);
-        const p99Latency = this.calculatePercentile(latencies, 99);
+        const medianLatency = calculateMedian(latencies);
+        const p95Latency = calculatePercentile(latencies, 95);
+        const p99Latency = calculatePercentile(latencies, 99);
 
         // Docker statistics summary
         const dockerStatsSummary = this.processDockerStats();
@@ -716,7 +729,7 @@ export class SimulationService {
             medianLatency,
             p95Latency,
             p99Latency,
-            latencyStandardDeviation: this.calculateStandardDeviation(latencies),
+            latencyStandardDeviation: calculateStandardDeviation(latencies),
 
             // Cache performance
             cacheHitRate,
@@ -734,8 +747,8 @@ export class SimulationService {
             errorRate: totalRequests > 0 ? (failedMetrics.length / totalRequests) * 100 : 0,
 
             // Performance insights
-            throughput: this.calculateThroughput(),
-            requestsPerSecond: this.calculateRequestsPerSecond(),
+            throughput: calculateThroughput(this.simulationState),
+            requestsPerSecond: calculateRequestsPerSecond(this.simulationState),
 
             // Infrastructure metrics
             dockerStats: dockerStatsSummary,
@@ -746,11 +759,11 @@ export class SimulationService {
 
             // Configuration
             configuration: {
-                optimized: this.simulationState.optimized,
-                interval: this.simulationState.interval,
-                profileCount: Object.keys(this.simulationState.profileStates).length,
-                totalDataPoints: this.simulationState.totalDataPoints,
-                processedDataPoints: this.simulationState.processedDataPoints
+                optimized: !!this.simulationState?.optimized,
+                interval: this.simulationState?.interval ?? 0,
+                profileCount: Object.keys(this.simulationState?.profileStates ?? {}).length,
+                totalDataPoints: this.simulationState?.totalDataPoints ?? 0,
+                processedDataPoints: this.simulationState?.processedDataPoints ?? 0
             }
         };
 
@@ -775,79 +788,30 @@ export class SimulationService {
             summary[container] = {
                 sampleCount: stats.length,
                 cpu: {
-                    average: this.calculateAverage(cpuValues),
+                    average: calculateAverage(cpuValues),
                     min: Math.min(...cpuValues),
                     max: Math.max(...cpuValues),
-                    median: this.calculateMedian(cpuValues),
-                    standardDeviation: this.calculateStandardDeviation(cpuValues)
+                    median: calculateMedian(cpuValues),
+                    standardDeviation: calculateStandardDeviation(cpuValues)
                 },
                 memory: {
-                    average: this.calculateAverage(memoryValues),
+                    average: calculateAverage(memoryValues),
                     min: Math.min(...memoryValues),
                     max: Math.max(...memoryValues),
-                    median: this.calculateMedian(memoryValues),
+                    median: calculateMedian(memoryValues),
                     peak: Math.max(...memoryValues),
                     limit: stats[0]?.memory_limit || 0
                 },
                 network: {
                     totalRx: Math.max(...networkRxValues) - Math.min(...networkRxValues),
                     totalTx: Math.max(...networkTxValues) - Math.min(...networkTxValues),
-                    avgRxRate: this.calculateNetworkRate(networkRxValues, stats),
-                    avgTxRate: this.calculateNetworkRate(networkTxValues, stats)
+                    avgRxRate: calculateNetworkRate(networkRxValues, stats),
+                    avgTxRate: calculateNetworkRate(networkTxValues, stats)
                 }
             };
         }
 
         return summary;
-    }
-
-    // Utility methods for statistical calculations
-    private calculateAverage(values: number[]): number {
-        return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
-    }
-
-    private calculateMedian(values: number[]): number {
-        if (values.length === 0) return 0;
-        const sorted = [...values].sort((a, b) => a - b);
-        const mid = Math.floor(sorted.length / 2);
-        return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
-    }
-
-    private calculatePercentile(values: number[], percentile: number): number {
-        if (values.length === 0) return 0;
-        const sorted = [...values].sort((a, b) => a - b);
-        const index = Math.ceil((percentile / 100) * sorted.length) - 1;
-        return sorted[Math.max(0, index)];
-    }
-
-    private calculateStandardDeviation(values: number[]): number {
-        if (values.length <= 1) return 0;
-        const avg = this.calculateAverage(values);
-        const variance = values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length;
-        return Math.sqrt(variance);
-    }
-
-    private calculateThroughput(): number {
-        if (!this.simulationState) return 0;
-        const duration = (Date.now() - this.simulationState.startTime) / 1000; // seconds
-        const totalObjects = Object.values(this.simulationState.profileStates)
-            .reduce((sum, state) => sum + state.downloadedObjects.length, 0);
-        return duration > 0 ? totalObjects / duration : 0;
-    }
-
-    private calculateRequestsPerSecond(): number {
-        if (!this.simulationState) return 0;
-        const duration = (Date.now() - this.simulationState.startTime) / 1000;
-        const totalRequests = Object.values(this.simulationState.profileStates)
-            .reduce((sum, state) => sum + (state.totalRequests || 0), 0);
-        return duration > 0 ? totalRequests / duration : 0;
-    }
-
-    private calculateNetworkRate(values: number[], stats: DockerStats[]): number {
-        if (values.length < 2 || stats.length < 2) return 0;
-        const timeDiff = (stats[stats.length - 1].timestamp - stats[0].timestamp) / 1000; // seconds
-        const dataDiff = Math.max(...values) - Math.min(...values);
-        return timeDiff > 0 ? dataDiff / timeDiff : 0;
     }
 
     // Existing methods (sendPointToWebSocket, processObjectIds, etc.) remain unchanged

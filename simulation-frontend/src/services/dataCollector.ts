@@ -84,7 +84,16 @@ export class DataCollector {
             throw error;
         }
     }
-
+    /**
+     * Exports all results in comprehensive scientific formats
+     */
+    async exportAllResults(): Promise<void> {
+        if (this.results.length === 0) {
+            throw new Error('No results to export');
+        }
+        await this.exportComprehensiveBenchmarkReport();
+        await this.exportScientificData();
+    }
     /**
      * Analyzes simulation results with comprehensive statistics
      */
@@ -214,8 +223,8 @@ export class DataCollector {
             title: 'Cache Performance (Optimized Mode)',
             description: 'Distribution of cache hits vs misses in optimized mode',
             data: [
-                { label: 'Cache Hits', value: cacheData.hits, color: '#4CAF50' },
-                { label: 'Cache Misses', value: cacheData.misses, color: '#ff9800' }
+                {label: 'Cache Hits', value: cacheData.hits, color: '#4CAF50'},
+                {label: 'Cache Misses', value: cacheData.misses, color: '#ff9800'}
             ]
         });
 
@@ -498,12 +507,12 @@ export class DataCollector {
 
     // Download utility methods
     private async downloadJson(data: any, filename: string): Promise<void> {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
         this.downloadBlob(blob, filename);
     }
 
     private async downloadCsv(content: string, filename: string): Promise<void> {
-        const blob = new Blob([content], { type: 'text/csv' });
+        const blob = new Blob([content], {type: 'text/csv'});
         this.downloadBlob(blob, filename);
     }
 
@@ -590,7 +599,7 @@ export class DataCollector {
 
     private async downloadMarkdownReport(report: BenchmarkReport): Promise<void> {
         const markdown = this.generateMarkdownReport(report);
-        const blob = new Blob([markdown], { type: 'text/markdown' });
+        const blob = new Blob([markdown], {type: 'text/markdown'});
         this.downloadBlob(blob, `benchmark_report_${this.generateTimestamp()}.md`);
     }
 
@@ -625,7 +634,7 @@ Generated at: ${report.metadata.generatedAt}
         const allMetrics = results.flatMap(r => r.metrics.filter(m => !m.isBaseline && !m.error));
         const hits = allMetrics.filter(m => m.cacheHit).length;
         const misses = allMetrics.length - hits;
-        return { hits, misses };
+        return {hits, misses};
     }
 
     private createThroughputTimelineData(optimized: SimulationResults[], unoptimized: SimulationResults[]): any[] {
@@ -673,11 +682,16 @@ Generated at: ${report.metadata.generatedAt}
 
     private formatPerformanceGain(gain: string): string {
         switch (gain) {
-            case 'significant_improvement': return 'Significant Performance Improvement';
-            case 'moderate_improvement': return 'Moderate Performance Improvement';
-            case 'no_improvement': return 'No Significant Improvement';
-            case 'regression': return 'Performance Regression';
-            default: return 'Unknown';
+            case 'significant_improvement':
+                return 'Significant Performance Improvement';
+            case 'moderate_improvement':
+                return 'Moderate Performance Improvement';
+            case 'no_improvement':
+                return 'No Significant Improvement';
+            case 'regression':
+                return 'Performance Regression';
+            default:
+                return 'Unknown';
         }
     }
 
@@ -691,5 +705,114 @@ Generated at: ${report.metadata.generatedAt}
         } else {
             return 'Evaluate cost-benefit of optimization implementation';
         }
+    }
+
+    /**
+     * Exports comprehensive benchmark data as structured JSON
+     */
+
+
+    /**
+     * Extract infrastructure metrics for specific containers
+     */
+    private extractInfrastructureMetrics(report: BenchmarkReport): any {
+        const optimizedResults = this.getResultsByType('optimized');
+        const unoptimizedResults = this.getResultsByType('unoptimized');
+
+        const extractContainerStats = (results: SimulationResults[], containerNames: string[]) => {
+            const allStats: Record<string, any[]> = {};
+
+            results.forEach(result => {
+                if (result.dockerStats) {
+                    Object.entries(result.dockerStats).forEach(([container, stats]) => {
+                        if (containerNames.some(name => container.includes(name))) {
+                            if (!allStats[container]) {
+                                allStats[container] = [];
+                            }
+                            allStats[container].push(stats);
+                        }
+                    });
+                }
+            });
+
+            // Aggregate statistics
+            const aggregated: Record<string, any> = {};
+            Object.entries(allStats).forEach(([container, statsList]) => {
+                const cpuValues = statsList.map(s => s.cpu?.average || 0).filter(v => v > 0);
+                const memoryValues = statsList.map(s => s.memory?.average || 0).filter(v => v > 0);
+                const networkRx = statsList.map(s => s.network?.totalRx || 0).filter(v => v > 0);
+                const networkTx = statsList.map(s => s.network?.totalTx || 0).filter(v => v > 0);
+
+                aggregated[container] = {
+                    cpu: {
+                        average: this.calculateMean(cpuValues),
+                        max: cpuValues.length > 0 ? Math.max(...cpuValues) : 0,
+                        median: this.calculateMedian(cpuValues)
+                    },
+                    memory: {
+                        average: this.calculateMean(memoryValues),
+                        max: memoryValues.length > 0 ? Math.max(...memoryValues) : 0,
+                        median: this.calculateMedian(memoryValues)
+                    },
+                    network: {
+                        totalRx: networkRx.reduce((sum, v) => sum + v, 0),
+                        totalTx: networkTx.reduce((sum, v) => sum + v, 0),
+                        avgRxRate: this.calculateMean(networkRx),
+                        avgTxRate: this.calculateMean(networkTx)
+                    }
+                };
+            });
+
+            return aggregated;
+        };
+
+        return {
+            optimized: extractContainerStats(
+                optimizedResults,
+                ['storage-service', 'cache-service', 'minio', 'prediction-service']
+            ),
+            unoptimized: extractContainerStats(
+                unoptimizedResults,
+                ['storage-service', 'minio']
+            )
+        };
+    }
+
+    /**
+     * Calculate statistical significance of results
+     */
+    private calculateStatisticalSignificance(analysis: PerformanceAnalysis): any {
+        const optimizedLatencies = this.getResultsByType('optimized')
+            .flatMap(r => r.metrics.filter(m => !m.isBaseline && !m.error))
+            .map(m => m.downloadLatencyMs);
+
+        const unoptimizedLatencies = this.getResultsByType('unoptimized')
+            .flatMap(r => r.metrics.filter(m => !m.isBaseline && !m.error))
+            .map(m => m.downloadLatencyMs);
+
+        if (optimizedLatencies.length < 2 || unoptimizedLatencies.length < 2) {
+            return {significant: false, message: 'Insufficient data for statistical analysis'};
+        }
+
+        // Calculate t-test (simplified)
+        const n1 = optimizedLatencies.length;
+        const n2 = unoptimizedLatencies.length;
+        const mean1 = this.calculateMean(optimizedLatencies);
+        const mean2 = this.calculateMean(unoptimizedLatencies);
+        const std1 = this.calculateStandardDeviation(optimizedLatencies);
+        const std2 = this.calculateStandardDeviation(unoptimizedLatencies);
+
+        const pooledStd = Math.sqrt(((n1 - 1) * std1 * std1 + (n2 - 1) * std2 * std2) / (n1 + n2 - 2));
+        const tStatistic = (mean1 - mean2) / (pooledStd * Math.sqrt(1 / n1 + 1 / n2));
+
+        return {
+            significant: Math.abs(tStatistic) > 1.96, // 95% confidence
+            tStatistic: tStatistic,
+            sampleSizes: {optimized: n1, unoptimized: n2},
+            confidenceLevel: '95%',
+            message: Math.abs(tStatistic) > 1.96
+                ? 'Results are statistically significant'
+                : 'Results are not statistically significant'
+        };
     }
 }

@@ -129,11 +129,11 @@ export interface ProfileSimulationState {
     websocket?: WebSocket;
     downloadedObjects: string[];
     metrics: ObjectMetric[];
-    totalRequests?: number;
-    successfulRequests?: number;
-    failedRequests?: number;
-    cacheHits?: number;
-    cacheMisses?: number;
+    totalRequests: number;
+    successfulRequests: number;
+    failedRequests: number;
+    cacheHits: number;
+    cacheMisses: number;
 }
 
 export interface ObjectMetric {

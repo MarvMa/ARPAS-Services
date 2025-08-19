@@ -62,6 +62,12 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
                 rewrite: (path) => '/health'
+            },
+            '/api/docker/stats': {
+                target: 'http://localhost',
+                changeOrigin: true,
+                secure: false,
+                rewrite: (path) => path
             }
         }
     },

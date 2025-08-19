@@ -521,6 +521,7 @@ const App: React.FC = () => {
                         isAddingMode={isAddingMode}
                         onProfileVisibilityToggle={handleProfileVisibilityToggle}
                     />
+                    
                 </div>
             </main>
 

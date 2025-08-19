@@ -312,6 +312,7 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			c.Set("X-Optimization-Mode", "optimized")
 
 			latency := time.Since(startTime).Milliseconds()
+
 			c.Set("X-Download-Latency-Ms", strconv.FormatInt(latency, 10))
 
 			if clen > 0 {
@@ -345,6 +346,8 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 		}
 
 		object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
+		latencyMinIO := time.Since(startTime).Milliseconds()
+		log.Printf("[DOWNLOAD MINIO]]:  Latency=%dms", latencyMinIO)
 		if err != nil {
 			log.Printf("Failed to retrieve file from MinIO: StorageKey=%s, Error=%v", obj.StorageKey, err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -368,7 +371,6 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			c.Set(fiber.HeaderContentLength, strconv.FormatInt(statInfo.Size, 10))
 		}
 
-		// Streamen + DANN schließen
 		c.Context().SetBodyStreamWriter(func(w *bufio.Writer) {
 			defer object.Close()
 			_, _ = io.Copy(w, object)
