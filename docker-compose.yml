@@ -27,6 +27,12 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+    environment:
+      - PROMETHEUS_BASE_URL=${PROMETHEUS_URL}
+      - PROM_HTTP_TIMEOUT=8
+    depends_on:
+      - prometheus
+      
   api-gateway:
     build: ./api-gateway
     ports:
@@ -40,32 +46,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker stats
 
-  #  simulation-service:
-  #    build: ./simulation-service
-  #    networks:
-  #      - backend-net
-  #    environment:
-  #      PORT: ${SIMULATION_BACKEND_PORT}
-  #      HOST: 0.0.0.0
-  #      UPLOAD_DIR: /app/uploads
-  #      RATE_LIMIT_WINDOW: 15
-  #      RATE_LIMIT_MAX: 100
-  #      LOG_LEVEL: ${LOG_LEVEL:-info}
-  #      PREDICTION_URL: http://prediction-service:8002
-  #    volumes:
-  #      - simulation-uploads:/app/uploads
-  #      - simulation-logs:/app/logs
-  #      - ./simulation-service/data:/app/data
-  #    ports:
-  #      - "8003:8003"
-  #    expose:
-  #      - "${SIMULATION_BACKEND_PORT}"
-  #    healthcheck:
-  #      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:${SIMULATION_BACKEND_PORT}/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })" ]
-  #      interval: 30s
-  #      timeout: 10s
-  #      retries: 3
-  #      start_period: 40s
 
   simulation-frontend:
     build: ./simulation-frontend
@@ -88,35 +68,6 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker stats
 
-  #    # Cache Service with monitoring
-  #  cache-service:
-  #    build: ./cache-service
-  #    networks:
-  #      - backend-net
-  #    depends_on:
-  #      redis:
-  #        condition: service_healthy
-  #    environment:
-  #      CACHE_PORT: ${CACHE_PORT}
-  #      REDIS_HOST: ${REDIS_HOST}
-  #      REDIS_PORT: ${REDIS_PORT}
-  #      OBJECT_TTL: ${OBJECT_TTL}
-  #      STORAGE_URL: ${STORAGE_URL}
-  #    ports:
-  #      - "8001:${CACHE_PORT}"  # Expose for metrics
-  #    healthcheck:
-  #      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://cache-service:${CACHE_PORT}/health" ]
-  #      interval: 30s
-  #      timeout: 10s
-  #      retries: 3
-  #      start_period: 40s
-  #    deploy:
-  #      resources:
-  #        limits:
-  #          memory: 4G  # Increased for in-memory caching
-  #        reservations:
-  #          memory: 2G
-
   prediction-service:
     networks:
       - backend-net
@@ -124,6 +75,8 @@ services:
       context: ./prediction-service
       args:
         PORT: ${PREDICTION_PORT}
+    labels:
+      - "sim.group=prediction_service"
     depends_on:
       storage-service:
         condition: service_healthy
@@ -133,9 +86,11 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       STORAGE_URL: ${STORAGE_URL}
-
+  
   storage-service:
     build: ./storage-service
+    labels:
+      - "sim.group=storage-service"
     networks:
       - backend-net
     depends_on:
@@ -180,6 +135,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    labels:
+      - "sim.group=redis"
     networks:
       - backend-net
     volumes:
@@ -228,6 +185,8 @@ services:
 
   minio:
     image: minio/minio:latest
+    labels:
+      - "sim.group=minio"
     networks:
       - backend-net
     ports:
@@ -269,3 +228,13 @@ services:
       - sonarqube_data:/opt/sonarqube/data
       - sonarqube_logs:/opt/sonarqube/logs
       - sonarqube_ext:/opt/sonarqube/extensions
+        
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    ports: [ "8080:8080" ]
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    restart: unless-stopped

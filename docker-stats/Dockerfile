@@ -6,5 +6,7 @@ RUN pip install --no-cache-dir flask docker
 ENV DOCKER_HOST=unix:///var/run/docker.sock
 COPY server.py .
 
+RUN pip install --no-cache-dir flask docker requests
+
 EXPOSE 3002
 CMD ["python", "server.py"]

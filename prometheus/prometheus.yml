@@ -1,18 +1,8 @@
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
 scrape_configs:
-  - job_name: 'cache-service'
+  - job_name: cadvisor
+    scrape_interval: 1s
     static_configs:
-      - targets: [ 'cache-service:8001' ]
-    metrics_path: '/metrics'
-
-  - job_name: 'storage-service'
-    static_configs:
-      - targets: [ 'storage-service:8000' ]
-    metrics_path: '/metrics'
-
-  - job_name: 'redis'
-    static_configs:
-      - targets: [ 'redis:6379' ]
+      - targets: ["cadvisor:8080"]
+    metric_relabel_configs:
+      - action: labelmap
+        regex: ^container_label_(sim\..+)$   # sim.group etc.
