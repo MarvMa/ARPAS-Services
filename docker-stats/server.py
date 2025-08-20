@@ -1,8 +1,8 @@
 from flask import Flask, jsonify, request
 import docker
-import os, time, threading, uuid, requests
+import os, threading, requests
 
-PROM_BASE = os.getenv("PROMETHEUS_BASE_URL", "http://prometheus:9090")
+PROMETHEUS_URL = os.getenv("PROMETHEUS_BASE_URL", "http://prometheus:9090")
 HTTP_TIMEOUT = float(os.getenv("PROM_HTTP_TIMEOUT", "8"))
 
 JOBS = {}  # jobId -> {"status": "pending"|"done"|"error", "result": {...}, "error": str}
@@ -16,217 +16,266 @@ client = docker.from_env()
 def health():
     return jsonify({"status": "ok"}), 200
 
-@app.post("/api/docker/sim-summary")
-def start_sim_summary():
+@app.post("/api/docker/metrics/historical")
+def get_historical_metrics():
     """
-    Body: { simId: str, groups: [str], startTs: ISO, endTs: ISO }
+    Get historical Docker metrics from Prometheus for a specific time range
+    Request body:
+    {
+        "start_time": timestamp_ms,
+        "end_time": timestamp_ms,
+        "simulation_type": "optimized" | "unoptimized"
+    }
     """
-    data = request.get_json(force=True, silent=True) or {}
-    for k in ("simId", "groups", "startTs", "endTs"):
-        if k not in data:
-            return jsonify({"error": f"missing field: {k}"}), 400
-    job_id = str(uuid.uuid4())
-    with JOBS_LOCK:
-        JOBS[job_id] = {"status": "pending"}
-    t = threading.Thread(target=_run_summary_job, args=(job_id, data), daemon=True)
-    t.start()
-    return jsonify({"jobId": job_id}), 202
-
-
-@app.get("/api/docker/sim-summary/<job_id>")
-def get_sim_summary(job_id: str):
-    with JOBS_LOCK:
-        job = JOBS.get(job_id)
-    if not job:
-        return jsonify({"status": "error", "error": "job not found"}), 404
-    if job.get("status") == "done":
-        return jsonify({"status": "done", "result": job.get("result")}), 200
-    if job.get("status") == "error":
-        return jsonify({"status": "error", "error": job.get("error")}), 200
-    return jsonify({"status": "pending"}), 200
-
-@app.get("/api/docker/stats")
-def docker_stats():
-    stats_list = []
-    for c in client.containers.list(all=True):
-        try:
-            s = c.stats(stream=False)
-            # CPU-Berechnung nach Docker-Logik
-            cpu_delta = s["cpu_stats"]["cpu_usage"]["total_usage"] - s["precpu_stats"]["cpu_usage"]["total_usage"]
-            system_delta = s["cpu_stats"]["system_cpu_usage"] - s["precpu_stats"]["system_cpu_usage"]
-            cpu_pct = 0.0
-            if system_delta > 0 and cpu_delta >= 0:
-                online_cpus = s["cpu_stats"].get("online_cpus") or len(
-                    s["cpu_stats"]["cpu_usage"].get("percpu_usage", [])) or 1
-                cpu_pct = (cpu_delta / system_delta) * online_cpus * 100.0
-
-            mem_usage = s["memory_stats"].get("usage", 0)
-            mem_limit = s["memory_stats"].get("limit", 0)
-            mem_pct = (mem_usage / mem_limit * 100.0) if mem_limit else 0.0
-
-            rx_bytes = s["networks"][next(iter(s["networks"]))]["rx_bytes"] if s.get("networks") else 0
-            tx_bytes = s["networks"][next(iter(s["networks"]))]["tx_bytes"] if s.get("networks") else 0
-
-            blkio = s.get("blkio_stats", {}).get("io_service_bytes_recursive", [])
-            r_bytes = sum(x.get("value", 0) for x in blkio if x.get("op") == "Read")
-            w_bytes = sum(x.get("value", 0) for x in blkio if x.get("op") == "Write")
-
-            stats_list.append({
-                "id": c.id[:12],
-                "name": c.name,
-                "state": c.status,
-                "cpu_percent": round(cpu_pct, 2),
-                "mem_usage": mem_usage,
-                "mem_limit": mem_limit,
-                "mem_percent": round(mem_pct, 2),
-                "net_rx_bytes": rx_bytes,
-                "net_tx_bytes": tx_bytes,
-                "block_read_bytes": r_bytes,
-                "block_write_bytes": w_bytes
-            })
-        except Exception as e:
-            stats_list.append({"id": c.id[:12], "name": c.name, "error": str(e)})
-
-    return jsonify({"containers": stats_list}), 200
-
-
-# -------------------- Prometheus helpers --------------------
-def _prom_instant(query: str, ts_iso: str):
     try:
-        r = requests.get(f"{PROM_BASE}/api/v1/query",
-                         params={"query": query, "time": ts_iso},
-                         timeout=HTTP_TIMEOUT,
-                         )
-        r.raise_for_status()
-        data = r.json()
-        if data.get("status") != "success":
-           raise RuntimeError(f"Prom error: {data}")
-        return data["data"]["result"]
+        data = request.get_json()
+
+        if not data:
+            return jsonify({"error": "Request body required"}), 400
+
+        start_time = data.get('start_time')
+        end_time = data.get('end_time')
+        simulation_type = data.get('simulation_type', 'optimized')
+
+        if not start_time or not end_time:
+            return jsonify({"error": "start_time and end_time required"}), 400
+
+        # Convert milliseconds to seconds for Prometheus
+        start_timestamp = start_time / 1000
+        end_timestamp = end_time / 1000
+
+        # Define service groups based on simulation type
+        if simulation_type == "optimized":
+            service_labels = [
+                "prediction_service",
+                "storage-service",
+                "redis",
+                "minio"
+            ]
+        else:  # unoptimized
+            service_labels = [
+                "storage-service",
+                "minio"
+            ]
+
+        print(f"Fetching metrics for {simulation_type} simulation from {start_timestamp} to {end_timestamp}")
+        print(f"Services: {service_labels}")
+
+        # Collect metrics for each service
+        metrics_data = {}
+
+        for service in service_labels:
+            try:
+                service_metrics = fetch_service_metrics(
+                    service, start_timestamp, end_timestamp
+                )
+                if service_metrics:
+                    metrics_data[service] = service_metrics
+                    print(f"Successfully fetched {len(service_metrics)} data points for {service}")
+                else:
+                    print(f"No metrics found for service: {service}")
+            except Exception as e:
+                print(f"Error fetching metrics for service {service}: {str(e)}")
+                # Continue with other services
+
+        if not metrics_data:
+            return jsonify({
+                "error": "No metrics data found for the specified time range",
+                "details": f"Services searched: {service_labels}"
+            }), 404
+
+        return jsonify({
+            "simulation_type": simulation_type,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration_ms": end_time - start_time,
+            "services": list(metrics_data.keys()),
+            "metrics": metrics_data
+        }), 200
+
     except Exception as e:
-        raise RuntimeError(f"Prometheus request failed for {query}: {e}")
+        print(f"Error in get_historical_metrics: {str(e)}")
+        return jsonify({"error": f"Failed to fetch historical metrics: {str(e)}"}), 500
 
+def fetch_service_metrics(service_name, start_timestamp, end_timestamp):
+    """Fetch comprehensive metrics for a specific service from Prometheus"""
 
-def _num(v) -> float:
     try:
-        return float(v)
-    except Exception as _e:
-        return 0.0
+        # Check Prometheus availability
+        health_response = requests.get(f"{PROMETHEUS_URL}/-/healthy", timeout=5)
+        if health_response.status_code != 200:
+            print(f"Prometheus not healthy: {health_response.status_code}")
+            return None
 
+    except requests.exceptions.RequestException as e:
+        print(f"Cannot connect to Prometheus: {str(e)}")
+        return None
 
-def _iso_to_epoch(iso_ts: str) -> float:
-    return time.mktime(time.strptime(iso_ts.split('.')[0], "%Y-%m-%dT%H:%M:%S"))
-
-def compute_group_rollup(group: str, start_ts: str, end_ts: str):
-    start_epoch = _iso_to_epoch(start_ts)
-    end_epoch = _iso_to_epoch(end_ts)
-    dur_s = max(1, int(end_epoch - start_epoch))
-    dur = f"{dur_s}s"
-    end_iso = end_ts 
-
-    q_cpu = f'sum by (sim.group) (increase(container_cpu_usage_seconds_total{{sim.group="{group}"}}[{dur}]))'
-    q_mem = f'max_over_time(container_memory_working_set_bytes{{sim.group="{group}"}}[{dur}])'
-    q_rx  = f'sum(increase(container_network_receive_bytes_total{{sim.group="{group}"}}[{dur}]))'
-    q_tx  = f'sum(increase(container_network_transmit_bytes_total{{sim.group="{group}"}}[{dur}]))'
-    q_io  = f'sum(increase(container_fs_reads_bytes_total{{sim.group="{group}"}}[{dur}])) + sum(increase(container_fs_writes_bytes_total{{sim.group="{group}"}}[{dur}]))'
-
-    cpu_res = _prom_instant(q_cpu, end_iso)
-    mem_res = _prom_instant(q_mem, end_iso)
-    rx_res  = _prom_instant(q_rx,  end_iso)
-    tx_res  = _prom_instant(q_tx,  end_iso)
-    
-    try:
-        io_res = _prom_instant(q_io, end_iso)
-    except Exception:
-        io_res = []
-
-    def _first_value(res):
-        if not res:
-            return 0.0
-        return _num(res[0]["value"][1])
-
-    cpu_seconds = _first_value(cpu_res)
-    mem_peak    = _first_value(mem_res)
-    net_bytes   = _first_value(rx_res) + _first_value(tx_res)
-    io_bytes    = _first_value(io_res) if io_res else 0.0
-
-    per_containers = []
-    for label in ("name", "container"):
-        try:
-            qc_cpu = f'sum by ({label}) (increase(container_cpu_usage_seconds_total{{sim.group="{group}"}}[{dur}]))'
-            qc_mem = f'max_over_time(container_memory_working_set_bytes{{sim.group="{group}"}}[{dur}])'
-            qc_rx  = f'sum by ({label}) (increase(container_network_receive_bytes_total{{sim.group="{group}"}}[{dur}]))'
-            qc_tx  = f'sum by ({label}) (increase(container_network_transmit_bytes_total{{sim.group="{group}"}}[{dur}]))'
-            rcpu = _prom_instant(qc_cpu, end_iso)
-            rmem = _prom_instant(qc_mem, end_iso)
-            rrx  = _prom_instant(qc_rx,  end_iso)
-            rtx  = _prom_instant(qc_tx,  end_iso)
-
-            def idx(res):
-                out = {}
-                for s in res:
-                    key = s["metric"].get(label) or s["metric"].get("container") or s["metric"].get("name")
-                    if key:
-                        out[key] = _num(s["value"][1])
-                return out
-            m_cpu = idx(rcpu)
-            m_mem = idx(rmem)
-            m_rx  = idx(rrx)
-            m_tx  = idx(rtx)
-            keys = set(m_cpu) | set(m_mem) | set(m_rx) | set(m_tx)
-            if keys:
-                per_containers = [{
-                    "name": k,
-                    "cpuSeconds": _num(m_cpu.get(k, 0.0)),
-                    "memPeakBytes": _num(m_mem.get(k, 0.0)),
-                    "netBytes": _num(m_rx.get(k, 0.0)) + _num(m_tx.get(k, 0.0))
-                } for k in sorted(keys)]
-                break
-        except Exception:
-            continue
-
-    return {
-        "cpuSeconds": cpu_seconds,
-        "memPeakBytes": mem_peak,
-        "netBytes": net_bytes,
-        "ioBytes": io_bytes,
-        "containers": per_containers
+    # Define Prometheus queries for different metrics
+    queries = {
+        "cpu_percent": f'rate(container_cpu_usage_seconds_total{{name=~".*{service_name}.*"}}[30s]) * 100',
+        "memory_usage": f'container_memory_usage_bytes{{name=~".*{service_name}.*"}}',
+        "memory_limit": f'container_spec_memory_limit_bytes{{name=~".*{service_name}.*"}}',
+        "network_rx": f'rate(container_network_receive_bytes_total{{name=~".*{service_name}.*"}}[30s])',
+        "network_tx": f'rate(container_network_transmit_bytes_total{{name=~".*{service_name}.*"}}[30s])',
     }
 
-# -------------------- Job API --------------------
-def _run_summary_job(job_id: str, payload: dict):
+    step = 1  # 1 second intervals
+
+    # Calculate the number of expected data points
+    duration = end_timestamp - start_timestamp
+    expected_points = int(duration / step)
+
+    print(f"Querying Prometheus for {service_name} over {duration}s with {expected_points} expected points")
+
     try:
-        sim_id = payload["simId"]
-        groups = payload["groups"]
-        start_ts = payload["startTs"]
-        end_ts = payload["endTs"]
+        # Fetch all metrics and combine them by timestamp
+        all_metrics = {}
 
-        per_group = {}
-        totals = {"cpuSeconds": 0.0, "memPeakBytes": 0.0, "netBytes": 0.0, "ioBytes": 0.0}
+        for metric_name, query in queries.items():
+            try:
+                params = {
+                    'query': query,
+                    'start': start_timestamp,
+                    'end': end_timestamp,
+                    'step': f'{step}s'
+                }
 
-        for g in groups:
-            roll = compute_group_rollup(g, start_ts, end_ts)
-            per_group[g] = roll
-            totals["cpuSeconds"] += roll["cpuSeconds"]
-            totals["netBytes"]   += roll["netBytes"]
-            totals["ioBytes"]    += roll.get("ioBytes", 0.0)
-            totals["memPeakBytes"] = max(totals["memPeakBytes"], roll["memPeakBytes"])  # Peak als Max über Gruppen
+                response = requests.get(
+                    f"{PROMETHEUS_URL}/api/v1/query_range",
+                    params=params,
+                    timeout=30
+                )
 
-        result = {
-            "simId": sim_id,
-            "window": {"start": start_ts, "end": end_ts},
-            "perGroup": per_group,
-            "totals": totals
-        }
-        with JOBS_LOCK:
-            JOBS[job_id]["status"] = "done"
-            JOBS[job_id]["result"] = result
+                if response.status_code == 200:
+                    result = response.json()
+                    if result.get('status') == 'success' and result.get('data', {}).get('result'):
+                        # Process the time series data
+                        for series in result['data']['result']:
+                            container_name = extract_container_name(series.get('metric', {}), service_name)
+                            values = series.get('values', [])
+
+                            for timestamp_str, value_str in values:
+                                timestamp_ms = int(float(timestamp_str) * 1000)
+
+                                if timestamp_ms not in all_metrics:
+                                    all_metrics[timestamp_ms] = {
+                                        'timestamp': timestamp_ms,
+                                        'container_name': container_name,
+                                        'cpu': {'percent': 0},
+                                        'memory': {'usage': 0, 'limit': 0, 'percent': 0},
+                                        'network': {'rxRate': 0, 'txRate': 0, 'rxBytes': 0, 'txBytes': 0}
+                                    }
+
+                                # Parse the metric value
+                                try:
+                                    value = float(value_str)
+
+                                    if metric_name == "cpu_percent":
+                                        all_metrics[timestamp_ms]['cpu']['percent'] = round(value, 2)
+                                    elif metric_name == "memory_usage":
+                                        all_metrics[timestamp_ms]['memory']['usage'] = int(value)
+                                    elif metric_name == "memory_limit":
+                                        all_metrics[timestamp_ms]['memory']['limit'] = int(value)
+                                    elif metric_name == "network_rx":
+                                        all_metrics[timestamp_ms]['network']['rxRate'] = round(value, 2)
+                                    elif metric_name == "network_tx":
+                                        all_metrics[timestamp_ms]['network']['txRate'] = round(value, 2)
+
+                                except (ValueError, TypeError):
+                                    print(f"Could not parse value for {metric_name}: {value_str}")
+
+                    else:
+                        print(f"No data returned for {metric_name} query: {query}")
+
+                else:
+                    print(f"Prometheus query failed for {metric_name}: {response.status_code} - {response.text}")
+
+            except Exception as e:
+                print(f"Error querying {metric_name} for {service_name}: {str(e)}")
+
+        # Convert to sorted time series
+        time_series_data = []
+        for timestamp in sorted(all_metrics.keys()):
+            metrics = all_metrics[timestamp]
+
+            # Calculate memory percentage
+            if metrics['memory']['limit'] > 0:
+                metrics['memory']['percent'] = round(
+                    (metrics['memory']['usage'] / metrics['memory']['limit']) * 100, 2
+                )
+
+            # Estimate cumulative network bytes (rough approximation)
+            # In a real scenario, you'd want to track this more precisely
+            metrics['network']['rxBytes'] = int(metrics['network']['rxRate'] * step)
+            metrics['network']['txBytes'] = int(metrics['network']['txRate'] * step)
+
+            time_series_data.append(metrics)
+
+        print(f"Processed {len(time_series_data)} data points for {service_name}")
+        return time_series_data
+
     except Exception as e:
-        with JOBS_LOCK:
-            JOBS[job_id]["status"] = "error"
-            JOBS[job_id]["error"] = str(e)
+        print(f"Error fetching metrics for {service_name}: {str(e)}")
+        return None
 
+def extract_container_name(metric_labels, service_name):
+    """Extract a clean container name from Prometheus metric labels"""
 
+    # Try different label fields that might contain the container name
+    for label_key in ['name', 'container_label_com_docker_compose_service', 'container_name', 'instance']:
+        if label_key in metric_labels:
+            name = metric_labels[label_key]
+            if service_name.lower() in name.lower():
+                return name
 
+    # Fallback to the service name
+    return service_name
+
+@app.get("/api/docker/metrics/test")
+def test_prometheus_connection():
+    """Test endpoint to verify Prometheus connectivity"""
+    try:
+        # Test basic Prometheus connection
+        health_response = requests.get(f"{PROMETHEUS_URL}/-/healthy", timeout=5)
+        if health_response.status_code != 200:
+            return jsonify({
+                "status": "error",
+                "message": f"Prometheus not healthy: {health_response.status_code}"
+            }), 500
+
+        # Test a simple query
+        query_response = requests.get(
+            f"{PROMETHEUS_URL}/api/v1/query",
+            params={'query': 'up'},
+            timeout=10
+        )
+
+        if query_response.status_code == 200:
+            result = query_response.json()
+            targets = len(result.get('data', {}).get('result', []))
+
+            return jsonify({
+                "status": "success",
+                "prometheus_url": PROMETHEUS_URL,
+                "prometheus_healthy": True,
+                "active_targets": targets,
+                "message": "Prometheus connection successful"
+            }), 200
+        else:
+            return jsonify({
+                "status": "error",
+                "message": f"Prometheus query failed: {query_response.status_code}"
+            }), 500
+
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            "status": "error",
+            "message": f"Cannot connect to Prometheus: {str(e)}",
+            "prometheus_url": PROMETHEUS_URL
+        }), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3002)
+    print(f"Starting Docker Stats Service with Prometheus integration")
+    print(f"Prometheus URL: {PROMETHEUS_URL}")
+    app.run(host="0.0.0.0", port=3002, debug=True)

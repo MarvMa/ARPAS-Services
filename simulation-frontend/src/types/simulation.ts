@@ -83,7 +83,6 @@ export interface ObjectMetric {
     isBaseline?: boolean;
 }
 
-// Neue wissenschaftliche Metrik-Struktur
 export interface ScientificMetrics {
     simulationId: string;
     simulationType: 'optimized' | 'unoptimized';
@@ -100,7 +99,6 @@ export interface ScientificMetrics {
         objectCount: number;
     };
 
-    // Per-object download metrics
     objectMetrics: {
         [objectId: string]: {
             downloads: Array<{

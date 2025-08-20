@@ -13,12 +13,14 @@ volumes:
   redis-data:         # Redis Data
   simulation-uploads: # Simulation Service Uploads
   simulation-logs:    # Simulation Service Logs
+  prometheus-data:    # Prometheus Data
 
 services:
   docker-stats:
     build: ./docker-stats
     networks:
       - backend-net
+      - monitoring-net  
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
@@ -28,11 +30,8 @@ services:
       retries: 3
       start_period: 5s
     environment:
-      - PROMETHEUS_BASE_URL=${PROMETHEUS_URL}
-      - PROM_HTTP_TIMEOUT=8
-    depends_on:
-      - prometheus
-      
+      - PROMETHEUS_URL=http://prometheus:9090
+
   api-gateway:
     build: ./api-gateway
     ports:
@@ -45,7 +44,6 @@ services:
         condition: service_healthy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker stats
-
 
   simulation-frontend:
     build: ./simulation-frontend
@@ -67,32 +65,39 @@ services:
       REACT_APP_MAPTILER_API_KEY: ${MAPTILER_API_KEY}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker stats
+    labels:
+      sim.group: "frontend"
 
   prediction-service:
     networks:
       - backend-net
+      - monitoring-net
     build:
       context: ./prediction-service
       args:
         PORT: ${PREDICTION_PORT}
-    labels:
-      - "sim.group=prediction_service"
     depends_on:
       storage-service:
         condition: service_healthy
-    
     environment:
       PREDICTION_PORT: ${PREDICTION_PORT}
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       STORAGE_URL: ${STORAGE_URL}
-  
+    labels:
+      sim.group: "prediction-service"  
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
   storage-service:
     build: ./storage-service
-    labels:
-      - "sim.group=storage-service"
     networks:
       - backend-net
+      - monitoring-net
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,18 +137,18 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    labels:
+      sim.group: "storage-service"  # Label for metric filtering
 
   redis:
     image: redis:7-alpine
-    labels:
-      - "sim.group=redis"
     networks:
       - backend-net
+      - monitoring-net
     volumes:
       - type: volume
         source: redis-data
         target: /data
-    #    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
     command: >
       redis-server
       --io-threads 6
@@ -165,11 +170,14 @@ services:
           memory: 3G
         reservations:
           memory: 2G
+    labels:
+      sim.group: "redis"  # Label for metric filtering
 
   postgres:
     image: postgres:15-alpine
     networks:
       - backend-net
+      - monitoring-net
     volumes:
       - pgdata:/var/lib/postgresql/data
     environment:
@@ -182,13 +190,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    labels:
+      sim.group: "database"
 
   minio:
     image: minio/minio:latest
-    labels:
-      - "sim.group=minio"
     networks:
       - backend-net
+      - monitoring-net
     ports:
       - "${MINIO_PORT}:9001"
     volumes:
@@ -202,6 +211,32 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    labels:
+      sim.group: "minio"  # Label for metric filtering
+
+  # cAdvisor for container metrics
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    networks:
+      - monitoring-net
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    command:
+      - '--housekeeping_interval=10s'
+      - '--docker_only=true'
+      - '--store_container_labels=false'
+      - '--whitelisted_container_labels=sim.group'
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:latest
     networks:
@@ -210,11 +245,15 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
 
   sonarqube:
     image: sonarqube:9.9-community
@@ -228,13 +267,3 @@ services:
       - sonarqube_data:/opt/sonarqube/data
       - sonarqube_logs:/opt/sonarqube/logs
       - sonarqube_ext:/opt/sonarqube/extensions
-        
-  cadvisor:
-    image: gcr.io/cadvisor/cadvisor:latest
-    ports: [ "8080:8080" ]
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-    restart: unless-stopped

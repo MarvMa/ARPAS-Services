@@ -10,6 +10,7 @@ import {
     ScientificMetrics
 } from '../types/simulation';
 import {DataCollector} from './dataCollector';
+import {DockerMetricsService} from "./dockerMetricsService.ts";
 
 interface PredictionResponse {
     status: string;
@@ -17,32 +18,6 @@ interface PredictionResponse {
     objectIds: (string | number | null)[];
 }
 
-export interface DockerStats {
-    cpu_usage: number;
-    memory_usage: number;
-    memory_limit: number;
-    network_rx_bytes: number;
-    network_tx_bytes: number;
-    timestamp: number;
-}
-
-interface ContainerStats {
-    id: string;
-    name: string;
-    state: string;
-    cpu_percent: number;
-    mem_usage: number;
-    mem_limit: number;
-    mem_percent: number;
-    net_rx_bytes: number;
-    net_tx_bytes: number;
-    block_read_bytes: number;
-    block_write_bytes: number;
-}
-
-interface DockerStatsResponse {
-    containers: ContainerStats[];
-}
 
 export class SimulationService {
     private dataCollector: DataCollector;
@@ -52,19 +27,20 @@ export class SimulationService {
     private availableObjects: Object3D[] = [];
     private profiles: Profile[] = [];
     private downloadedObjectsPerProfile: Map<string, Set<string>> = new Map();
+    private dockerMetricsService?: DockerMetricsService;
 
     // Scientific tracking
     private objectDownloadTracking: Map<string, Map<string, Set<string>>> = new Map();
-    private dockerTimeSeriesData: Map<string, any[]> = new Map();
-    private dockerCollectionInterval: number | null = null;
     private baselineMetrics: Map<string, ObjectMetric[]> = new Map();
-    
-    
 
     constructor() {
         this.dataCollector = new DataCollector();
     }
-
+    
+    setDockerMetricsService(service: DockerMetricsService): void {
+        this.dockerMetricsService = service;
+        console.log('Docker metrics service configured for simulation tracking');
+    }
     setAvailableObjects(objects: Object3D[]): void {
         this.availableObjects = objects;
         console.log(`Available objects for simulation: ${objects.length}`);
@@ -89,11 +65,7 @@ export class SimulationService {
         this.downloadedObjectsPerProfile.clear();
         this.objectDownloadTracking.clear();
         this.profileWebSockets.clear();
-        this.dockerTimeSeriesData.clear();
         this.baselineMetrics.clear();
-
-        // Start Docker stats collection
-        this.startEnhancedDockerStatsCollection();
 
         const simulationStartTime = Date.now();
 
@@ -124,7 +96,7 @@ export class SimulationService {
                 cacheHits: 0,
                 cacheMisses: 0
             };
-            
+
             this.downloadedObjectsPerProfile.set(profile.id, new Set<string>());
             this.baselineMetrics.set(profile.id, []);
             this.simulationState!.profileStates[profile.id] = profileState;
@@ -161,18 +133,15 @@ export class SimulationService {
 
         console.log('Stopping simulation and collecting scientific metrics...');
 
-        // Collect metrics BEFORE clearing state
-        const metrics = await this.collectScientificMetrics();
+        // Store simulation timing for Docker metrics collection
+        const simulationStartTime = this.simulationState.startTime;
+        const simulationEndTime = Date.now();
+        const simulationType = this.simulationState.optimized ? 'optimized' : 'unoptimized';
 
         // Stop intervals
         if (this.simulationIntervalId) {
             clearInterval(this.simulationIntervalId);
             this.simulationIntervalId = null;
-        }
-
-        if (this.dockerCollectionInterval) {
-            clearInterval(this.dockerCollectionInterval);
-            this.dockerCollectionInterval = null;
         }
 
         // Close WebSockets
@@ -183,15 +152,32 @@ export class SimulationService {
         });
         this.profileWebSockets.clear();
 
+        // Collect scientific metrics first (without Docker data)
+        const preliminaryMetrics = await this.collectScientificMetrics();
+
+        // Collect Docker metrics after simulation end
+        console.log('Collecting Docker metrics from Prometheus...');
+        const dockerMetrics = await this.collectDockerMetricsFromPrometheus(
+            simulationStartTime,
+            simulationEndTime,
+            simulationType
+        );
+
+        // Combine metrics with Docker data
+        const finalMetrics: ScientificMetrics = {
+            ...preliminaryMetrics,
+            dockerTimeSeries: dockerMetrics
+        };
+
         try {
-            await this.dataCollector.saveScientificResults(metrics);
+            await this.dataCollector.saveScientificResults(finalMetrics);
             console.log('Metrics saved successfully');
         } catch (error) {
             console.error('Failed to save metrics, retrying...', error);
             // Retry once
             try {
                 await new Promise(resolve => setTimeout(resolve, 1000));
-                await this.dataCollector.saveScientificResults(metrics);
+                await this.dataCollector.saveScientificResults(finalMetrics);
                 console.log('Metrics saved on retry');
             } catch (retryError) {
                 console.error('Failed to save metrics after retry:', retryError);
@@ -199,116 +185,66 @@ export class SimulationService {
             }
         }
 
-        // Save to data collector
-        await this.dataCollector.saveScientificResults(metrics);
-
         // Clean up
         this.downloadedObjectsPerProfile.clear();
-        this.dockerTimeSeriesData.clear();
         this.simulationState = null;
 
-        return metrics;
+        return finalMetrics;
     }
 
     /**
-     * Enhanced Docker stats collection - every second
+     * Collect Docker metrics from Prometheus after simulation completion
      */
-    private startEnhancedDockerStatsCollection(): void {
-        const simulationType = this.simulationState?.optimized ? 'optimized' : 'unoptimized';
-        console.log(`Starting Docker metrics collection for ${simulationType} simulation`);
+    private async collectDockerMetricsFromPrometheus(
+        startTime: number,
+        endTime: number,
+        simulationType: 'optimized' | 'unoptimized'
+    ): Promise<ScientificMetrics['dockerTimeSeries']> {
+        if (!this.dockerMetricsService) {
+            console.warn('Docker metrics service not available, skipping Docker metrics collection');
+            return {};
+        }
 
-        this.dockerTimeSeriesData.clear();
-
-        const containersToMonitor = this.simulationState?.optimized
-            ? ['storage-service', 'redis', 'minio', 'cache-service', 'prediction-service']
-            : ['storage-service', 'minio'];
-
-        this.dockerCollectionInterval = window.setInterval(async () => {
-            try {
-                const stats = await this.fetchFilteredDockerStats(containersToMonitor);
-                const timestamp = Date.now();
-
-                Object.entries(stats).forEach(([containerName, containerStats]) => {
-                    if (!this.dockerTimeSeriesData.has(containerName)) {
-                        this.dockerTimeSeriesData.set(containerName, []);
-                    }
-
-                    const timeSeriesEntry = {
-                        timestamp,
-                        cpu: {
-                            usage: containerStats.cpu_usage,
-                            percent: containerStats.cpu_usage
-                        },
-                        memory: {
-                            usage: containerStats.memory_usage,
-                            limit: containerStats.memory_limit,
-                            percent: (containerStats.memory_usage / containerStats.memory_limit) * 100
-                        },
-                        network: {
-                            rxBytes: containerStats.network_rx_bytes,
-                            txBytes: containerStats.network_tx_bytes,
-                            rxRate: 0,
-                            txRate: 0
-                        }
-                    };
-
-                    const timeSeries = this.dockerTimeSeriesData.get(containerName)!;
-                    if (timeSeries.length > 0) {
-                        const previous = timeSeries[timeSeries.length - 1];
-                        const timeDiff = (timestamp - previous.timestamp) / 1000;
-                        if (timeDiff > 0) {
-                            timeSeriesEntry.network.rxRate = (timeSeriesEntry.network.rxBytes - previous.network.rxBytes) / timeDiff;
-                            timeSeriesEntry.network.txRate = (timeSeriesEntry.network.txBytes - previous.network.txBytes) / timeDiff;
-                        }
-                    }
-
-                    timeSeries.push(timeSeriesEntry);
-                });
-
-            } catch (error) {
-                console.warn('Failed to collect Docker metrics:', error);
-            }
-        }, 1000); // Every second
-    }
-
-    /**
-     * Fetch Docker stats for specific containers
-     */
-    private async fetchFilteredDockerStats(containerNames: string[]): Promise<Record<string, DockerStats>> {
         try {
-            const response = await axios.get<DockerStatsResponse>('http://localhost/api/docker/stats', {
-                timeout: 5000
+            const response = await this.dockerMetricsService.fetchHistoricalMetrics(
+                startTime,
+                endTime,
+                simulationType
+            );
+
+            const dockerTimeSeries = this.dockerMetricsService.transformToScientificFormat(response);
+
+            // Log statistics for debugging
+            const stats = this.dockerMetricsService.calculateDockerStats(dockerTimeSeries);
+            console.log('Docker metrics statistics:', stats);
+
+            return dockerTimeSeries;
+
+        } catch (error) {
+            console.error('Failed to collect Docker metrics:', error);
+            return {};
+        }
+    }
+
+    /**
+     * Test Docker metrics connectivity
+     */
+    public static async testDockerMetricsConnection(): Promise<boolean> {
+        try {
+            const response = await axios.get('http://localhost/api/docker/metrics/test', {
+                timeout: 10000
             });
 
-            const filteredStats: Record<string, DockerStats> = {};
-
-            if (response.data?.containers) {
-                response.data.containers.forEach(container => {
-                    const shouldMonitor = containerNames.some(name =>
-                        container.name.toLowerCase().includes(name.toLowerCase())
-                    );
-
-                    if (shouldMonitor) {
-                        const simpleName = containerNames.find(name =>
-                            container.name.toLowerCase().includes(name.toLowerCase())
-                        ) || container.name;
-
-                        filteredStats[simpleName] = {
-                            cpu_usage: container.cpu_percent,
-                            memory_usage: container.mem_usage,
-                            memory_limit: container.mem_limit,
-                            network_rx_bytes: container.net_rx_bytes,
-                            network_tx_bytes: container.net_tx_bytes,
-                            timestamp: Date.now()
-                        };
-                    }
-                });
+            if (response.status === 200) {
+                console.log('Docker metrics service is available:', response.data);
+                return true;
+            } else {
+                console.warn('Docker metrics service test failed:', response.status);
+                return false;
             }
-
-            return filteredStats;
         } catch (error) {
-            console.warn('Failed to fetch Docker stats:', error);
-            return {};
+            console.warn('Docker metrics service connectivity test failed:', error);
+            return false;
         }
     }
 
@@ -692,7 +628,7 @@ export class SimulationService {
     }
 
     /**
-     * Collect comprehensive scientific metrics
+     * Collect comprehensive scientific metrics (without Docker data)
      */
     private async collectScientificMetrics(): Promise<ScientificMetrics> {
         if (!this.simulationState) {
@@ -763,12 +699,6 @@ export class SimulationService {
                 cacheHitRate: (cacheHits.length / downloads.length) * 100,
                 successRate: (successfulDownloads.length / downloads.length) * 100
             };
-        });
-
-        // Docker time series
-        const dockerTimeSeries: ScientificMetrics['dockerTimeSeries'] = {};
-        this.dockerTimeSeriesData.forEach((timeSeries, containerName) => {
-            dockerTimeSeries[containerName] = timeSeries;
         });
 
         // Aggregated statistics
@@ -847,7 +777,7 @@ export class SimulationService {
                 objectCount: this.availableObjects.length
             },
             objectMetrics,
-            dockerTimeSeries,
+            dockerTimeSeries: {}, // Will be filled with actual Docker data in stopSimulation
             aggregatedStats,
             profileMetrics
         };

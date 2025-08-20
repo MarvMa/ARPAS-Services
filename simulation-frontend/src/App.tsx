@@ -7,6 +7,7 @@ import {SimulationService} from './services/simulationService';
 import {DataCollector} from './services/dataCollector';
 import {StorageService} from './services/storageService';
 import {ProfileService} from './services/profileService';
+import {DockerMetricsService} from './services/dockerMetricsService';
 import {Profile, SimulationState, SimulationConfig, Object3D} from './types/simulation';
 
 // Define the profiles to be loaded automatically
@@ -27,7 +28,12 @@ const App: React.FC = () => {
     const [showInterpolated, setShowInterpolated] = useState<boolean>(true);
     const [smoothingEnabled, setSmoothingEnabled] = useState<boolean>(false);
     const [isAddingMode, setIsAddingMode] = useState<boolean>(false);
+
+    // Service availability states
     const [storageServiceAvailable, setStorageServiceAvailable] = useState<boolean>(false);
+    const [dockerMetricsAvailable, setDockerMetricsAvailable] = useState<boolean>(false);
+
+    // Loading and error states
     const [isLoadingProfiles, setIsLoadingProfiles] = useState<boolean>(false);
     const [loadingError, setLoadingError] = useState<string | null>(null);
     const [showResults, setShowResults] = useState<boolean>(true);
@@ -37,6 +43,7 @@ const App: React.FC = () => {
     const [dataCollector] = useState(() => new DataCollector());
     const [storageService] = useState(() => new StorageService());
     const [profileService] = useState(() => new ProfileService());
+    const [dockerMetricsService] = useState(() => new DockerMetricsService());
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const mapViewerRef = useRef<any>(null);
@@ -49,13 +56,33 @@ const App: React.FC = () => {
 
         const initializeApp = async () => {
             try {
-                console.log('Initializing application...');
+                console.log('Initializing Enhanced Simulation Framework v2.0...');
 
                 // Check storage service availability
                 const isStorageAvailable = await storageService.healthCheck();
                 if (isMounted) {
                     setStorageServiceAvailable(isStorageAvailable);
                     console.log(`Storage service ${isStorageAvailable ? 'available' : 'unavailable'}`);
+                }
+
+                // Check Docker metrics service availability
+                try {
+                    const dockerMetricsStatus = await dockerMetricsService.testConnection();
+                    if (isMounted) {
+                        setDockerMetricsAvailable(dockerMetricsStatus.status === 'success');
+                        console.log(`Docker metrics service ${dockerMetricsStatus.status === 'success' ? 'available' : 'unavailable'}:`, dockerMetricsStatus.message);
+
+                        if (dockerMetricsStatus.prometheus_healthy) {
+                            console.log(`Prometheus is healthy with ${dockerMetricsStatus.active_targets} active targets`);
+                        } else if (dockerMetricsStatus.status === 'success') {
+                            console.warn('Docker metrics service is available but Prometheus may have issues');
+                        }
+                    }
+                } catch (dockerError) {
+                    console.warn('Docker metrics service not available:', dockerError);
+                    if (isMounted) {
+                        setDockerMetricsAvailable(false);
+                    }
                 }
 
                 // Load 3D objects if storage is available
@@ -70,7 +97,8 @@ const App: React.FC = () => {
 
                 // Load data collector from localStorage
                 dataCollector.loadFromLocalStorage();
-                console.log('Application initialization completed');
+
+                console.log('Application initialization completed successfully');
 
             } catch (error) {
                 console.error('Failed to initialize app:', error);
@@ -88,12 +116,21 @@ const App: React.FC = () => {
     }, []);
 
     /**
-     * Update simulation service with 3D objects when they change
+     * Update simulation service with dependencies when they change
      */
     useEffect(() => {
         simulationService.setAvailableObjects(objects3D);
-        simulationService.setProfiles(profiles); 
-    }, [objects3D, profiles, simulationService]);
+        simulationService.setProfiles(profiles);
+
+        // Pass Docker metrics service to simulation service if available
+        if (dockerMetricsAvailable) {
+            simulationService.setDockerMetricsService(dockerMetricsService);
+            console.log('Docker metrics service configured for simulation tracking');
+        } else {
+            console.log('Docker metrics service not available - simulations will run without metrics collection');
+        }
+    }, [objects3D, profiles, simulationService, dockerMetricsAvailable, dockerMetricsService]);
+
     /**
      * Loads 3D objects from storage service
      */
@@ -294,29 +331,50 @@ const App: React.FC = () => {
     const handleStartSimulation = useCallback(async (config: SimulationConfig) => {
         try {
             console.log(`Starting ${config.optimized ? 'optimized' : 'unoptimized'} simulation with ${config.profiles.length} profiles`);
+
+            // Log Docker metrics availability
+            if (dockerMetricsAvailable) {
+                console.log('Docker metrics collection will be active during this simulation');
+            } else {
+                console.warn('Docker metrics collection is NOT available for this simulation');
+            }
+
             const simulationId = await simulationService.startSimulation(config);
             console.log(`Simulation started successfully: ${simulationId}`);
         } catch (error) {
             console.error('Failed to start simulation:', error);
             throw error;
         }
-    }, [simulationService]);
+    }, [simulationService, dockerMetricsAvailable]);
 
     /**
      * Stops the current simulation and processes results
      */
     const handleStopSimulation = useCallback(async () => {
         try {
-            console.log('Stopping simulation...');
+            console.log('Stopping simulation and collecting comprehensive metrics...');
             const results = await simulationService.stopSimulation();
+
             if (results) {
-                console.log('Simulation completed with scientific metrics:', results);
-                alert(`Simulation completed! 
+                const dockerMetricsCount = Object.keys(results.dockerTimeSeries).length;
+
+                console.log('Simulation completed with comprehensive metrics:', {
+                    type: results.simulationType,
+                    objects: Object.keys(results.objectMetrics).length,
+                    profiles: Object.keys(results.profileMetrics).length,
+                    dockerServices: dockerMetricsCount,
+                    avgLatency: results.aggregatedStats.latency.mean.toFixed(2) + 'ms',
+                    cacheHitRate: results.aggregatedStats.cache.hitRate.toFixed(1) + '%',
+                    successRate: results.aggregatedStats.success.rate.toFixed(1) + '%'
+                });
+
+                alert(`Simulation completed successfully! 
                     Type: ${results.simulationType}
                     Objects: ${Object.keys(results.objectMetrics).length}
                     Avg Latency: ${results.aggregatedStats.latency.mean.toFixed(2)}ms
                     Cache Hit Rate: ${results.aggregatedStats.cache.hitRate.toFixed(1)}%
                     Success Rate: ${results.aggregatedStats.success.rate.toFixed(1)}%
+                    ${dockerMetricsCount > 0 ? `Docker Services Monitored: ${dockerMetricsCount}` : 'No Docker metrics collected'}
                     
                     Results saved and downloaded!`);
             }
@@ -415,10 +473,29 @@ const App: React.FC = () => {
         }
     }, []);
 
+    /**
+     * Test Docker metrics connectivity
+     */
+    const handleTestDockerMetrics = useCallback(async () => {
+        try {
+            const result = await dockerMetricsService.testConnection();
+            console.log('Docker metrics test result:', result);
+
+            if (result.status === 'success') {
+                console.log(`Docker metrics service is available!\n\nPrometheus: ${result.prometheus_healthy ? 'Healthy' : 'Unhealthy'}\nActive Targets: ${result.active_targets || 0}\n\n${result.message}`);
+            } else {
+                console.log(`Docker metrics service test failed:\n\n${result.message}`);
+            }
+        } catch (error) {
+            console.error('Docker metrics test failed:', error);
+            alert(`Docker metrics test failed:\n\n${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }, [dockerMetricsService]);
+
     return (
         <div className="app">
             <header className="app-header">
-                <h1>Enhanced Simulation Dashboard</h1>
+                <h1>Enhanced Simulation Dashboard v2.0</h1>
                 <div className="header-controls">
                     <input
                         ref={fileInputRef}
@@ -454,6 +531,15 @@ const App: React.FC = () => {
                     >
                         {showResults ? 'Hide' : 'Show'} Results
                     </button>
+                    {dockerMetricsAvailable && (
+                        <button
+                            onClick={handleTestDockerMetrics}
+                            className="btn-secondary"
+                            title="Test Docker metrics connectivity"
+                        >
+                            Test Docker Metrics
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -484,6 +570,8 @@ const App: React.FC = () => {
                         onDeleteProfile={handleDeleteProfile}
                         onProfileVisibilityToggle={handleProfileVisibilityToggle}
                         onFocusProfile={handleFocusProfile}
+                        dockerMetricsService={dockerMetricsService}
+                        dockerMetricsAvailable={dockerMetricsAvailable}
                     />
 
                     {storageServiceAvailable && (
@@ -547,17 +635,20 @@ const App: React.FC = () => {
 
             <footer className="app-footer">
                 <div className="footer-info">
-                    <span>Enhanced Simulation Framework v2.0</span>
+                    <span>Enhanced Simulation Framework v2.0 with Docker Metrics</span>
                     <span>
                         {profiles.length} profiles loaded |
                         {selectedProfiles.length} selected |
                         {objects3D.length} 3D objects |
                         {simulationState?.isRunning ? ' Running' : ' Stopped'}
-                        {!storageServiceAvailable && ' | Storage service unavailable'}
+                        {!storageServiceAvailable && ' | Storage unavailable'}
+                        {!dockerMetricsAvailable && ' | Docker metrics unavailable'}
+                        {dockerMetricsAvailable && ' | Docker metrics ready'}
                     </span>
                 </div>
             </footer>
         </div>
     );
 };
+
 export default App;

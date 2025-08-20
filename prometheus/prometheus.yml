@@ -1,8 +1,57 @@
+global:
+  scrape_interval: 1s      # Scrape targets every 2 seconds for high-resolution data
+  evaluation_interval: 1s  # Evaluate rules every 2 seconds
+  external_labels:
+    monitor: 'simulation-monitor'
+
+rule_files:
+
 scrape_configs:
-  - job_name: cadvisor
-    scrape_interval: 1s
+  - job_name: 'cadvisor'
     static_configs:
-      - targets: ["cadvisor:8080"]
+      - targets: ['cadvisor:8080']
+    scrape_interval: 1s
+    metrics_path: '/metrics'
+    
     metric_relabel_configs:
-      - action: labelmap
-        regex: ^container_label_(sim\..+)$   # sim.group etc.
+      - source_labels: [__name__]
+        regex: 'container_(cpu_usage_seconds_total|memory_usage_bytes|spec_memory_limit_bytes|network_receive_bytes_total|network_transmit_bytes_total)'
+        action: keep
+      
+      # Extract sim.group label from container_label_sim_group
+      - source_labels: [container_label_sim_group]
+        target_label: sim_group
+        regex: '(.+)'
+        replacement: '${1}'
+      
+      - source_labels: [name]
+        target_label: container_name
+        regex: '/(.+)'
+        replacement: '${1}'
+      
+      - source_labels: [container_label_com_docker_compose_service]
+        target_label: container_name
+        regex: '(.+)'
+        replacement: '${1}'
+      
+      - source_labels: [sim_group]
+        regex: '(prediction_service|storage-service|redis|minio|frontend|database)'
+        action: keep
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 1s
+
+  - job_name: 'storage-service'
+    static_configs:
+      - targets: ['storage-service:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 1s
+    scrape_timeout: 1s
+
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    scrape_interval: 1s
+    scrape_timeout: 1s
