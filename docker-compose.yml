@@ -133,7 +133,6 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       STORAGE_URL: ${STORAGE_URL}
-      CACHE_URL: ${CACHE_URL}
 
   storage-service:
     build: ./storage-service

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, {useState, useCallback, useMemo, useEffect} from 'react';
 import { Profile, SimulationState } from '../types/simulation';
 
 interface SimulationControlsProps {
@@ -168,6 +168,36 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         }
     }, []);
 
+    const formatRunningTime = (state: SimulationState): string => {
+        if (!state || !state.isRunning) return '0s';
+
+        const elapsed = Date.now() - state.startTime;
+        const seconds = Math.floor(elapsed / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+
+        if (hours > 0) {
+            return `${hours}h ${minutes % 60}m ${seconds % 60}s`;
+        } else if (minutes > 0) {
+            return `${minutes}m ${seconds % 60}s`;
+        } else {
+            return `${seconds}s`;
+        }
+    };
+    useEffect(() => {
+        if (!simulationState?.isRunning) return;
+
+        // Update display every second when simulation is running
+        const interval = setInterval(() => {
+            // Force re-render to update time display
+            setForceUpdate(prev => prev + 1);
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [simulationState?.isRunning]);
+
+// Add force update state at the top of the component:
+    const [_forceUpdate, setForceUpdate] = useState(0);
     return (
         <div className="simulation-controls">
             <div className="controls-header">
@@ -419,20 +449,29 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         <div className="stat">
                             <span className="stat-label">Running Time:</span>
                             <span className="stat-value">
-                                {Math.floor((Date.now() - simulationState.startTime) / 1000)}s
-                            </span>
+                    {formatRunningTime(simulationState)}
+                </span>
                         </div>
                         <div className="stat">
                             <span className="stat-label">Active Profiles:</span>
-                            <span className="stat-value">{derivedState.activeProfilesCount}</span>
+                            <span className="stat-value">{Object.keys(simulationState.profileStates).length}</span>
                         </div>
                         <div className="stat">
                             <span className="stat-label">Mode:</span>
-                            <span className="stat-value">{optimized ? 'Optimized' : 'Unoptimized'}</span>
+                            <span className="stat-value">{simulationState.optimized ? 'Optimized' : 'Unoptimized'}</span>
                         </div>
                         <div className="stat">
                             <span className="stat-label">Interval:</span>
-                            <span className="stat-value">{intervalMs}ms</span>
+                            <span className="stat-value">{simulationState.interval || 200}ms</span>
+                        </div>
+                        <div className="stat">
+                            <span className="stat-label">Progress:</span>
+                            <span className="stat-value">
+                    {(simulationState?.totalDataPoints ?? 0) > 0
+                        ? `${((simulationState.processedDataPoints || 0) / (simulationState.totalDataPoints ?? 1) * 100).toFixed(1)}%`
+                        : '0%'
+                    }
+                </span>
                         </div>
                     </div>
                 </div>

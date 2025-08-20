@@ -1,4 +1,4 @@
-import {Profile, DataPoint, RawLocationData} from '../types/simulation';
+import {Profile, DataPoint} from '../types/simulation';
 
 // Enhanced type for the specific data format we're dealing with
 interface LocationEntry {

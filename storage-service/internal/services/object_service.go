@@ -3,17 +3,15 @@ package services
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"mime/multipart"
 
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"github.com/pkg/errors"
-	"mime/multipart"
 
 	"storage-service/internal/config"
 	"storage-service/internal/models"
@@ -162,68 +160,6 @@ func (s *ObjectService) ListObjects() ([]models.Object, error) {
 	return s.Repo.ListObjects()
 }
 
-// UpdateObject replaces an existing object's file (and updates metadata).
-func (s *ObjectService) UpdateObject(id uuid.UUID, fileHeader *multipart.FileHeader) (*models.Object, error) {
-	obj, err := s.Repo.GetObject(id)
-	if err != nil {
-		return nil, err
-	}
-	// Remove the old file from storage
-	s.Minio.RemoveObject(context.Background(), s.BucketName, obj.StorageKey, minio.RemoveObjectOptions{})
-
-	obj.OriginalFilename = fileHeader.Filename
-
-	// Save the new file to temp
-	srcFile, err := fileHeader.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer srcFile.Close()
-	tempDir := os.TempDir()
-	newExt := filepath.Ext(fileHeader.Filename)
-	outFile, err := os.CreateTemp(tempDir, "upload-*"+newExt)
-	if err != nil {
-		return nil, err
-	}
-	tempFilePath := outFile.Name()
-	_, err = io.Copy(outFile, srcFile)
-	outFile.Close()
-	if err != nil {
-		return nil, err
-	}
-	var glbPath string
-	if filepath.Ext(fileHeader.Filename) != ".glb" {
-		return nil, fmt.Errorf("only GLB files are supported, got: %s", fileHeader.Filename)
-	} else {
-		glbPath = tempFilePath
-	}
-	objectKey := obj.ID.String() + ".glb"
-	glbFile, err := os.Open(glbPath)
-	if err != nil {
-		return nil, err
-	}
-	defer glbFile.Close()
-	stat, _ := glbFile.Stat()
-	_, err = s.Minio.PutObject(context.Background(), s.BucketName, objectKey, glbFile, stat.Size(), minio.PutObjectOptions{
-		ContentType: "model/gltf-binary",
-	})
-	if err != nil {
-		os.Remove(glbPath)
-		return nil, err
-	}
-	os.Remove(glbPath)
-	obj.ContentType = "model/gltf-binary"
-	obj.Size = stat.Size()
-	obj.UploadedAt = time.Now()
-	obj.StorageKey = objectKey
-	err = s.Repo.UpdateObject(obj)
-	if err != nil {
-		s.Minio.RemoveObject(context.Background(), s.BucketName, objectKey, minio.RemoveObjectOptions{})
-		return nil, err
-	}
-	return obj, nil
-}
-
 // DeleteObject removes an object and its file from storage.
 func (s *ObjectService) DeleteObject(id uuid.UUID) error {
 	obj, err := s.Repo.GetObject(id)
@@ -232,46 +168,4 @@ func (s *ObjectService) DeleteObject(id uuid.UUID) error {
 	}
 	_ = s.Minio.RemoveObject(context.Background(), s.BucketName, obj.StorageKey, minio.RemoveObjectOptions{})
 	return s.Repo.DeleteObject(id)
-}
-
-func (s *ObjectService) GetFromCache(objectID uuid.UUID) ([]byte, error) {
-	rc, _, err := s.GetFromCacheStream(objectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rc.Close()
-
-	data, err := io.ReadAll(rc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read cache response: %w", err)
-	}
-	return data, nil
-}
-
-func (s *ObjectService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
-	cacheURL := s.Config.CacheServiceURL
-	if cacheURL == "" {
-		cacheURL = "http://cache-service:8001"
-	}
-
-	url := fmt.Sprintf("%s/object/%s", strings.TrimRight(cacheURL, "/"), objectID.String())
-
-	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("Accept", "application/octet-stream")
-
-	resp, err := s.cacheHTTP.Do(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("cache service request failed: %w", err)
-	}
-
-	if resp.StatusCode == http.StatusNotFound {
-		resp.Body.Close()
-		return nil, 0, fmt.Errorf("object not found in cache")
-	}
-	if resp.StatusCode != http.StatusOK {
-		b, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		return nil, 0, fmt.Errorf("cache service returned status %d: %s", resp.StatusCode, string(b))
-	}
-	return resp.Body, resp.ContentLength, nil
 }

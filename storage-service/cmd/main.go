@@ -77,7 +77,7 @@ func main() {
 	}))
 
 	// initialize handlers
-	objHandler := handlers.NewObjectHandler(objectService)
+	objHandler := handlers.NewObjectHandler(objectService, cacheService)
 
 	// API routes
 	api := app.Group("/api/storage")
