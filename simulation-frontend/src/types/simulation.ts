@@ -44,21 +44,7 @@ export interface RawLocationData {
     [key: string]: any; // Allow additional fields
 }
 
-// Metadata entry type
-export interface LocationMetadata {
-    "device id"?: string;
-    version?: string;
-    sensor: "Metadata" | "metadata";
-    "device name"?: string;
-    sampleRateMs?: string;
-    "recording epoch time"?: string;
-    "recording time"?: string;
-    platform?: string;
-    standardisation?: string;
-    "recording timezone"?: string;
-    appVersion?: string;
-    sensors?: string;
-}
+
 
 export interface Object3D {
     ID: string;
@@ -218,31 +204,6 @@ export interface SimulationResults {
     };
 }
 
-// Validation types
-export interface ParsedLocationResult {
-    success: boolean;
-    dataPoints: DataPoint[];
-    errors: string[];
-    skippedEntries: number;
-    totalEntries: number;
-}
-
-export interface ProfileStatistics {
-    totalPoints: number;
-    duration: number; // in milliseconds
-    distance: number; // in meters
-    averageSpeed: number; // in m/s
-    bounds: {
-        minLat: number;
-        maxLat: number;
-        minLng: number;
-        maxLng: number;
-    };
-    timeRange: {
-        start: Date;
-        end: Date;
-    };
-}
 
 // Performance Analysis Types
 export interface PerformanceAnalysis {
@@ -346,6 +307,123 @@ export interface BenchmarkReport {
             averageCpuUsage: number;
             peakMemoryUsage: number;
             networkThroughput: number;
+        };
+    };
+}
+
+
+export interface ScientificMetrics {
+    simulationId: string;
+    simulationType: 'optimized' | 'unoptimized';
+    timestamp: string;
+    duration: {
+        startTime: number;
+        endTime: number;
+        totalMs: number;
+    };
+    configuration: {
+        profileCount: number;
+        intervalMs: number;
+        totalDataPoints: number;
+        objectCount: number;
+    };
+
+    // Per-object download metrics
+    objectMetrics: {
+        [objectId: string]: {
+            downloads: Array<{
+                profileId: string;
+                timestamp: number;
+                latency: {
+                    total: number;
+                    server: number;
+                    client: number;
+                    network: number;
+                };
+                cacheHit: boolean;
+                downloadSource: string;
+                sizeBytes: number;
+                success: boolean;
+                error?: string;
+            }>;
+            statistics: {
+                totalDownloads: number;
+                uniqueProfiles: number;
+                averageLatency: number;
+                minLatency: number;
+                maxLatency: number;
+                p95Latency: number;
+                cacheHitRate: number;
+                successRate: number;
+            };
+        };
+    };
+
+    // Docker metrics time series (per second)
+    dockerTimeSeries: {
+        [containerName: string]: Array<{
+            timestamp: number;
+            cpu: {
+                usage: number;
+                percent: number;
+            };
+            memory: {
+                usage: number;
+                limit: number;
+                percent: number;
+            };
+            network: {
+                rxBytes: number;
+                txBytes: number;
+                rxRate: number;
+                txRate: number;
+            };
+        }>;
+    };
+
+    // Aggregated statistics
+    aggregatedStats: {
+        latency: {
+            mean: number;
+            median: number;
+            stdDev: number;
+            p50: number;
+            p75: number;
+            p90: number;
+            p95: number;
+            p99: number;
+            min: number;
+            max: number;
+        };
+        throughput: {
+            objectsPerSecond: number;
+            bytesPerSecond: number;
+            requestsPerSecond: number;
+        };
+        cache: {
+            hitRate: number;
+            totalHits: number;
+            totalMisses: number;
+            efficiency: number;
+        };
+        success: {
+            rate: number;
+            totalSuccess: number;
+            totalFailure: number;
+        };
+    };
+
+    // Profile-specific metrics
+    profileMetrics: {
+        [profileId: string]: {
+            name: string;
+            totalObjects: number;
+            uniqueObjects: number;
+            totalLatency: number;
+            averageLatency: number;
+            cacheHitRate: number;
+            errorRate: number;
+            dataTransferred: number;
         };
     };
 }

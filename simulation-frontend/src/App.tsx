@@ -7,6 +7,7 @@ import {DataCollector} from './services/dataCollector';
 import {StorageService} from './services/storageService';
 import {ProfileService} from './services/profileService';
 import {Profile, SimulationState, SimulationConfig, Object3D} from './types/simulation';
+import {SimulationResultsList} from "./components/SimulationResultsList.tsx";
 
 // Define the profiles to be loaded automatically
 const PRELOADED_PROFILES: string[] = [
@@ -29,6 +30,7 @@ const App: React.FC = () => {
     const [storageServiceAvailable, setStorageServiceAvailable] = useState<boolean>(false);
     const [isLoadingProfiles, setIsLoadingProfiles] = useState<boolean>(false);
     const [loadingError, setLoadingError] = useState<string | null>(null);
+    const [showBenchmarkDashboard, setShowBenchmarkDashboard] = useState<boolean>(true);
 
     // Service instances
     const [simulationService] = useState(() => new SimulationService());
@@ -439,6 +441,12 @@ const App: React.FC = () => {
                     >
                         {isAddingMode ? 'Cancel Adding' : 'Add 3D Object'}
                     </button>
+                    <button
+                        onClick={() => setShowBenchmarkDashboard(!showBenchmarkDashboard)}
+                        className="btn-primary"
+                    >
+                        {showBenchmarkDashboard ? 'Hide' : 'Show'} Benchmarks
+                    </button>
                 </div>
             </header>
 
@@ -521,7 +529,9 @@ const App: React.FC = () => {
                         isAddingMode={isAddingMode}
                         onProfileVisibilityToggle={handleProfileVisibilityToggle}
                     />
-                    
+                    <SimulationResultsList 
+                        dataCollector={dataCollector}
+                    />
                 </div>
             </main>
 

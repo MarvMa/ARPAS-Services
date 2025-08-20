@@ -6,16 +6,9 @@ import {
     SimulationState,
     ProfileSimulationState,
     ObjectMetric,
-    SimulationResults,
-    Object3D
+    Object3D, ScientificMetrics
 } from '../types/simulation';
 import {DataCollector} from './dataCollector';
-import {
-    calculateAverage,
-    calculateMedian, calculateNetworkRate,
-    calculatePercentile, calculateRequestsPerSecond,
-    calculateStandardDeviation, calculateThroughput
-} from "../utils/statisticUtils.ts";
 
 interface PredictionResponse {
     status: string;
@@ -57,10 +50,11 @@ export class SimulationService {
     private profileWebSockets: Map<string, WebSocket> = new Map();
     private downloadedObjectsPerProfile: Map<string, Set<string>> = new Map();
     private availableObjects: Object3D[] = [];
-    private dockerStatsInterval: number | null = null;
     private dockerStats: Map<string, DockerStats[]> = new Map();
     private baselineMetrics: Map<string, ObjectMetric[]> = new Map();
-
+    private objectDownloadTracking: Map<string, Map<string, Set<string>>> = new Map(); // simulationId -> objectId -> profileIds
+    private dockerTimeSeriesData: Map<string, any[]> = new Map(); // containerName -> timeseries
+    private dockerCollectionInterval: number | null = null;
     constructor() {
         this.dataCollector = new DataCollector();
     }
@@ -147,134 +141,8 @@ export class SimulationService {
 
         return simulationId;
     }
+    
 
-    async stopSimulation(): Promise<SimulationResults | null> {
-        if (!this.simulationState) {
-            return null;
-        }
-
-        console.log('Stopping simulation and collecting comprehensive results...');
-
-        // Stop simulation loop
-        if (this.simulationIntervalId) {
-            clearInterval(this.simulationIntervalId);
-            this.simulationIntervalId = null;
-        }
-
-        // Stop Docker stats collection
-        this.stopDockerStatsCollection();
-
-        // Close WebSocket connections
-        this.profileWebSockets.forEach((ws, profileId) => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
-        });
-        this.profileWebSockets.clear();
-
-        const results = await this.collectEnhancedSimulationResults();
-        await this.dataCollector.saveResults(results);
-
-        this.downloadedObjectsPerProfile.clear();
-        this.baselineMetrics.clear();
-        this.simulationState = null;
-        return results;
-    }
-
-    /**
-     * Enhanced Docker stats collection with error handling
-     */
-    private startEnhancedDockerStatsCollection(): void {
-        console.log(`Starting Docker stats collection for ${this.simulationState?.optimized ? 'OPTIMIZED' : 'UNOPTIMIZED'} simulation...`);
-
-        this.dockerStatsInterval = window.setInterval(async () => {
-            try {
-                const stats = await this.fetchDockerStats();
-                const timestamp = Date.now();
-
-                Object.entries(stats).forEach(([containerName, containerStats]) => {
-                    if (!this.dockerStats.has(containerName)) {
-                        this.dockerStats.set(containerName, []);
-                    }
-
-                    const enhancedStats: DockerStats = {
-                        ...containerStats,
-                        timestamp
-                    };
-
-                    this.dockerStats.get(containerName)!.push(enhancedStats);
-
-                    // Log für Debugging
-                    if (this.dockerStats.get(containerName)!.length === 1) {
-                        console.log(`Started collecting stats for container: ${containerName}`);
-                    }
-                });
-
-                if (Object.keys(stats).length > 0) {
-                    console.log(`Collected Docker stats for ${Object.keys(stats).length} containers (${this.simulationState?.optimized ? 'OPTIMIZED' : 'UNOPTIMIZED'} mode)`);
-                }
-            } catch (error) {
-                console.warn('Failed to collect Docker stats:', error);
-            }
-        }, 1000);
-    }
-
-    private stopDockerStatsCollection(): void {
-        if (this.dockerStatsInterval) {
-            clearInterval(this.dockerStatsInterval);
-            this.dockerStatsInterval = null;
-            console.log('Stopped Docker stats collection');
-        }
-    }
-
-    /**
-     * Enhanced Docker stats fetching with retry logic
-     */
-    private async fetchDockerStats(): Promise<Record<string, DockerStats>> {
-        try {
-            const response = await axios.get<DockerStatsResponse>('http://localhost/api/docker/stats', {
-                timeout: 5000,
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
-
-            const transformedStats: Record<string, DockerStats> = {};
-
-            if (response.data && response.data.containers) {
-                response.data.containers.forEach(container => {
-                    // Nur relevante Container filtern basierend auf Simulationstyp
-                    const isRelevantOptimized = this.simulationState?.optimized && (
-                        container.name.includes('storage-service') ||
-                        container.name.includes('cache-service') ||
-                        container.name.includes('minio') ||
-                        container.name.includes('prediction-service')
-                    );
-
-                    const isRelevantUnoptimized = !this.simulationState?.optimized && (
-                        container.name.includes('storage-service') ||
-                        container.name.includes('minio')
-                    );
-
-                    if (isRelevantOptimized || isRelevantUnoptimized) {
-                        transformedStats[container.name] = {
-                            cpu_usage: container.cpu_percent,
-                            memory_usage: container.mem_usage,
-                            memory_limit: container.mem_limit,
-                            network_rx_bytes: container.net_rx_bytes,
-                            network_tx_bytes: container.net_tx_bytes,
-                            timestamp: Date.now()
-                        };
-                    }
-                });
-            }
-
-            return transformedStats;
-        } catch (error) {
-            console.warn('Failed to fetch Docker stats:', error);
-            return {};
-        }
-    }
 
     /**
      * Enhanced WebSocket connection with better error handling
@@ -541,280 +409,7 @@ export class SimulationService {
         }
     }
 
-    /**
-     * Enhanced object download with comprehensive metrics
-     */
-    private async downloadObject(objectId: string, profileId: string): Promise<void> {
-        const startTime = performance.now();
-        const profileState = this.simulationState?.profileStates[profileId];
-        if (!profileState) return;
-
-        try {
-            const headers: any = {};
-            if (this.simulationState?.optimized) {
-                headers['X-Optimization-Mode'] = 'optimized';
-            }
-
-            const response = await axios.get(
-                `http://localhost/api/storage/objects/${objectId}/download`,
-                {
-                    responseType: 'blob',
-                    timeout: 30000,
-                    headers
-                }
-            );
-
-            const endTime = performance.now();
-            const totalLatency = endTime - startTime;
-            const sizeBytes = response.data.size || 0;
-
-            // Extract enhanced metrics from response headers
-            const downloadSource = response.headers['x-download-source'] || 'unknown';
-            const serverLatency = parseInt(response.headers['x-download-latency-ms'] || '0');
-            const cacheHit = downloadSource === 'cache';
-
-            // Update cache statistics
-            if (cacheHit) {
-                profileState.cacheHits++;
-            } else {
-                profileState.cacheMisses++;
-            }
-
-            const metric: ObjectMetric = {
-                objectId,
-                profileId,
-                downloadLatencyMs: totalLatency,
-                serverLatencyMs: serverLatency,
-                clientLatencyMs: totalLatency - serverLatency,
-                sizeBytes,
-                timestamp: Date.now(),
-                simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
-                simulationId: this.getCurrentSimulationId(),
-                downloadSource,
-                cacheHit,
-                networkLatencyMs: totalLatency - serverLatency,
-                compressionRatio: sizeBytes > 0 ? 1.0 : 0,
-                isBaseline: false
-            };
-
-            profileState.metrics.push(metric);
-            console.log(`Downloaded ${objectId} for ${profileId}: ${totalLatency.toFixed(2)}ms total (server: ${serverLatency}ms, client: ${(totalLatency - serverLatency).toFixed(2)}ms) from ${downloadSource}, cache hit: ${cacheHit}`);
-
-        } catch (error) {
-            const endTime = performance.now();
-            const latency = endTime - startTime;
-
-            profileState.failedRequests++;
-
-            // Record failed download metric
-            const failureMetric: ObjectMetric = {
-                objectId,
-                profileId,
-                downloadLatencyMs: latency,
-                serverLatencyMs: 0,
-                clientLatencyMs: latency,
-                sizeBytes: 0,
-                timestamp: Date.now(),
-                simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
-                simulationId: this.getCurrentSimulationId(),
-                downloadSource: 'error',
-                error: error instanceof Error ? error.message : 'Unknown error',
-                isBaseline: false
-            };
-
-            profileState.metrics.push(failureMetric);
-            console.error(`Failed to download object ${objectId} for profile ${profileId}:`, error);
-        }
-    }
-
-    /**
-     * Enhanced simulation results collection
-     */
-    private async collectEnhancedSimulationResults(): Promise<SimulationResults> {
-        if (!this.simulationState) {
-            throw new Error('No simulation state available');
-        }
-
-        console.log('Collecting enhanced simulation results...');
-
-        const allMetrics: ObjectMetric[] = [];
-        const profileStats = new Map<string, any>();
-
-        // Collect all metrics including baseline
-        Object.entries(this.simulationState.profileStates).forEach(([profileId, profileState]) => {
-            allMetrics.push(...profileState.metrics);
-
-            const profileUnique = new Set(profileState.downloadedObjects);
-            const totalRequests = profileState.totalRequests || 0;
-            const successfulRequests = profileState.successfulRequests || 0;
-            const cacheHits = profileState.cacheHits || 0;
-            const cacheMisses = profileState.cacheMisses || 0;
-
-            profileStats.set(profileId, {
-                downloads: profileState.downloadedObjects.length,
-                unique: profileUnique.size,
-                totalRequests,
-                successfulRequests,
-                failedRequests: profileState.failedRequests || 0,
-                successRate: totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0,
-                cacheHits,
-                cacheMisses,
-                cacheHitRate: (cacheHits + cacheMisses) > 0 ? (cacheHits / (cacheHits + cacheMisses)) * 100 : 0
-            });
-        });
-
-        // Calculate comprehensive statistics
-        const realMetrics = allMetrics.filter(m => !m.isBaseline);
-        const baselineMetrics = allMetrics.filter(m => m.isBaseline);
-        const successfulMetrics = realMetrics.filter(m => !m.error);
-        const failedMetrics = realMetrics.filter(m => !!m.error);
-
-        const totalRequests = allMetrics.length;
-        const successfulDownloads = successfulMetrics.length;
-        const globalUniqueObjects = new Set(successfulMetrics.map(m => m.objectId));
-
-        // Latency statistics
-        const latencies = successfulMetrics.map(m => m.downloadLatencyMs);
-        const serverLatencies = successfulMetrics.map(m => m.serverLatencyMs || 0);
-        const clientLatencies = successfulMetrics.map(m => m.clientLatencyMs || 0);
-
-        const averageLatency = latencies.length > 0 ? latencies.reduce((sum, l) => sum + l, 0) / latencies.length : 0;
-        const averageServerLatency = serverLatencies.length > 0 ? serverLatencies.reduce((sum, l) => sum + l, 0) / serverLatencies.length : 0;
-        const averageClientLatency = clientLatencies.length > 0 ? clientLatencies.reduce((sum, l) => sum + l, 0) / clientLatencies.length : 0;
-
-        // Cache statistics
-        const cacheHits = successfulMetrics.filter(m => m.cacheHit).length;
-        const cacheMisses = successfulMetrics.filter(m => !m.cacheHit && !m.error).length;
-        const cacheHitRate = (cacheHits + cacheMisses) > 0 ? (cacheHits / (cacheHits + cacheMisses)) * 100 : 0;
-
-        // Data transfer statistics
-        const totalDataSize = successfulMetrics.reduce((sum, m) => sum + m.sizeBytes, 0);
-        const averageObjectSize = successfulMetrics.length > 0 ? totalDataSize / successfulMetrics.length : 0;
-
-        // Performance metrics
-        const minLatency = latencies.length > 0 ? Math.min(...latencies) : 0;
-        const maxLatency = latencies.length > 0 ? Math.max(...latencies) : 0;
-        const medianLatency = calculateMedian(latencies);
-        const p95Latency = calculatePercentile(latencies, 95);
-        const p99Latency = calculatePercentile(latencies, 99);
-
-        // Docker statistics summary
-        const dockerStatsSummary = this.processDockerStats();
-
-        const simulationType = this.simulationState.optimized ? 'optimized' : 'unoptimized';
-
-        const enhancedResults: SimulationResults = {
-            simulationId: this.getCurrentSimulationId(),
-            simulationType,
-            startTime: this.simulationState.startTime,
-            endTime: Date.now(),
-            duration: Date.now() - this.simulationState.startTime,
-            profiles: [], // Simplified for export
-            metrics: allMetrics,
-
-            // Basic counters
-            totalObjects: successfulDownloads,
-            uniqueObjects: globalUniqueObjects.size,
-            totalRequests,
-            successfulRequests: successfulDownloads,
-            failedRequests: failedMetrics.length,
-            baselineRequests: baselineMetrics.length,
-
-            // Latency statistics
-            averageLatency,
-            averageServerLatency,
-            averageClientLatency,
-            minLatency,
-            maxLatency,
-            medianLatency,
-            p95Latency,
-            p99Latency,
-            latencyStandardDeviation: calculateStandardDeviation(latencies),
-
-            // Cache performance
-            cacheHitRate,
-            cacheHits,
-            cacheMisses,
-            cacheEfficiency: cacheHitRate / 100,
-
-            // Data transfer
-            totalDataSize,
-            averageObjectSize,
-            totalDataTransferred: totalDataSize,
-
-            // Success rates
-            successRate: totalRequests > 0 ? (successfulDownloads / totalRequests) * 100 : 0,
-            errorRate: totalRequests > 0 ? (failedMetrics.length / totalRequests) * 100 : 0,
-
-            // Performance insights
-            throughput: calculateThroughput(this.simulationState),
-            requestsPerSecond: calculateRequestsPerSecond(this.simulationState),
-
-            // Infrastructure metrics
-            dockerStats: dockerStatsSummary,
-            detailedDockerStats: Object.fromEntries(this.dockerStats),
-
-            // Profile-specific statistics
-            profileStatistics: Object.fromEntries(profileStats),
-
-            // Configuration
-            configuration: {
-                optimized: !!this.simulationState?.optimized,
-                interval: this.simulationState?.interval ?? 0,
-                profileCount: Object.keys(this.simulationState?.profileStates ?? {}).length,
-                totalDataPoints: this.simulationState?.totalDataPoints ?? 0,
-                processedDataPoints: this.simulationState?.processedDataPoints ?? 0
-            }
-        };
-
-        console.log(`Enhanced results collected: ${successfulDownloads} successful downloads, ${cacheHitRate.toFixed(1)}% cache hit rate, ${averageLatency.toFixed(2)}ms avg latency`);
-        return enhancedResults;
-    }
-
-    /**
-     * Process Docker statistics for analysis
-     */
-    private processDockerStats(): any {
-        const summary: any = {};
-
-        for (const [container, stats] of this.dockerStats.entries()) {
-            if (stats.length === 0) continue;
-
-            const cpuValues = stats.map(s => s.cpu_usage);
-            const memoryValues = stats.map(s => s.memory_usage);
-            const networkRxValues = stats.map(s => s.network_rx_bytes);
-            const networkTxValues = stats.map(s => s.network_tx_bytes);
-
-            summary[container] = {
-                sampleCount: stats.length,
-                cpu: {
-                    average: calculateAverage(cpuValues),
-                    min: Math.min(...cpuValues),
-                    max: Math.max(...cpuValues),
-                    median: calculateMedian(cpuValues),
-                    standardDeviation: calculateStandardDeviation(cpuValues)
-                },
-                memory: {
-                    average: calculateAverage(memoryValues),
-                    min: Math.min(...memoryValues),
-                    max: Math.max(...memoryValues),
-                    median: calculateMedian(memoryValues),
-                    peak: Math.max(...memoryValues),
-                    limit: stats[0]?.memory_limit || 0
-                },
-                network: {
-                    totalRx: Math.max(...networkRxValues) - Math.min(...networkRxValues),
-                    totalTx: Math.max(...networkTxValues) - Math.min(...networkTxValues),
-                    avgRxRate: calculateNetworkRate(networkRxValues, stats),
-                    avgTxRate: calculateNetworkRate(networkTxValues, stats)
-                }
-            };
-        }
-
-        return summary;
-    }
-
-    // Existing methods (sendPointToWebSocket, processObjectIds, etc.) remain unchanged
+    
     private async sendPointToWebSocket(profileId: string, point: DataPoint): Promise<void> {
         const ws = this.profileWebSockets.get(profileId);
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -899,4 +494,459 @@ export class SimulationService {
     public getSimulationState(): SimulationState | null {
         return this.simulationState;
     }
+
+    /**
+     * Enhanced Docker stats collection - every second
+     */
+    private startEnhancedDockerStatsCollection(): void {
+        const simulationType = this.simulationState?.optimized ? 'optimized' : 'unoptimized';
+        console.log(`Starting Docker metrics collection for ${simulationType} simulation`);
+
+        // Clear previous data
+        this.dockerTimeSeriesData.clear();
+
+        // Define which containers to monitor based on simulation type
+        const containersToMonitor = this.simulationState?.optimized
+            ? ['storage-service', 'redis', 'minio', 'cache-service', 'prediction-service']
+            : ['storage-service', 'minio'];
+
+        this.dockerCollectionInterval = window.setInterval(async () => {
+            try {
+                const stats = await this.fetchFilteredDockerStats(containersToMonitor);
+                const timestamp = Date.now();
+
+                Object.entries(stats).forEach(([containerName, containerStats]) => {
+                    if (!this.dockerTimeSeriesData.has(containerName)) {
+                        this.dockerTimeSeriesData.set(containerName, []);
+                    }
+
+                    const timeSeriesEntry = {
+                        timestamp,
+                        cpu: {
+                            usage: containerStats.cpu_usage,
+                            percent: containerStats.cpu_usage
+                        },
+                        memory: {
+                            usage: containerStats.memory_usage,
+                            limit: containerStats.memory_limit,
+                            percent: (containerStats.memory_usage / containerStats.memory_limit) * 100
+                        },
+                        network: {
+                            rxBytes: containerStats.network_rx_bytes,
+                            txBytes: containerStats.network_tx_bytes,
+                            rxRate: 0, // Will be calculated from previous entry
+                            txRate: 0
+                        }
+                    };
+
+                    // Calculate network rates
+                    const timeSeries = this.dockerTimeSeriesData.get(containerName)!;
+                    if (timeSeries.length > 0) {
+                        const previous = timeSeries[timeSeries.length - 1];
+                        const timeDiff = (timestamp - previous.timestamp) / 1000; // seconds
+                        if (timeDiff > 0) {
+                            timeSeriesEntry.network.rxRate = (timeSeriesEntry.network.rxBytes - previous.network.rxBytes) / timeDiff;
+                            timeSeriesEntry.network.txRate = (timeSeriesEntry.network.txBytes - previous.network.txBytes) / timeDiff;
+                        }
+                    }
+
+                    timeSeries.push(timeSeriesEntry);
+                });
+
+            } catch (error) {
+                console.warn('Failed to collect Docker metrics:', error);
+            }
+        }, 1000); // Every second
+    }
+
+    /**
+     * Fetch Docker stats for specific containers only
+     */
+    private async fetchFilteredDockerStats(containerNames: string[]): Promise<Record<string, DockerStats>> {
+        try {
+            const response = await axios.get<DockerStatsResponse>('http://localhost/api/docker/stats', {
+                timeout: 5000,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+
+            const filteredStats: Record<string, DockerStats> = {};
+
+            if (response.data && response.data.containers) {
+                response.data.containers.forEach(container => {
+                    // Check if this container should be monitored
+                    const shouldMonitor = containerNames.some(name =>
+                        container.name.toLowerCase().includes(name.toLowerCase())
+                    );
+
+                    if (shouldMonitor) {
+                        // Simplify container name for easier reference
+                        const simpleName = containerNames.find(name =>
+                            container.name.toLowerCase().includes(name.toLowerCase())
+                        ) || container.name;
+
+                        filteredStats[simpleName] = {
+                            cpu_usage: container.cpu_percent,
+                            memory_usage: container.mem_usage,
+                            memory_limit: container.mem_limit,
+                            network_rx_bytes: container.net_rx_bytes,
+                            network_tx_bytes: container.net_tx_bytes,
+                            timestamp: Date.now()
+                        };
+                    }
+                });
+            }
+
+            return filteredStats;
+        } catch (error) {
+            console.warn('Failed to fetch Docker stats:', error);
+            return {};
+        }
+    }
+
+    /**
+     * Enhanced object download with deduplication
+     */
+    private async downloadObject(objectId: string, profileId: string): Promise<void> {
+        // Check if this object has already been downloaded for this profile in this simulation
+        const simulationId = this.getCurrentSimulationId();
+
+        if (!this.objectDownloadTracking.has(simulationId)) {
+            this.objectDownloadTracking.set(simulationId, new Map());
+        }
+
+        const objectTracking = this.objectDownloadTracking.get(simulationId)!;
+        if (!objectTracking.has(objectId)) {
+            objectTracking.set(objectId, new Set());
+        }
+
+        const profilesForObject = objectTracking.get(objectId)!;
+        if (profilesForObject.has(profileId)) {
+            console.log(`Object ${objectId} already downloaded for profile ${profileId}, skipping`);
+            return; // Already downloaded for this profile
+        }
+
+        const startTime = performance.now();
+        const profileState = this.simulationState?.profileStates[profileId];
+        if (!profileState) return;
+
+        try {
+            const headers: any = {};
+            if (this.simulationState?.optimized) {
+                headers['X-Optimization-Mode'] = 'optimized';
+                headers['X-Profile-Id'] = profileId; // Add profile ID for tracking
+            }
+
+            const response = await axios.get(
+                `http://localhost/api/storage/objects/${objectId}/download`,
+                {
+                    responseType: 'blob',
+                    timeout: 30000,
+                    headers
+                }
+            );
+
+            const endTime = performance.now();
+            const totalLatency = endTime - startTime;
+            const sizeBytes = response.data.size || 0;
+
+            // Extract enhanced metrics from response headers
+            const downloadSource = response.headers['x-download-source'] || 'unknown';
+            const serverLatency = parseInt(response.headers['x-download-latency-ms'] || '0');
+            const networkLatency = parseInt(response.headers['x-network-latency-ms'] || '0');
+            const cacheHit = downloadSource === 'cache';
+
+            // Mark as downloaded for this profile
+            profilesForObject.add(profileId);
+
+            // Update cache statistics
+            if (cacheHit) {
+                profileState.cacheHits++;
+            } else {
+                profileState.cacheMisses++;
+            }
+
+            const metric: ObjectMetric = {
+                objectId,
+                profileId,
+                downloadLatencyMs: totalLatency,
+                serverLatencyMs: serverLatency,
+                clientLatencyMs: totalLatency - serverLatency - networkLatency,
+                networkLatencyMs: networkLatency,
+                sizeBytes,
+                timestamp: Date.now(),
+                simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
+                simulationId,
+                downloadSource,
+                cacheHit,
+                compressionRatio: 1.0,
+                isBaseline: false
+            };
+
+            profileState.metrics.push(metric);
+            console.log(`Downloaded ${objectId} for ${profileId}: ${totalLatency.toFixed(2)}ms (server: ${serverLatency}ms, network: ${networkLatency}ms, client: ${(totalLatency - serverLatency - networkLatency).toFixed(2)}ms) from ${downloadSource}`);
+
+        } catch (error) {
+            const endTime = performance.now();
+            const latency = endTime - startTime;
+
+            profileState.failedRequests++;
+
+            // Still mark as attempted for this profile to avoid retry
+            profilesForObject.add(profileId);
+
+            // Record failed download metric
+            const failureMetric: ObjectMetric = {
+                objectId,
+                profileId,
+                downloadLatencyMs: latency,
+                serverLatencyMs: 0,
+                clientLatencyMs: latency,
+                networkLatencyMs: 0,
+                sizeBytes: 0,
+                timestamp: Date.now(),
+                simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
+                simulationId,
+                downloadSource: 'error',
+                error: error instanceof Error ? error.message : 'Unknown error',
+                isBaseline: false
+            };
+
+            profileState.metrics.push(failureMetric);
+            console.error(`Failed to download object ${objectId} for profile ${profileId}:`, error);
+        }
+    }
+
+    /**
+     * Collect comprehensive scientific metrics
+     */
+    private async collectScientificMetrics(): Promise<ScientificMetrics> {
+        if (!this.simulationState) {
+            throw new Error('No simulation state available');
+        }
+
+        const simulationId = this.getCurrentSimulationId();
+        const simulationType = this.simulationState.optimized ? 'optimized' : 'unoptimized';
+
+        // Build object-centric metrics
+        const objectMetrics: ScientificMetrics['objectMetrics'] = {};
+        const allMetrics: ObjectMetric[] = [];
+
+        Object.values(this.simulationState.profileStates).forEach(profileState => {
+            profileState.metrics.forEach(metric => {
+                if (!metric.isBaseline) {
+                    allMetrics.push(metric);
+
+                    if (!objectMetrics[metric.objectId]) {
+                        objectMetrics[metric.objectId] = {
+                            downloads: [],
+                            statistics: {
+                                totalDownloads: 0,
+                                uniqueProfiles: 0,
+                                averageLatency: 0,
+                                minLatency: Infinity,
+                                maxLatency: 0,
+                                p95Latency: 0,
+                                cacheHitRate: 0,
+                                successRate: 0
+                            }
+                        };
+                    }
+
+                    objectMetrics[metric.objectId].downloads.push({
+                        profileId: metric.profileId,
+                        timestamp: metric.timestamp,
+                        latency: {
+                            total: metric.downloadLatencyMs,
+                            server: metric.serverLatencyMs || 0,
+                            client: metric.clientLatencyMs || 0,
+                            network: metric.networkLatencyMs || 0
+                        },
+                        cacheHit: metric.cacheHit || false,
+                        downloadSource: metric.downloadSource || 'unknown',
+                        sizeBytes: metric.sizeBytes,
+                        success: !metric.error,
+                        error: metric.error
+                    });
+                }
+            });
+        });
+
+        // Calculate per-object statistics
+        Object.entries(objectMetrics).forEach(([objectId, data]) => {
+            const downloads = data.downloads;
+            const latencies = downloads.map(d => d.latency.total);
+            const successfulDownloads = downloads.filter(d => d.success);
+            const cacheHits = downloads.filter(d => d.cacheHit);
+
+            data.statistics = {
+                totalDownloads: downloads.length,
+                uniqueProfiles: new Set(downloads.map(d => d.profileId)).size,
+                averageLatency: latencies.reduce((sum, l) => sum + l, 0) / latencies.length,
+                minLatency: Math.min(...latencies),
+                maxLatency: Math.max(...latencies),
+                p95Latency: this.calculatePercentile(latencies, 95),
+                cacheHitRate: (cacheHits.length / downloads.length) * 100,
+                successRate: (successfulDownloads.length / downloads.length) * 100
+            };
+        });
+
+        // Build Docker time series data
+        const dockerTimeSeries: ScientificMetrics['dockerTimeSeries'] = {};
+        this.dockerTimeSeriesData.forEach((timeSeries, containerName) => {
+            dockerTimeSeries[containerName] = timeSeries;
+        });
+
+        // Calculate aggregated statistics
+        const successfulMetrics = allMetrics.filter(m => !m.error);
+        const latencies = successfulMetrics.map(m => m.downloadLatencyMs);
+        const duration = Date.now() - this.simulationState.startTime;
+
+        const aggregatedStats: ScientificMetrics['aggregatedStats'] = {
+            latency: {
+                mean: this.calculateMean(latencies),
+                median: this.calculateMedian(latencies),
+                stdDev: this.calculateStandardDeviation(latencies),
+                p50: this.calculatePercentile(latencies, 50),
+                p75: this.calculatePercentile(latencies, 75),
+                p90: this.calculatePercentile(latencies, 90),
+                p95: this.calculatePercentile(latencies, 95),
+                p99: this.calculatePercentile(latencies, 99),
+                min: latencies.length > 0 ? Math.min(...latencies) : 0,
+                max: latencies.length > 0 ? Math.max(...latencies) : 0
+            },
+            throughput: {
+                objectsPerSecond: successfulMetrics.length / (duration / 1000),
+                bytesPerSecond: successfulMetrics.reduce((sum, m) => sum + m.sizeBytes, 0) / (duration / 1000),
+                requestsPerSecond: allMetrics.length / (duration / 1000)
+            },
+            cache: {
+                hitRate: (successfulMetrics.filter(m => m.cacheHit).length / successfulMetrics.length) * 100,
+                totalHits: successfulMetrics.filter(m => m.cacheHit).length,
+                totalMisses: successfulMetrics.filter(m => !m.cacheHit).length,
+                efficiency: 0 // Calculate based on your efficiency metric
+            },
+            success: {
+                rate: (successfulMetrics.length / allMetrics.length) * 100,
+                totalSuccess: successfulMetrics.length,
+                totalFailure: allMetrics.length - successfulMetrics.length
+            }
+        };
+
+        // Build profile metrics
+        const profileMetrics: ScientificMetrics['profileMetrics'] = {};
+        Object.entries(this.simulationState.profileStates).forEach(([profileId, state]) => {
+            const profileSuccessMetrics = state.metrics.filter(m => !m.error && !m.isBaseline);
+            profileMetrics[profileId] = {
+                name: this.profiles.find(p => p.id === profileId)?.name || profileId,
+                totalObjects: state.downloadedObjects.length,
+                uniqueObjects: new Set(state.downloadedObjects).size,
+                totalLatency: profileSuccessMetrics.reduce((sum, m) => sum + m.downloadLatencyMs, 0),
+                averageLatency: profileSuccessMetrics.length > 0
+                    ? profileSuccessMetrics.reduce((sum, m) => sum + m.downloadLatencyMs, 0) / profileSuccessMetrics.length
+                    : 0,
+                cacheHitRate: state.cacheHits > 0 ? (state.cacheHits / (state.cacheHits + state.cacheMisses)) * 100 : 0,
+                errorRate: state.failedRequests > 0 ? (state.failedRequests / state.totalRequests) * 100 : 0,
+                dataTransferred: profileSuccessMetrics.reduce((sum, m) => sum + m.sizeBytes, 0)
+            };
+        });
+
+        return {
+            simulationId,
+            simulationType,
+            timestamp: new Date().toISOString(),
+            duration: {
+                startTime: this.simulationState.startTime,
+                endTime: Date.now(),
+                totalMs: duration
+            },
+            configuration: {
+                profileCount: Object.keys(this.simulationState.profileStates).length,
+                intervalMs: this.simulationState.interval || 200,
+                totalDataPoints: this.simulationState.totalDataPoints || 0,
+                objectCount: this.availableObjects.length
+            },
+            objectMetrics,
+            dockerTimeSeries,
+            aggregatedStats,
+            profileMetrics
+        };
+    }
+
+    // Statistical helper methods
+    private calculateMean(values: number[]): number {
+        return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
+    }
+
+    private calculateMedian(values: number[]): number {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    }
+
+    private calculatePercentile(values: number[], percentile: number): number {
+        if (values.length === 0) return 0;
+        const sorted = [...values].sort((a, b) => a - b);
+        const index = Math.ceil((percentile / 100) * sorted.length) - 1;
+        return sorted[Math.max(0, index)];
+    }
+
+    private calculateStandardDeviation(values: number[]): number {
+        if (values.length <= 1) return 0;
+        const mean = this.calculateMean(values);
+        const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / values.length;
+        return Math.sqrt(variance);
+    }
+
+    // Update stopSimulation to use scientific metrics
+    async stopSimulation(): Promise<ScientificMetrics | null> {
+        if (!this.simulationState) {
+            return null;
+        }
+
+        console.log('Stopping simulation and collecting scientific metrics...');
+
+        // Stop simulation loop
+        if (this.simulationIntervalId) {
+            clearInterval(this.simulationIntervalId);
+            this.simulationIntervalId = null;
+        }
+
+        // Stop Docker stats collection
+        if (this.dockerCollectionInterval) {
+            clearInterval(this.dockerCollectionInterval);
+            this.dockerCollectionInterval = null;
+        }
+
+        // Close WebSocket connections
+        this.profileWebSockets.forEach((ws, profileId) => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+        });
+        this.profileWebSockets.clear();
+
+        // Collect scientific metrics
+        const metrics = await this.collectScientificMetrics();
+
+        // Save to data collector
+        await this.dataCollector.saveScientificResults(metrics);
+
+        // Clean up
+        this.objectDownloadTracking.clear();
+        this.dockerTimeSeriesData.clear();
+        this.simulationState = null;
+
+        return metrics;
+    }
+
+    // Store profiles reference for name resolution
+    private profiles: Profile[] = [];
+
+    setProfiles(profiles: Profile[]): void {
+        this.profiles = profiles;
+    }
+
 }

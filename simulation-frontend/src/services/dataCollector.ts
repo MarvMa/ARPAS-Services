@@ -6,7 +6,7 @@ import {
     ComparisonResults,
     ChartData,
     BenchmarkReport,
-    DockerContainerStats
+    DockerContainerStats, ScientificMetrics
 } from '../types/simulation';
 
 /**
@@ -15,29 +15,60 @@ import {
  */
 export class DataCollector {
     private results: SimulationResults[] = [];
-    private readonly STORAGE_KEY = 'simulation_results_v3';
-    private readonly VERSION = '3.0.0';
+    
+    private scientificResults: ScientificMetrics[] = [];
+    private readonly STORAGE_KEY = 'scientific_simulation_results_v1';
 
     /**
-     * Saves simulation results and automatically generates analysis
+     * Save scientific metrics from a completed simulation
      */
-    async saveResults(results: SimulationResults): Promise<void> {
+    async saveScientificResults(metrics: ScientificMetrics): Promise<void> {
         try {
-            this.results.push(results);
+            this.scientificResults.push(metrics);
             this.saveToLocalStorage();
 
-            // Generate immediate individual report
-            await this.downloadIndividualReport(results);
+            console.log(`Saved scientific metrics for simulation ${metrics.simulationId}:
+                Type: ${metrics.simulationType}
+                Duration: ${metrics.duration.totalMs}ms
+                Objects: ${Object.keys(metrics.objectMetrics).length}
+                Profiles: ${metrics.configuration.profileCount}
+                Docker Containers: ${Object.keys(metrics.dockerTimeSeries).length}
+                Avg Latency: ${metrics.aggregatedStats.latency.mean.toFixed(2)}ms
+                Cache Hit Rate: ${metrics.aggregatedStats.cache.hitRate.toFixed(1)}%
+            `);
 
-            console.log(`Saved and analyzed simulation: ${results.simulationId} 
-                (${results.totalObjects} objects, ${results.averageLatency.toFixed(2)}ms avg latency, 
-                ${results.cacheHitRate?.toFixed(1) || 0}% cache hit rate)`);
+            // Auto-download individual result
+            await this.downloadIndividualResult(metrics);
+
         } catch (error) {
-            console.error('Failed to save simulation results:', error);
+            console.error('Failed to save scientific results:', error);
             throw new Error('Failed to save simulation results');
         }
     }
+    /**
+     * Get all scientific results
+     */
+    getScientificResults(): ScientificMetrics[] {
+        return [...this.scientificResults];
+    }
 
+    /**
+     * Download individual simulation result
+     */
+    private async downloadIndividualResult(metrics: ScientificMetrics): Promise<void> {
+        const filename = `simulation_${metrics.simulationType}_${metrics.simulationId}_${metrics.timestamp.replace(/[:.]/g, '-')}.json`;
+        const blob = new Blob([JSON.stringify(metrics, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log(`Auto-downloaded: ${filename}`);
+    }
     /**
      * Generates comprehensive scientific benchmark report
      */
@@ -84,16 +115,53 @@ export class DataCollector {
             throw error;
         }
     }
+   
+
     /**
-     * Exports all results in comprehensive scientific formats
+     * Export all scientific results as comprehensive JSON
      */
-    async exportAllResults(): Promise<void> {
-        if (this.results.length === 0) {
+    async exportScientificResults(): Promise<void> {
+        if (this.scientificResults.length === 0) {
             throw new Error('No results to export');
         }
-        await this.exportComprehensiveBenchmarkReport();
-        await this.exportScientificData();
+
+        const exportData = {
+            exportDate: new Date().toISOString(),
+            totalSimulations: this.scientificResults.length,
+            optimizedSimulations: this.scientificResults.filter(r => r.simulationType === 'optimized').length,
+            unoptimizedSimulations: this.scientificResults.filter(r => r.simulationType === 'unoptimized').length,
+            simulations: this.scientificResults,
+
+            // Comparative analysis
+            comparison: this.generateComparativeAnalysis(),
+
+            // Metadata
+            metadata: {
+                version: '1.0.0',
+                exportFormat: 'scientific_analysis',
+                dataStructure: {
+                    perObjectMetrics: true,
+                    dockerTimeSeries: true,
+                    profileSpecificMetrics: true,
+                    aggregatedStatistics: true
+                }
+            }
+        };
+
+        const filename = `scientific_analysis_export_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log(`Exported ${this.scientificResults.length} simulations to ${filename}`);
     }
+    
     /**
      * Analyzes simulation results with comprehensive statistics
      */
@@ -187,7 +255,7 @@ export class DataCollector {
             cacheEffectiveness: optimized.cacheHitRate,
             dataSizeReductionPercent: dataSizeReduction,
             performanceGain,
-            recommendation: this.generateRecommendation(performanceGain, latencyImprovement, optimized.cacheHitRate)
+            recommendation: this.generateRecommendation(performanceGain, latencyImprovement)
         };
     }
 
@@ -268,7 +336,6 @@ export class DataCollector {
     private generateBenchmarkReport(analysis: PerformanceAnalysis): BenchmarkReport {
         const metadata = {
             generatedAt: new Date().toISOString(),
-            version: this.VERSION,
             totalSimulations: analysis.totalSimulations,
             optimizedSimulations: this.getResultsByType('optimized').length,
             unoptimizedSimulations: this.getResultsByType('unoptimized').length
@@ -531,35 +598,8 @@ export class DataCollector {
         return new Date().toISOString().split('T')[0].replace(/-/g, '') + '_' + Date.now();
     }
 
-    // Storage methods
-    private saveToLocalStorage(): void {
-        try {
-            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.results));
-        } catch (error) {
-            console.error('Failed to save to localStorage:', error);
-            if (this.results.length > 20) {
-                this.results = this.results.slice(-20);
-                try {
-                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.results));
-                } catch (retryError) {
-                    console.error('Failed to save even after cleanup:', retryError);
-                }
-            }
-        }
-    }
+    
 
-    public loadFromLocalStorage(): void {
-        try {
-            const stored = localStorage.getItem(this.STORAGE_KEY);
-            if (stored) {
-                this.results = JSON.parse(stored);
-                console.log(`Loaded ${this.results.length} previous simulation results`);
-            }
-        } catch (error) {
-            console.error('Failed to load from localStorage:', error);
-            localStorage.removeItem(this.STORAGE_KEY);
-        }
-    }
 
     public getAllResults(): SimulationResults[] {
         return [...this.results];
@@ -569,23 +609,7 @@ export class DataCollector {
         return this.results.filter(result => result.simulationType === type);
     }
 
-    public clearResults(): void {
-        this.results = [];
-        localStorage.removeItem(this.STORAGE_KEY);
-    }
-
-    // Placeholder methods for additional functionality
-    private async exportLatencyDistribution(): Promise<void> {
-        // Implementation for latency distribution export
-    }
-
-    private async exportCachePerformanceCsv(): Promise<void> {
-        // Implementation for cache performance metrics
-    }
-
-    private async exportInfrastructureMetrics(): Promise<void> {
-        // Implementation for infrastructure metrics export
-    }
+    
 
     private async downloadCsvData(analysis: PerformanceAnalysis): Promise<void> {
         await this.exportRawDataCsv();
@@ -695,124 +719,176 @@ Generated at: ${report.metadata.generatedAt}
         }
     }
 
-    private generateRecommendation(gain: string, latencyImprovement: number, cacheHitRate: number): string {
-        if (gain === 'significant_improvement') {
-            return 'Optimization highly recommended for production use';
-        } else if (gain === 'moderate_improvement') {
-            return 'Optimization recommended with further tuning';
-        } else if (cacheHitRate < 30) {
-            return 'Improve cache strategy before enabling optimization';
+    /**
+     * Generate comparative analysis between optimized and unoptimized
+     */
+    private generateComparativeAnalysis(): any {
+        const optimized = this.scientificResults.filter(r => r.simulationType === 'optimized');
+        const unoptimized = this.scientificResults.filter(r => r.simulationType === 'unoptimized');
+
+        if (optimized.length === 0 || unoptimized.length === 0) {
+            return { message: 'Insufficient data for comparison' };
+        }
+
+        // Calculate average metrics for each type
+        const calculateAverages = (results: ScientificMetrics[]) => {
+            const latencies = results.map(r => r.aggregatedStats.latency.mean);
+            const cacheRates = results.map(r => r.aggregatedStats.cache.hitRate);
+            const throughputs = results.map(r => r.aggregatedStats.throughput.objectsPerSecond);
+            const successRates = results.map(r => r.aggregatedStats.success.rate);
+
+            return {
+                avgLatency: latencies.reduce((sum, l) => sum + l, 0) / latencies.length,
+                avgCacheHitRate: cacheRates.reduce((sum, c) => sum + c, 0) / cacheRates.length,
+                avgThroughput: throughputs.reduce((sum, t) => sum + t, 0) / throughputs.length,
+                avgSuccessRate: successRates.reduce((sum, s) => sum + s, 0) / successRates.length,
+                sampleSize: results.length
+            };
+        };
+
+        const optimizedAvg = calculateAverages(optimized);
+        const unoptimizedAvg = calculateAverages(unoptimized);
+
+        return {
+            optimized: optimizedAvg,
+            unoptimized: unoptimizedAvg,
+            improvements: {
+                latencyReduction: ((unoptimizedAvg.avgLatency - optimizedAvg.avgLatency) / unoptimizedAvg.avgLatency) * 100,
+                throughputIncrease: ((optimizedAvg.avgThroughput - unoptimizedAvg.avgThroughput) / unoptimizedAvg.avgThroughput) * 100,
+                cacheEffectiveness: optimizedAvg.avgCacheHitRate,
+                successRateImprovement: optimizedAvg.avgSuccessRate - unoptimizedAvg.avgSuccessRate
+            },
+            recommendation: this.generateRecommendation(optimizedAvg, unoptimizedAvg)
+        };
+    }
+
+    /**
+     * Generate recommendation based on comparison
+     */
+    private generateRecommendation(optimized: any, unoptimized: any): string {
+        const latencyImprovement = ((unoptimized.avgLatency - optimized.avgLatency) / unoptimized.avgLatency) * 100;
+
+        if (latencyImprovement > 30) {
+            return 'Significant performance improvement with optimization. Strongly recommend using optimized mode.';
+        } else if (latencyImprovement > 15) {
+            return 'Moderate performance improvement with optimization. Recommend using optimized mode for production.';
+        } else if (latencyImprovement > 5) {
+            return 'Minor performance improvement with optimization. Consider based on specific use case requirements.';
         } else {
-            return 'Evaluate cost-benefit of optimization implementation';
+            return 'Minimal performance difference. Evaluate based on infrastructure costs and complexity.';
         }
     }
 
     /**
-     * Exports comprehensive benchmark data as structured JSON
+     * Export as CSV for scientific analysis tools
      */
+    async exportAsCSV(): Promise<void> {
+        if (this.scientificResults.length === 0) {
+            throw new Error('No results to export');
+        }
 
+        // Create CSV header
+        const headers = [
+            'simulationId', 'simulationType', 'timestamp', 'durationMs',
+            'profileCount', 'objectCount', 'intervalMs',
+            'meanLatency', 'medianLatency', 'p95Latency', 'p99Latency',
+            'minLatency', 'maxLatency', 'stdDevLatency',
+            'cacheHitRate', 'successRate', 'throughput',
+            'totalObjects', 'totalDataBytes'
+        ];
+
+        // Create CSV rows
+        const rows = this.scientificResults.map(result => [
+            result.simulationId,
+            result.simulationType,
+            result.timestamp,
+            result.duration.totalMs,
+            result.configuration.profileCount,
+            result.configuration.objectCount,
+            result.configuration.intervalMs,
+            result.aggregatedStats.latency.mean.toFixed(2),
+            result.aggregatedStats.latency.median.toFixed(2),
+            result.aggregatedStats.latency.p95.toFixed(2),
+            result.aggregatedStats.latency.p99.toFixed(2),
+            result.aggregatedStats.latency.min.toFixed(2),
+            result.aggregatedStats.latency.max.toFixed(2),
+            result.aggregatedStats.latency.stdDev.toFixed(2),
+            result.aggregatedStats.cache.hitRate.toFixed(2),
+            result.aggregatedStats.success.rate.toFixed(2),
+            result.aggregatedStats.throughput.objectsPerSecond.toFixed(2),
+            Object.keys(result.objectMetrics).length,
+            result.aggregatedStats.throughput.bytesPerSecond * (result.duration.totalMs / 1000)
+        ]);
+
+        // Combine headers and rows
+        const csvContent = [
+            headers.join(','),
+            ...rows.map(row => row.join(','))
+        ].join('\n');
+
+        // Download CSV
+        const filename = `simulation_metrics_${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log(`Exported ${this.scientificResults.length} simulations to CSV: ${filename}`);
+    }
 
     /**
-     * Extract infrastructure metrics for specific containers
+     * Save to localStorage
      */
-    private extractInfrastructureMetrics(report: BenchmarkReport): any {
-        const optimizedResults = this.getResultsByType('optimized');
-        const unoptimizedResults = this.getResultsByType('unoptimized');
-
-        const extractContainerStats = (results: SimulationResults[], containerNames: string[]) => {
-            const allStats: Record<string, any[]> = {};
-
-            results.forEach(result => {
-                if (result.dockerStats) {
-                    Object.entries(result.dockerStats).forEach(([container, stats]) => {
-                        if (containerNames.some(name => container.includes(name))) {
-                            if (!allStats[container]) {
-                                allStats[container] = [];
-                            }
-                            allStats[container].push(stats);
-                        }
-                    });
+    private saveToLocalStorage(): void {
+        try {
+            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.scientificResults));
+        } catch (error) {
+            console.error('Failed to save to localStorage:', error);
+            // Keep only last 10 results if storage is full
+            if (this.scientificResults.length > 10) {
+                this.scientificResults = this.scientificResults.slice(-10);
+                try {
+                    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.scientificResults));
+                } catch (retryError) {
+                    console.error('Failed to save even after cleanup:', retryError);
                 }
-            });
-
-            // Aggregate statistics
-            const aggregated: Record<string, any> = {};
-            Object.entries(allStats).forEach(([container, statsList]) => {
-                const cpuValues = statsList.map(s => s.cpu?.average || 0).filter(v => v > 0);
-                const memoryValues = statsList.map(s => s.memory?.average || 0).filter(v => v > 0);
-                const networkRx = statsList.map(s => s.network?.totalRx || 0).filter(v => v > 0);
-                const networkTx = statsList.map(s => s.network?.totalTx || 0).filter(v => v > 0);
-
-                aggregated[container] = {
-                    cpu: {
-                        average: this.calculateMean(cpuValues),
-                        max: cpuValues.length > 0 ? Math.max(...cpuValues) : 0,
-                        median: this.calculateMedian(cpuValues)
-                    },
-                    memory: {
-                        average: this.calculateMean(memoryValues),
-                        max: memoryValues.length > 0 ? Math.max(...memoryValues) : 0,
-                        median: this.calculateMedian(memoryValues)
-                    },
-                    network: {
-                        totalRx: networkRx.reduce((sum, v) => sum + v, 0),
-                        totalTx: networkTx.reduce((sum, v) => sum + v, 0),
-                        avgRxRate: this.calculateMean(networkRx),
-                        avgTxRate: this.calculateMean(networkTx)
-                    }
-                };
-            });
-
-            return aggregated;
-        };
-
-        return {
-            optimized: extractContainerStats(
-                optimizedResults,
-                ['storage-service', 'cache-service', 'minio', 'prediction-service']
-            ),
-            unoptimized: extractContainerStats(
-                unoptimizedResults,
-                ['storage-service', 'minio']
-            )
-        };
+            }
+        }
     }
 
     /**
-     * Calculate statistical significance of results
+     * Load from localStorage
      */
-    private calculateStatisticalSignificance(analysis: PerformanceAnalysis): any {
-        const optimizedLatencies = this.getResultsByType('optimized')
-            .flatMap(r => r.metrics.filter(m => !m.isBaseline && !m.error))
-            .map(m => m.downloadLatencyMs);
-
-        const unoptimizedLatencies = this.getResultsByType('unoptimized')
-            .flatMap(r => r.metrics.filter(m => !m.isBaseline && !m.error))
-            .map(m => m.downloadLatencyMs);
-
-        if (optimizedLatencies.length < 2 || unoptimizedLatencies.length < 2) {
-            return {significant: false, message: 'Insufficient data for statistical analysis'};
+    public loadFromLocalStorage(): void {
+        try {
+            const stored = localStorage.getItem(this.STORAGE_KEY);
+            if (stored) {
+                this.scientificResults = JSON.parse(stored);
+                console.log(`Loaded ${this.scientificResults.length} scientific simulation results from storage`);
+            }
+        } catch (error) {
+            console.error('Failed to load from localStorage:', error);
+            localStorage.removeItem(this.STORAGE_KEY);
         }
+    }
 
-        // Calculate t-test (simplified)
-        const n1 = optimizedLatencies.length;
-        const n2 = unoptimizedLatencies.length;
-        const mean1 = this.calculateMean(optimizedLatencies);
-        const mean2 = this.calculateMean(unoptimizedLatencies);
-        const std1 = this.calculateStandardDeviation(optimizedLatencies);
-        const std2 = this.calculateStandardDeviation(unoptimizedLatencies);
+    /**
+     * Clear all results
+     */
+    public clearResults(): void {
+        this.scientificResults = [];
+        localStorage.removeItem(this.STORAGE_KEY);
+        console.log('All scientific results cleared');
+    }
 
-        const pooledStd = Math.sqrt(((n1 - 1) * std1 * std1 + (n2 - 1) * std2 * std2) / (n1 + n2 - 2));
-        const tStatistic = (mean1 - mean2) / (pooledStd * Math.sqrt(1 / n1 + 1 / n2));
-
-        return {
-            significant: Math.abs(tStatistic) > 1.96, // 95% confidence
-            tStatistic: tStatistic,
-            sampleSizes: {optimized: n1, unoptimized: n2},
-            confidenceLevel: '95%',
-            message: Math.abs(tStatistic) > 1.96
-                ? 'Results are statistically significant'
-                : 'Results are not statistically significant'
-        };
+    // Keep existing methods for backward compatibility but mark as deprecated
+    async exportAllResults(): Promise<void> {
+        console.warn('exportAllResults is deprecated, use exportScientificResults instead');
+        return this.exportScientificResults();
     }
 }

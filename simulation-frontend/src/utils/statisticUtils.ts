@@ -1,5 +1,5 @@
-import {SimulationState} from "../types/simulation.ts";
-import {DockerStats} from "../services/simulationService.ts";
+import { SimulationState } from "../types/simulation";
+import { DockerStats } from "../services/simulationService";
 
 export function calculateAverage(values: number[]): number {
     return values.length > 0 ? values.reduce((sum, v) => sum + v, 0) / values.length : 0;
@@ -37,8 +37,8 @@ export function calculateThroughput(simulationState: SimulationState): number {
 export function calculateRequestsPerSecond(simulationState: SimulationState): number {
     if (!simulationState) return 0;
     const duration = (Date.now() - simulationState.startTime) / 1000;
-    const totalRequests: number = Object.values(simulationState.profileStates)
-        .reduce((sum, _state) => sum + (totalRequests || 0), 0);
+    const totalRequests = Object.values(simulationState.profileStates)
+        .reduce((sum, state) => sum + (state.totalRequests || 0), 0);
     return duration > 0 ? totalRequests / duration : 0;
 }
 
