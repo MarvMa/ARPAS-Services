@@ -2,12 +2,12 @@ import React, {useState, useEffect, useRef, useCallback} from 'react';
 import {SimulationControls} from './components/SimulationControls';
 import {MapViewer} from './components/MapViewer';
 import {ObjectManager} from './components/ObjectManager';
+import {SimulationResultsList} from './components/SimulationResultsList';
 import {SimulationService} from './services/simulationService';
 import {DataCollector} from './services/dataCollector';
 import {StorageService} from './services/storageService';
 import {ProfileService} from './services/profileService';
 import {Profile, SimulationState, SimulationConfig, Object3D} from './types/simulation';
-import {SimulationResultsList} from "./components/SimulationResultsList.tsx";
 
 // Define the profiles to be loaded automatically
 const PRELOADED_PROFILES: string[] = [
@@ -30,7 +30,7 @@ const App: React.FC = () => {
     const [storageServiceAvailable, setStorageServiceAvailable] = useState<boolean>(false);
     const [isLoadingProfiles, setIsLoadingProfiles] = useState<boolean>(false);
     const [loadingError, setLoadingError] = useState<string | null>(null);
-    const [showBenchmarkDashboard, setShowBenchmarkDashboard] = useState<boolean>(true);
+    const [showResults, setShowResults] = useState<boolean>(true);
 
     // Service instances
     const [simulationService] = useState(() => new SimulationService());
@@ -92,8 +92,8 @@ const App: React.FC = () => {
      */
     useEffect(() => {
         simulationService.setAvailableObjects(objects3D);
-    }, [objects3D, simulationService]);
-
+        simulationService.setProfiles(profiles); 
+    }, [objects3D, profiles, simulationService]);
     /**
      * Loads 3D objects from storage service
      */
@@ -310,8 +310,15 @@ const App: React.FC = () => {
             console.log('Stopping simulation...');
             const results = await simulationService.stopSimulation();
             if (results) {
-                console.log('Simulation completed:', results);
-                alert(`Simulation completed! Downloaded ${results.totalObjects} objects with average latency of ${results.averageLatency.toFixed(2)}ms`);
+                console.log('Simulation completed with scientific metrics:', results);
+                alert(`Simulation completed! 
+                    Type: ${results.simulationType}
+                    Objects: ${Object.keys(results.objectMetrics).length}
+                    Avg Latency: ${results.aggregatedStats.latency.mean.toFixed(2)}ms
+                    Cache Hit Rate: ${results.aggregatedStats.cache.hitRate.toFixed(1)}%
+                    Success Rate: ${results.aggregatedStats.success.rate.toFixed(1)}%
+                    
+                    Results saved and downloaded!`);
             }
         } catch (error) {
             console.error('Failed to stop simulation:', error);
@@ -324,7 +331,7 @@ const App: React.FC = () => {
      */
     const handleExportResults = useCallback(async () => {
         try {
-            await dataCollector.exportAllResults();
+            await dataCollector.exportScientificResults();
             alert('Results exported successfully!');
             console.log('All simulation results exported');
         } catch (error) {
@@ -442,10 +449,10 @@ const App: React.FC = () => {
                         {isAddingMode ? 'Cancel Adding' : 'Add 3D Object'}
                     </button>
                     <button
-                        onClick={() => setShowBenchmarkDashboard(!showBenchmarkDashboard)}
+                        onClick={() => setShowResults(!showResults)}
                         className="btn-primary"
                     >
-                        {showBenchmarkDashboard ? 'Hide' : 'Show'} Benchmarks
+                        {showResults ? 'Hide' : 'Show'} Results
                     </button>
                 </div>
             </header>
@@ -529,9 +536,12 @@ const App: React.FC = () => {
                         isAddingMode={isAddingMode}
                         onProfileVisibilityToggle={handleProfileVisibilityToggle}
                     />
-                    <SimulationResultsList 
-                        dataCollector={dataCollector}
-                    />
+
+                    {showResults && (
+                        <SimulationResultsList
+                            dataCollector={dataCollector}
+                        />
+                    )}
                 </div>
             </main>
 
@@ -550,5 +560,4 @@ const App: React.FC = () => {
         </div>
     );
 };
-
 export default App;

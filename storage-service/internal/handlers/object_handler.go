@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
-	"path/filepath"
 	_ "storage-service/internal/utils"
 	"strconv"
 	"strings"
@@ -27,12 +25,13 @@ const ObjectNotFoundError = "object not found"
 
 // ObjectHandler defines handlers for managing 3D object resources.
 type ObjectHandler struct {
-	Service *services.ObjectService
+	Service      *services.ObjectService
+	CacheService *services.CacheService
 }
 
 // NewObjectHandler creates a new ObjectHandler with the given ObjectService.
-func NewObjectHandler(service *services.ObjectService) *ObjectHandler {
-	return &ObjectHandler{Service: service}
+func NewObjectHandler(service *services.ObjectService, cacheService *services.CacheService) *ObjectHandler {
+	return &ObjectHandler{Service: service, CacheService: cacheService}
 }
 
 // ListObjects handles GET /objects to retrieve a list of all 3D objects.
@@ -159,59 +158,6 @@ func (h *ObjectHandler) UploadObject(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(object)
 }
 
-// UpdateObject handles PUT /objects/:id to update an existing object's GLB file.
-// @Summary Update a GLB object
-// @Description Replace an existing GLB object file with a new GLB upload
-// @Tags objects
-// @Accept multipart/form-data
-// @Produce json
-// @Param id path string true "Object ID"
-// @Param file formData file true "New GLB file (.glb format only)"
-// @Success 200 {object} models.Object "Updated object metadata"
-// @Failure 400 {object} map[string]interface{} "Bad request"
-// @Failure 404 {object} map[string]interface{} "Object not found"
-// @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /objects/{id} [put]
-func (h *ObjectHandler) UpdateObject(c *fiber.Ctx) error {
-	idStr := c.Params("id")
-	log.Printf("Updating GLB object - ID: %s, Method: %s, Path: %s, IP: %s", idStr, c.Method(), c.Path(), c.IP())
-	objectID, err := uuid.Parse(idStr)
-	if err != nil {
-		log.Printf("Invalid UUID format for update: %s - Error: %v", idStr, err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": true, "message": InvalidUuidError,
-		})
-	}
-	fileHeader, err := c.FormFile("file")
-	if err != nil {
-		log.Printf("Failed to read GLB file for update: %v", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": true, "message": "failed to read file: " + err.Error(),
-		})
-	}
-	log.Printf("Processing GLB update with file: %s (%d bytes)", fileHeader.Filename, fileHeader.Size)
-
-	updatedObject, err := h.Service.UpdateObject(objectID, fileHeader)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("Object not found for update: ID=%s", objectID)
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": true, "message": ObjectNotFoundError,
-			})
-		}
-		log.Printf("Error updating GLB object: ID=%s, Error=%v", objectID, err)
-		status := fiber.StatusInternalServerError
-		if strings.Contains(err.Error(), "only GLB files are supported") {
-			status = fiber.StatusBadRequest
-		}
-		return c.Status(status).JSON(fiber.Map{
-			"error": true, "message": err.Error(),
-		})
-	}
-	log.Printf("Successfully updated GLB object: ID=%s, Name=%s", objectID, updatedObject.OriginalFilename)
-	return c.JSON(updatedObject)
-}
-
 // DeleteObject handles DELETE /objects/:id to remove an object.
 // @Summary Delete a 3D object
 // @Description Delete a 3D object by ID (removes both the stored file and the metadata record)
@@ -297,20 +243,8 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 
 	if optimizationMode == "optimized" {
 
-		if fi, err := os.Stat(diskMirrorPath(obj.ID)); err == nil && fi.Size() > 0 {
-			ct := obj.ContentType
-			if ct == "" {
-				ct = "model/gltf-binary"
-			}
-			c.Set(fiber.HeaderContentType, ct)
-			c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", obj.ID))
-			c.Set("Content-Encoding", "identity")
-			c.Set("X-Download-Source", "cache-disk")
-			c.Set("X-Optimization-Mode", "optimized")
-			return c.SendFile(diskMirrorPath(obj.ID))
-		}
-		rc, clen, err := h.Service.GetFromCacheStream(obj.ID)
-		if err == nil && rc != nil && clen > 0 {
+		rc, clen, err := h.CacheService.GetFromCacheStream(obj.ID)
+		if err == nil && rc != nil {
 			ct := obj.ContentType
 			if ct == "" {
 				ct = "model/gltf-binary"
@@ -367,8 +301,4 @@ func (e *eofCloser) Read(p []byte) (int, error) {
 		_ = e.ReadCloser.Close()
 	}
 	return n, err
-}
-
-func diskMirrorPath(id uuid.UUID) string {
-	return filepath.Join("/tmp/cache", id.String()+".glb")
 }

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ScientificMetrics } from '../types/simulation';
 import { DataCollector } from '../services/dataCollector';
-
 interface SimulationResultsListProps {
     dataCollector: DataCollector;
 }
