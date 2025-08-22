@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"storage-service/internal/models"
 	_ "storage-service/internal/utils"
 	"strconv"
 	"strings"
@@ -242,31 +243,40 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 	startTime := time.Now()
 
 	if optimizationMode == "optimized" {
-
-		rc, clen, err := h.CacheService.GetFromCacheStream(obj.ID)
-		if err == nil && rc != nil {
-			ct := obj.ContentType
-			if ct == "" {
-				ct = "model/gltf-binary"
-			}
-			c.Set(fiber.HeaderContentType, ct)
-			c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", obj.ID))
-			c.Set("Content-Encoding", "identity")
-			c.Set("X-Download-Source", "cache")
-			c.Set("X-Optimization-Mode", "optimized")
-			c.Set(fiber.HeaderContentLength, strconv.FormatInt(clen, 10))
-			c.Context().SetBodyStream(&eofCloser{rc}, int(clen))
-			log.Printf("perf dl_start_e2e source=cache id=%s size=%d", obj.ID, clen)
-			return c.SendStatus(fiber.StatusOK)
-		}
-		log.Printf("optimized=cache fallback to MinIO: id=%s err=%v", obj.ID, err)
+		return h.handleOptimizedDownload(c, obj, startTime)
 	}
 
+	return h.handleDirectMinIODownload(c, obj, startTime)
+}
+
+func (h *ObjectHandler) handleOptimizedDownload(c *fiber.Ctx, obj *models.Object, startTime time.Time) error {
+	// Try multi-layer cache with intelligent fallback
+	rc, clen, err := h.CacheService.GetFromCacheStream(obj.ID)
+
+	if err == nil && rc != nil {
+		defer rc.Close()
+
+		// Set response headers for cached content
+		h.setCacheResponseHeaders(c, obj, clen)
+
+		// Stream from cache with performance monitoring
+		return h.streamWithMetrics(c, rc, obj.ID, "CACHE", startTime, clen)
+	}
+
+	log.Printf("Optimized cache miss for %s: %v, falling back to MinIO", obj.ID, err)
+
+	// Fallback to MinIO
+	return h.handleDirectMinIODownload(c, obj, startTime)
+}
+
+func (h *ObjectHandler) handleDirectMinIODownload(c *fiber.Ctx, obj *models.Object, startTime time.Time) error {
+	// Get object size for metrics
 	var clen int64 = -1
-	if st, statErr := h.Service.Minio.StatObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.StatObjectOptions{}); statErr == nil {
-		clen = st.Size
+	if stat, statErr := h.Service.Minio.StatObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.StatObjectOptions{}); statErr == nil {
+		clen = stat.Size
 	}
 
+	// Get object from MinIO
 	object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
 	if err != nil {
 		log.Printf("Failed to retrieve file from MinIO: key=%s err=%v", obj.StorageKey, err)
@@ -275,22 +285,69 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 		})
 	}
 
+	// Set response headers for MinIO content
+	h.setMinIOResponseHeaders(c, obj, clen)
+
+	// Stream from MinIO with performance monitoring
+	return h.streamWithMetrics(c, object, obj.ID, "MINIO", startTime, clen)
+}
+
+func (h *ObjectHandler) streamWithMetrics(c *fiber.Ctx, reader io.ReadCloser, objectID uuid.UUID, source string, startTime time.Time, size int64) error {
+	defer reader.Close()
+
+	// Set body stream
+	c.Context().SetBodyStream(&eofCloser{reader}, int(size))
+
+	// Log performance metrics
+	latency := time.Since(startTime).Milliseconds()
+
+	// Different log formats for different sources
+	switch source {
+	case "CACHE":
+		log.Printf("perf dl_start_e2e source=optimized-cache id=%s size=%d latency_ms=%d", objectID, size, latency)
+	case "MINIO":
+		log.Printf("perf dl_end_e2e source=minio id=%s total_ms=%d size=%d", objectID, latency, size)
+	}
+
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func (h *ObjectHandler) setCacheResponseHeaders(c *fiber.Ctx, obj *models.Object, clen int64) {
 	ct := obj.ContentType
 	if ct == "" {
 		ct = "model/gltf-binary"
 	}
+
 	c.Set(fiber.HeaderContentType, ct)
 	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", obj.ID))
 	c.Set("Content-Encoding", "identity")
-	c.Set("X-Download-Source", "minio")
+	c.Set("X-Download-Source", "optimized-cache")
+	c.Set("X-Cache-Strategy", "multi-layer")
+	c.Set("X-Optimization-Mode", "optimized")
+
 	if clen > 0 {
 		c.Set(fiber.HeaderContentLength, strconv.FormatInt(clen, 10))
 	}
 
-	c.Context().SetBodyStream(object, int(clen))
-	latency := time.Since(startTime).Milliseconds()
-	log.Printf("perf dl_end_e2e source=minio id=%s total_ms=%d size=%d", obj.ID, latency, clen)
-	return c.SendStatus(fiber.StatusOK)
+	// Cache control headers for optimized content
+	c.Set("Cache-Control", "public, max-age=3600") // 1 hour browser cache
+	c.Set("ETag", fmt.Sprintf("\"%s\"", obj.ID))
+}
+
+func (h *ObjectHandler) setMinIOResponseHeaders(c *fiber.Ctx, obj *models.Object, clen int64) {
+	ct := obj.ContentType
+	if ct == "" {
+		ct = "model/gltf-binary"
+	}
+
+	c.Set(fiber.HeaderContentType, ct)
+	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", obj.ID))
+	c.Set("Content-Encoding", "identity")
+	c.Set("X-Download-Source", "minio")
+
+	if clen > 0 {
+		c.Set(fiber.HeaderContentLength, strconv.FormatInt(clen, 10))
+	}
 }
 
 type eofCloser struct{ io.ReadCloser }

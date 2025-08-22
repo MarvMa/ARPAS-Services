@@ -5,439 +5,342 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
-	"path/filepath"
 	"storage-service/internal/storage"
 	"storage-service/internal/utils"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 )
 
-// CacheStats holds statistics for a cached object
-type CacheStats struct {
-	Size       int64
-	Hits       int64
-	LastAccess time.Time
-}
-
-// CacheStatistics represents overall cache statistics
-type CacheStatistics struct {
-	TotalObjects int               `json:"totalObjects"`
-	TotalSize    int64             `json:"totalSize"`
-	Objects      []ObjectCacheInfo `json:"objects"`
-	HitRate      float64           `json:"hitRate"`
-	AvgLatency   float64           `json:"avgLatency"`
-}
-
-// ObjectCacheInfo represents cache information for a single object
-type ObjectCacheInfo struct {
-	ID         string    `json:"id"`
-	Size       int64     `json:"size"`
-	Updated    time.Time `json:"updated"`
-	Hits       int64     `json:"hits"`
-	LastAccess time.Time `json:"lastAccess"`
-}
-
+// CacheService provides multi-layer caching with intelligent strategy selection
 type CacheService struct {
-	redis      *storage.RedisClient
+	strategy   *CacheStrategy
 	minio      *minio.Client
 	bucketName string
-	objectTTL  time.Duration
-	stats      sync.Map // map[string]*CacheStats
 	metrics    *utils.Metrics
 
-	totalHits   atomic.Int64
-	totalMisses atomic.Int64
+	// Performance tracking
+	strategyHits   map[string]int64
+	strategyMisses map[string]int64
+	mu             sync.RWMutex
 }
-
-const (
-	diskMirrorDir     = "/tmp/cache"
-	diskMirrorMinSize = 32 << 20
-	rangeChunkBytes   = 16 << 20
-)
 
 func NewCacheService(redis *storage.RedisClient, minio *minio.Client, bucketName string, ttl time.Duration) *CacheService {
-	m := &CacheService{
-		redis:      redis,
-		minio:      minio,
-		bucketName: bucketName,
-		objectTTL:  ttl,
-		metrics:    utils.NewMetrics(),
+	return &CacheService{
+		strategy:       NewCacheStrategy(redis, minio, bucketName, ttl),
+		minio:          minio,
+		bucketName:     bucketName,
+		metrics:        utils.NewMetrics(),
+		strategyHits:   make(map[string]int64),
+		strategyMisses: make(map[string]int64),
 	}
-
-	// Start background metrics collection
-	//go m.collectMetrics()
-
-	return m
 }
 
-// PreloadObjects preloads multiple objects into the cache
-func (m *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUID, storageKeys []string) error {
+// PreloadObjects implements intelligent multi-layer preloading
+func (ocs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUID, storageKeys []string) error {
 	if len(objectIDs) != len(storageKeys) {
 		return fmt.Errorf("objectIDs and storageKeys must have the same length")
 	}
 
-	log.Printf("Preloading %d objects to Redis cache", len(objectIDs))
+	log.Printf("Starting optimized preload for %d objects", len(objectIDs))
 	startTime := time.Now()
 
-	// Use goroutines for parallel preloading with a worker pool
-	const maxWorkers = 10
-	sem := make(chan struct{}, maxWorkers)
-	errChan := make(chan error, len(objectIDs))
+	objectSizes := make(map[uuid.UUID]int64)
+	for i, storageKey := range storageKeys {
+		if stat, err := ocs.minio.StatObject(ctx, ocs.bucketName, storageKey, minio.StatObjectOptions{}); err == nil {
+			objectSizes[objectIDs[i]] = stat.Size
+		} else {
+			log.Printf("Failed to get size for object %s: %v", objectIDs[i], err)
+			objectSizes[objectIDs[i]] = 0 // Will be handled appropriately
+		}
+	}
+
+	// Group objects by cache strategy
+	strategyGroups := ocs.groupObjectsByStrategy(objectIDs, storageKeys, objectSizes)
+
+	// Preload each group with optimal concurrency
 	var wg sync.WaitGroup
+	errChan := make(chan error, len(objectIDs))
 
-	for i := range objectIDs {
+	for strategy, objects := range strategyGroups {
 		wg.Add(1)
-		go func(id uuid.UUID, storageKey string) {
+		go func(strategy string, objects []PreloadObject) {
 			defer wg.Done()
-			sem <- struct{}{}        // Acquire semaphore
-			defer func() { <-sem }() // Release semaphore
-
-			// Check if already cached
-			if exists, _ := m.isObjectCached(id); exists {
-				log.Printf("Object %s already in cache", id)
-				return
-			}
-
-			// Download from MinIO
-			downloadStart := time.Now()
-			data, err := m.downloadFromStorage(ctx, storageKey)
-			if err != nil {
-				errChan <- fmt.Errorf("failed to download object %s: %w", id, err)
-				return
-			}
-			m.metrics.RecordDownloadLatency(time.Since(downloadStart).Milliseconds())
-
-			// Cache the object
-			if err := m.cacheObject(id, data); err != nil {
-				errChan <- fmt.Errorf("failed to cache object %s: %w", id, err)
-				return
-			}
-			go m.saveDiskMirror(id, data) // Save to disk mirror asynchronously for large objects
-
-			log.Printf("Object %s cached successfully (%d bytes)", id, len(data))
-		}(objectIDs[i], storageKeys[i])
+			ocs.preloadStrategyGroup(ctx, strategy, objects, errChan)
+		}(strategy, objects)
 	}
 
 	wg.Wait()
 	close(errChan)
 
-	var errs []error
+	// Collect errors
+	var errors []error
 	for err := range errChan {
-		errs = append(errs, err)
+		errors = append(errors, err)
 	}
 
 	duration := time.Since(startTime)
-	log.Printf("Preload completed in %v with %d errors", duration, len(errs))
+	log.Printf("Optimized preload completed in %v with %d errors", duration, len(errors))
 
-	if len(errs) > 0 {
-		return fmt.Errorf("preload had %d errors: %v", len(errs), errs[0])
+	if len(errors) > 0 {
+		return fmt.Errorf("preload had %d errors: %v", len(errors), errors[0])
 	}
 
 	return nil
 }
 
-// GetObject retrieves an object from cache
-func (m *CacheService) GetObject(ctx context.Context, objectID uuid.UUID) ([]byte, error) {
+// GetFromCacheStream provides optimized streaming with fallback chain
+func (ocs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
 	startTime := time.Now()
 	defer func() {
-		m.metrics.RecordCacheLatency(time.Since(startTime).Milliseconds())
+		ocs.metrics.RecordCacheLatency(time.Since(startTime).Milliseconds())
 	}()
 
-	key := fmt.Sprintf("object:%s:data", objectID.String())
-	data, err := m.redis.GetBytes(key)
-	if err != nil {
-		return nil, fmt.Errorf("redis error: %w", err)
-	}
-
-	if data == nil {
-		m.totalMisses.Add(1)
-		m.metrics.IncrementCacheMisses(objectID.String())
-		return nil, nil // Cache miss
-	}
-
-	// Update statistics
-	m.totalHits.Add(1)
-	m.metrics.IncrementCacheHits(objectID.String())
-	m.updateAccessTime(objectID)
-
-	// Update stats
-	if stats, ok := m.stats.Load(objectID.String()); ok {
-		cacheStats := stats.(*CacheStats)
-		atomic.AddInt64(&cacheStats.Hits, 1)
-		cacheStats.LastAccess = time.Now()
-	}
-
-	log.Printf("[CACHE HIT] Object %s retrieved from cache (%d bytes)", objectID, len(data))
-	return data, nil
-}
-
-// GetObjectOrLoad retrieves from cache or loads from storage if not cached
-func (m *CacheService) GetObjectOrLoad(ctx context.Context, objectID uuid.UUID, storageKey string) ([]byte, bool, error) {
-	// Try cache first
-	data, err := m.GetObject(ctx, objectID)
-	if err != nil {
-		return nil, false, err
-	}
-	if data != nil {
-		return data, true, nil // Cache hit
-	}
-
-	// Cache miss - load from storage
-	log.Printf("Cache miss for %s, loading from storage", objectID)
-	data, err = m.downloadFromStorage(ctx, storageKey)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to download from storage: %w", err)
-	}
-
-	// Cache for future requests
-	go func() {
-		if err := m.cacheObject(objectID, data); err != nil {
-			log.Printf("Failed to cache object %s: %v", objectID, err)
+	if exists, _ := ocs.strategy.memoryCache.Exists(objectID); exists {
+		rc, length, err := ocs.strategy.memoryCache.GetStream(objectID)
+		if err == nil {
+			ocs.recordStrategyHit("MEMORY")
+			log.Printf("CACHE HIT: MEMORY layer for object %s (size: %d)", objectID, length)
+			return rc, length, nil
 		}
-	}()
-
-	return data, false, nil
-}
-
-func (m *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
-	key := fmt.Sprintf("object:%s:data", objectID.String())
-
-	size, err := m.redis.StrLen(key)
-	if err != nil || size <= 0 {
-		return nil, 0, fmt.Errorf("not in cache or size unknown: %w", err)
 	}
 
-	rc := newRedisChunkReader(m.redis, key, size, rangeChunkBytes)
-	return rc, size, nil
-}
+	if exists, _ := ocs.strategy.fileCache.Exists(objectID); exists {
+		rc, length, err := ocs.strategy.fileCache.GetStream(objectID)
+		if err == nil {
+			ocs.recordStrategyHit("FILESYSTEM")
+			log.Printf("CACHE HIT: FILESYSTEM layer for object %s (size: %d)", objectID, length)
 
-func diskPath(id uuid.UUID) string {
-	return filepath.Join(diskMirrorDir, id.String()+".glb")
-}
+			// Async: promote to memory cache if small enough
+			go ocs.promoteToMemory(objectID, length)
 
-func ensureMirrorDir() {
-	_ = os.MkdirAll(diskMirrorDir, 0o755)
-}
-
-func (m *CacheService) saveDiskMirror(id uuid.UUID, data []byte) {
-	if int64(len(data)) < diskMirrorMinSize {
-		return
-	}
-	ensureMirrorDir()
-	path := diskPath(id)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		log.Printf("disk-mirror: write failed for %s: %v", id, err)
-	} else {
-		log.Printf("disk-mirror: wrote %s (%d bytes)", path, len(data))
-	}
-}
-
-// InvalidateObject removes an object from cache
-func (m *CacheService) InvalidateObject(objectID uuid.UUID) error {
-	keys := []string{
-		fmt.Sprintf("object:%s:data", objectID.String()),
-		fmt.Sprintf("object:%s:size", objectID.String()),
-		fmt.Sprintf("object:%s:updated", objectID.String()),
+			return rc, length, nil
+		}
 	}
 
-	err := m.redis.Delete(keys...)
+	if exists, _ := ocs.strategy.redisCache.Exists(objectID); exists {
+		rc, length, err := ocs.strategy.redisCache.GetStream(objectID)
+		if err == nil {
+			ocs.recordStrategyHit("REDIS")
+			log.Printf("CACHE HIT: REDIS layer for object %s (size: %d)", objectID, length)
+
+			// Async: promote to optimal cache
+			go ocs.promoteToOptimalCache(objectID, length)
+
+			return rc, length, nil
+		}
+	}
+
+	// Complete cache miss
+	ocs.recordStrategyMiss("ALL_LAYERS")
+	return nil, 0, fmt.Errorf("object %s not found in any cache layer", objectID)
+}
+
+// GetObjectOrLoad with intelligent caching strategy
+func (ocs *CacheService) GetObjectOrLoad(ctx context.Context, objectID uuid.UUID, storageKey string) ([]byte, bool, error) {
+	// Get object size for strategy decision
+	size, err := ocs.getObjectSizeFromStorage(ctx, storageKey)
 	if err != nil {
-		return fmt.Errorf("failed to invalidate cache: %w", err)
+		return nil, false, fmt.Errorf("failed to get object size: %w", err)
 	}
 
-	m.stats.Delete(objectID.String())
-	log.Printf("Invalidated cache for object %s", objectID)
-	return nil
+	return ocs.strategy.GetObject(ctx, objectID, storageKey, size)
 }
 
-// GetStatistics returns cache statistics
-func (m *CacheService) GetStatistics() (*CacheStatistics, error) {
-	pattern := "object:*:data"
-	keys, err := m.redis.Keys(pattern)
+// InvalidateObject removes from all layers
+func (ocs *CacheService) InvalidateObject(objectID uuid.UUID) error {
+	return ocs.strategy.InvalidateObject(objectID)
+}
+
+// GetStatistics returns comprehensive multi-layer statistics
+func (ocs *CacheService) GetStatistics() (*OptimizedCacheStatistics, error) {
+	strategyStats, err := ocs.strategy.GetStatistics()
 	if err != nil {
 		return nil, err
 	}
 
-	stats := &CacheStatistics{
-		TotalObjects: len(keys),
-		Objects:      make([]ObjectCacheInfo, 0, len(keys)),
+	ocs.mu.RLock()
+	hitsByStrategy := make(map[string]int64)
+	missesByStrategy := make(map[string]int64)
+	for k, v := range ocs.strategyHits {
+		hitsByStrategy[k] = v
 	}
-
-	for _, key := range keys {
-		// Extract UUID from key
-		var id string
-		fmt.Sscanf(key, "object:%s:data", &id)
-
-		sizeStr, _ := m.redis.Get(fmt.Sprintf("object:%s:size", id))
-		updatedStr, _ := m.redis.Get(fmt.Sprintf("object:%s:updated", id))
-
-		var size int64
-		var updated time.Time
-
-		if sizeStr != "" {
-			fmt.Sscanf(sizeStr, "%d", &size)
-			stats.TotalSize += size
-		}
-
-		if updatedStr != "" {
-			var updatedUnix int64
-			fmt.Sscanf(updatedStr, "%d", &updatedUnix)
-			updated = time.Unix(0, updatedUnix*int64(time.Millisecond))
-		}
-
-		objInfo := ObjectCacheInfo{
-			ID:      id,
-			Size:    size,
-			Updated: updated,
-		}
-
-		// Get stats from memory
-		if s, ok := m.stats.Load(id); ok {
-			cacheStats := s.(*CacheStats)
-			objInfo.Hits = atomic.LoadInt64(&cacheStats.Hits)
-			objInfo.LastAccess = cacheStats.LastAccess
-		}
-
-		stats.Objects = append(stats.Objects, objInfo)
+	for k, v := range ocs.strategyMisses {
+		missesByStrategy[k] = v
 	}
+	ocs.mu.RUnlock()
 
-	// Calculate hit rate
-	totalHits := m.totalHits.Load()
-	totalMisses := m.totalMisses.Load()
-	total := totalHits + totalMisses
-	if total > 0 {
-		stats.HitRate = float64(totalHits) / float64(total) * 100
-	}
+	return &OptimizedCacheStatistics{
+		MultiLayer:        *strategyStats,
+		HitsByStrategy:    hitsByStrategy,
+		MissesByStrategy:  missesByStrategy,
+		OptimalCacheUsage: ocs.calculateOptimalCacheUsage(),
+	}, nil
+}
 
-	return stats, nil
+// ClearCache clears all cache layers
+func (ocs *CacheService) ClearCache() error {
+	return ocs.strategy.ClearAll()
 }
 
 // Private helper methods
 
-func (m *CacheService) isObjectCached(objectID uuid.UUID) (bool, error) {
-	key := fmt.Sprintf("object:%s:data", objectID.String())
-	exists, err := m.redis.Exists(key)
-	return exists > 0, err
+type PreloadObject struct {
+	ID         uuid.UUID
+	StorageKey string
+	Size       int64
 }
 
-func (m *CacheService) downloadFromStorage(ctx context.Context, storageKey string) ([]byte, error) {
-	object, err := m.minio.GetObject(ctx, m.bucketName, storageKey, minio.GetObjectOptions{})
-	if err != nil {
-		return nil, err
-	}
-	defer object.Close()
+func (ocs *CacheService) groupObjectsByStrategy(objectIDs []uuid.UUID, storageKeys []string, sizes map[uuid.UUID]int64) map[string][]PreloadObject {
+	groups := make(map[string][]PreloadObject)
 
-	// Read the object data
-	var data []byte
-	buf := make([]byte, 1024*1024) // 1MB buffer
-	for {
-		n, err := object.Read(buf)
-		if n > 0 {
-			data = append(data, buf[:n]...)
+	for i, id := range objectIDs {
+		size := sizes[id]
+		cache := ocs.strategy.GetOptimalCache(size)
+
+		var strategyName string
+		if cache != nil {
+			strategyName = cache.Name()
+		} else {
+			strategyName = "SKIP" // Too large for caching
 		}
-		if err != nil {
-			if err.Error() == "EOF" {
-				break
+
+		groups[strategyName] = append(groups[strategyName], PreloadObject{
+			ID:         id,
+			StorageKey: storageKeys[i],
+			Size:       size,
+		})
+	}
+
+	return groups
+}
+
+func (ocs *CacheService) preloadStrategyGroup(ctx context.Context, strategy string, objects []PreloadObject, errChan chan<- error) {
+	if strategy == "SKIP" {
+		log.Printf("Skipping preload for %d oversized objects", len(objects))
+		return
+	}
+
+	// Adjust concurrency based on strategy
+	maxWorkers := ocs.getOptimalWorkerCount(strategy)
+	sem := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+
+	log.Printf("Preloading %d objects using %s strategy with %d workers", len(objects), strategy, maxWorkers)
+
+	for _, obj := range objects {
+		wg.Add(1)
+		go func(object PreloadObject) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			if err := ocs.strategy.PreloadObject(ctx, object.ID, object.StorageKey, object.Size); err != nil {
+				errChan <- fmt.Errorf("failed to preload %s: %w", object.ID, err)
 			}
-			return nil, err
-		}
+		}(obj)
 	}
 
-	return data, nil
+	wg.Wait()
 }
 
-func (m *CacheService) cacheObject(objectID uuid.UUID, data []byte) error {
-	now := time.Now()
+func (ocs *CacheService) getOptimalWorkerCount(strategy string) int {
+	switch strategy {
+	case "MEMORY":
+		return 20 // Memory operations are fast, can handle more concurrency
+	case "FILESYSTEM":
+		return 10 // Disk I/O limited
+	case "REDIS":
+		return 5 // Network limited
+	default:
+		return 5
+	}
+}
 
-	// Use pipeline for atomic operations
-	pipe := m.redis.Pipeline()
-	ctx := context.Background()
+func (ocs *CacheService) promoteToMemory(objectID uuid.UUID, size int64) {
+	if size > SmallFileThreshold {
+		return // Too large for memory cache
+	}
 
-	// Cache the data
-	dataKey := fmt.Sprintf("object:%s:data", objectID.String())
-	pipe.Set(ctx, dataKey, data, m.objectTTL)
-
-	// Cache metadata
-	sizeKey := fmt.Sprintf("object:%s:size", objectID.String())
-	pipe.Set(ctx, sizeKey, fmt.Sprintf("%d", len(data)), m.objectTTL)
-
-	updatedKey := fmt.Sprintf("object:%s:updated", objectID.String())
-	pipe.Set(ctx, updatedKey, fmt.Sprintf("%d", now.UnixMilli()), m.objectTTL)
-
-	// Update access time
-	pipe.ZAdd(ctx, "object:access", &redis.Z{
-		Score:  float64(now.Unix()),
-		Member: objectID.String(),
-	})
-
-	_, err := pipe.Exec(ctx)
+	// Get data from filesystem cache
+	data, err := ocs.strategy.fileCache.Get(objectID)
 	if err != nil {
-		return fmt.Errorf("failed to cache object: %w", err)
+		return
 	}
 
-	// Update in-memory stats
-	m.stats.Store(objectID.String(), &CacheStats{
-		Size:       int64(len(data)),
-		Hits:       0,
-		LastAccess: now,
-	})
-
-	m.metrics.UpdateCacheSize(int64(len(data)))
-	return nil
-}
-
-func (m *CacheService) updateAccessTime(objectID uuid.UUID) {
-	m.redis.ZAdd("object:access", &redis.Z{
-		Score:  float64(time.Now().Unix()),
-		Member: objectID.String(),
-	})
-}
-
-func (m *CacheService) collectMetrics() {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		stats, err := m.GetStatistics()
-		if err != nil {
-			log.Printf("Error collecting metrics: %v", err)
-			continue
-		}
-
-		m.metrics.SetCacheSize(stats.TotalSize)
-		m.metrics.SetCacheObjectCount(int64(stats.TotalObjects))
+	// Store in memory cache
+	if err := ocs.strategy.memoryCache.Store(objectID, data); err != nil {
+		log.Printf("Failed to promote object %s to memory: %v", objectID, err)
+	} else {
+		log.Printf("Promoted object %s to memory cache", objectID)
 	}
 }
 
-// ClearCache removes all cached objects
-func (m *CacheService) ClearCache() error {
-	keys, err := m.redis.Keys("object:*")
+func (ocs *CacheService) promoteToOptimalCache(objectID uuid.UUID, size int64) {
+	optimal := ocs.strategy.GetOptimalCache(size)
+	if optimal == nil || optimal.Name() == "REDIS" {
+		return // Already in optimal layer or too large
+	}
+
+	// Get data from Redis cache
+	data, err := ocs.strategy.redisCache.Get(objectID)
 	if err != nil {
-		return err
+		return
 	}
 
-	if len(keys) > 0 {
-		err = m.redis.Delete(keys...)
-		if err != nil {
-			return err
+	// Store in optimal cache
+	if err := optimal.Store(objectID, data); err != nil {
+		log.Printf("Failed to promote object %s to %s: %v", objectID, optimal.Name(), err)
+	} else {
+		log.Printf("Promoted object %s to %s cache", objectID, optimal.Name())
+	}
+}
+
+func (ocs *CacheService) getObjectSizeFromStorage(ctx context.Context, storageKey string) (int64, error) {
+	stat, err := ocs.minio.StatObject(ctx, ocs.bucketName, storageKey, minio.StatObjectOptions{})
+	if err != nil {
+		return 0, err
+	}
+	return stat.Size, nil
+}
+
+func (ocs *CacheService) recordStrategyHit(strategy string) {
+	ocs.mu.Lock()
+	ocs.strategyHits[strategy]++
+	ocs.mu.Unlock()
+}
+
+func (ocs *CacheService) recordStrategyMiss(strategy string) {
+	ocs.mu.Lock()
+	ocs.strategyMisses[strategy]++
+	ocs.mu.Unlock()
+}
+
+func (ocs *CacheService) calculateOptimalCacheUsage() map[string]float64 {
+	ocs.mu.RLock()
+	defer ocs.mu.RUnlock()
+
+	usage := make(map[string]float64)
+
+	for strategy := range ocs.strategyHits {
+		hits := ocs.strategyHits[strategy]
+		misses := ocs.strategyMisses[strategy]
+		total := hits + misses
+
+		if total > 0 {
+			usage[strategy] = float64(hits) / float64(total) * 100
 		}
 	}
 
-	// Clear in-memory stats
-	m.stats.Range(func(key, value interface{}) bool {
-		m.stats.Delete(key)
-		return true
-	})
+	return usage
+}
 
-	m.totalHits.Store(0)
-	m.totalMisses.Store(0)
-
-	log.Printf("Cleared cache (%d keys removed)", len(keys))
-	return nil
+// OptimizedCacheStatistics represents comprehensive cache statistics
+type OptimizedCacheStatistics struct {
+	MultiLayer        MultiLayerCacheStats `json:"multiLayer"`
+	HitsByStrategy    map[string]int64     `json:"hitsByStrategy"`
+	MissesByStrategy  map[string]int64     `json:"missesByStrategy"`
+	OptimalCacheUsage map[string]float64   `json:"optimalCacheUsage"`
 }

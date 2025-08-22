@@ -1,4 +1,4 @@
-package services
+package caches
 
 import (
 	"io"
@@ -15,6 +15,10 @@ type redisChunkReader struct {
 
 	buf    []byte
 	bufPos int
+}
+
+func NewRedisChunkReader(cli *storage.RedisClient, key string, size int64, maxChunk int64) io.ReadCloser {
+	return newRedisChunkReader(cli, key, size, maxChunk)
 }
 
 func newRedisChunkReader(cli *storage.RedisClient, key string, size int64, maxChunk int64) io.ReadCloser {

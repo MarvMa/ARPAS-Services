@@ -20,7 +20,7 @@ services:
     build: ./docker-stats
     networks:
       - backend-net
-      - monitoring-net  
+      - monitoring-net
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
@@ -85,7 +85,7 @@ services:
       REDIS_PORT: ${REDIS_PORT}
       STORAGE_URL: ${STORAGE_URL}
     labels:
-      sim.group: "prediction-service"  
+      sim.group: "prediction-service"
     deploy:
       resources:
         limits:
@@ -121,6 +121,57 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       CACHE_TTL: ${CACHE_TTL}
+
+      # Enhanced Multi-Layer Cache Configuration
+      # Memory Cache
+      MEMORY_CACHE_ENABLED: "true"
+      MEMORY_CACHE_MAX_SIZE_MB: "2048"        # 2GB for better performance
+      MEMORY_CACHE_TTL: "30m"
+      MEMORY_CACHE_MAX_OBJECTS: "15000"
+      MEMORY_CACHE_CLEANUP_INTERVAL: "5m"
+
+      # FileSystem Cache
+      FS_CACHE_ENABLED: "true"
+      FS_CACHE_PATH: "/cache/filesystem"
+      FS_CACHE_MAX_SIZE_MB: "10240"           # 10GB for extensive caching
+      FS_CACHE_TTL: "4h"                      # Longer TTL for disk cache
+      FS_CACHE_MAX_OBJECTS: "100000"
+      FS_CACHE_CLEANUP_INTERVAL: "15m"
+      FS_CACHE_IO_BUFFER_SIZE: "131072"      # 128KB for better I/O
+
+      # Redis Cache (optimized)
+      REDIS_CACHE_ENABLED: "true"
+      REDIS_CACHE_TTL: "12h"                  # Longer TTL for network cache
+      REDIS_CACHE_MAX_OBJECTS: "200000"
+      REDIS_CHUNK_SIZE_BYTES: "2097152"      # 2MB chunks for better performance
+      REDIS_PIPELINE_SIZE: "200"             # Larger pipeline
+      REDIS_CONNECTION_POOL: "300"           # More connections
+
+      # Cache Strategy (fine-tuned for Windows/Docker)
+      CACHE_SMALL_FILE_THRESHOLD_MB: "8"     # 8MB → Memory
+      CACHE_MEDIUM_FILE_THRESHOLD_MB: "32"   # 32MB → FileSystem
+      CACHE_LARGE_FILE_THRESHOLD_MB: "100"   # 100MB → Redis
+      CACHE_ENABLE_FALLBACK: "true"
+      CACHE_ENABLE_PROMOTION: "true"
+      CACHE_PROMOTION_DELAY: "50ms"          # Faster promotion
+      CACHE_FREQUENT_ACCESS_THRESHOLD: "2"   # Lower threshold
+      CACHE_ACCESS_COUNT_WINDOW: "30m"       # Shorter window
+
+      # Performance Optimization
+      PRELOAD_WORKERS: "15"                  # More workers for preloading
+      PRELOAD_BATCH_SIZE: "25"               # Smaller batches for better responsiveness
+      PRELOAD_TIMEOUT: "3m"
+      MAX_CONCURRENT_DOWNLOADS: "150"        # Higher concurrency
+      MAX_CONCURRENT_PRELOADS: "30"
+      STREAM_BUFFER_SIZE: "131072"           # 128KB streaming buffer
+      ENABLE_STREAM_OPTIMIZATION: "true"
+
+      # Metrics and Monitoring
+      METRICS_ENABLED: "true"
+      METRICS_INTERVAL: "15s"                # More frequent metrics
+      DETAILED_METRICS: "true"
+      HEALTH_CHECK_INTERVAL: "20s"
+      HEALTH_CHECK_TIMEOUT: "3s"
     expose:
       - "${STORAGE_PORT}"
     deploy:

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 	"storage-service/internal/models"
 	"storage-service/internal/services"
@@ -32,21 +31,7 @@ func NewPredictionHandler(objectService *services.ObjectService) *PredictionHand
 // @Failure 500 {object} map[string]interface{} "Internal server error"
 // @Router /predictions [post]
 func (h *PredictionHandler) GetPredictedModels(c *fiber.Ctx) error {
-
-	if c.Method() != fiber.MethodPost {
-		log.Fatalf("Method not allowed: %s for prediction endpoint", c.Method())
-		return c.Status(http.StatusMethodNotAllowed).JSON(fiber.Map{
-			"error": "Method not allowed, use POST",
-		})
-	}
-
 	var req models.PredictionRequest
-	if err := c.BodyParser(&req); err != nil {
-		log.Fatalf("Invalid prediction request format: %v", err)
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request format",
-		})
-	}
 
 	modelIDs, err := h.objectService.GetPredictedModels(req)
 

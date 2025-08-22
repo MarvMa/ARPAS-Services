@@ -13,7 +13,7 @@ RUN go install github.com/swaggo/swag/cmd/swag@latest
 COPY . .
 
 # Generate Swagger documentation (outputs to ./docs)
-RUN swag init -g cmd/main.go -o ./docs --parseDependency --parseInternal
+#RUN swag init -g cmd/main.go -o ./docs --parseDependency --parseInternal
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -o storage-service ./cmd/main.go
@@ -26,7 +26,7 @@ WORKDIR /
 
 # Copy the compiled binary and Swagger docs from the builder stage
 COPY --from=builder /app/storage-service /storage-service
-COPY --from=builder /app/docs /docs
+#COPY --from=builder /app/docs /docs
 
 EXPOSE 8080
 
