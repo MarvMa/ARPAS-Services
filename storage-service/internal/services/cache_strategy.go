@@ -28,6 +28,18 @@ type CacheStrategy struct {
 	minio       *minio.Client
 	bucketName  string
 }
+type MultiLayerCacheStats struct {
+	Memory     cache.LayerStats `json:"memory"`
+	FileSystem cache.LayerStats `json:"fileSystem"`
+	Redis      cache.LayerStats `json:"redis"`
+	Strategy   StrategyStats    `json:"strategy"`
+}
+
+type StrategyStats struct {
+	SmallFileThreshold  int64 `json:"smallFileThreshold"`
+	MediumFileThreshold int64 `json:"mediumFileThreshold"`
+	LargeFileThreshold  int64 `json:"largeFileThreshold"`
+}
 
 func NewCacheStrategy(redis *storage.RedisClient, minio *minio.Client, bucketName string, ttl time.Duration) *CacheStrategy {
 	return &CacheStrategy{
@@ -89,24 +101,6 @@ func (cs *CacheStrategy) PreloadObject(ctx context.Context, objectID uuid.UUID, 
 		objectID, cacheStrategy.Name(), downloadLatency, cacheLatency, len(data))
 
 	return nil
-}
-
-// GetObjectStream retrieves object with optimal streaming strategy
-func (cs *CacheStrategy) GetObjectStream(ctx context.Context, objectID uuid.UUID, size int64) (io.ReadCloser, int64, error) {
-	cacheStrategy := cs.GetOptimalCache(size)
-	if cacheStrategy == nil {
-		// Direct MinIO access for very large files
-		return cs.getMinioStream(ctx, objectID)
-	}
-
-	// Try cache first
-	if exists, _ := cacheStrategy.Exists(objectID); exists {
-		return cacheStrategy.GetStream(objectID)
-	}
-
-	// Cache miss - fallback to MinIO
-	log.Printf("Cache miss for %s in %s layer, falling back to MinIO", objectID, cacheStrategy.Name())
-	return cs.getMinioStream(ctx, objectID)
 }
 
 // GetObject retrieves full object data
@@ -201,8 +195,6 @@ func (cs *CacheStrategy) ClearAll() error {
 	return nil
 }
 
-// Private helper methods
-
 func (cs *CacheStrategy) downloadFromMinio(ctx context.Context, storageKey string) ([]byte, error) {
 	object, err := cs.minio.GetObject(ctx, cs.bucketName, storageKey, minio.GetObjectOptions{})
 	if err != nil {
@@ -211,23 +203,4 @@ func (cs *CacheStrategy) downloadFromMinio(ctx context.Context, storageKey strin
 	defer object.Close()
 
 	return io.ReadAll(object)
-}
-
-func (cs *CacheStrategy) getMinioStream(ctx context.Context, objectID uuid.UUID) (io.ReadCloser, int64, error) {
-	// This would need object lookup - simplified for example
-	// In real implementation, get storageKey from object metadata
-	return nil, 0, fmt.Errorf("MinIO stream fallback not implemented in this example")
-}
-
-type MultiLayerCacheStats struct {
-	Memory     cache.LayerStats `json:"memory"`
-	FileSystem cache.LayerStats `json:"fileSystem"`
-	Redis      cache.LayerStats `json:"redis"`
-	Strategy   StrategyStats    `json:"strategy"`
-}
-
-type StrategyStats struct {
-	SmallFileThreshold  int64 `json:"smallFileThreshold"`
-	MediumFileThreshold int64 `json:"mediumFileThreshold"`
-	LargeFileThreshold  int64 `json:"largeFileThreshold"`
 }

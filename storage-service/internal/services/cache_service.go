@@ -6,7 +6,6 @@ import (
 	"io"
 	"log"
 	"storage-service/internal/storage"
-	"storage-service/internal/utils"
 	"sync"
 	"time"
 
@@ -19,12 +18,24 @@ type CacheService struct {
 	strategy   *CacheStrategy
 	minio      *minio.Client
 	bucketName string
-	metrics    *utils.Metrics
 
 	// Performance tracking
 	strategyHits   map[string]int64
 	strategyMisses map[string]int64
 	mu             sync.RWMutex
+}
+type PreloadObject struct {
+	ID         uuid.UUID
+	StorageKey string
+	Size       int64
+}
+
+// OptimizedCacheStatistics represents comprehensive cache statistics
+type OptimizedCacheStatistics struct {
+	MultiLayer        MultiLayerCacheStats `json:"multiLayer"`
+	HitsByStrategy    map[string]int64     `json:"hitsByStrategy"`
+	MissesByStrategy  map[string]int64     `json:"missesByStrategy"`
+	OptimalCacheUsage map[string]float64   `json:"optimalCacheUsage"`
 }
 
 func NewCacheService(redis *storage.RedisClient, minio *minio.Client, bucketName string, ttl time.Duration) *CacheService {
@@ -32,7 +43,6 @@ func NewCacheService(redis *storage.RedisClient, minio *minio.Client, bucketName
 		strategy:       NewCacheStrategy(redis, minio, bucketName, ttl),
 		minio:          minio,
 		bucketName:     bucketName,
-		metrics:        utils.NewMetrics(),
 		strategyHits:   make(map[string]int64),
 		strategyMisses: make(map[string]int64),
 	}
@@ -92,18 +102,13 @@ func (ocs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UU
 }
 
 // GetFromCacheStream provides optimized streaming with fallback chain
-func (ocs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
-	startTime := time.Now()
-	defer func() {
-		ocs.metrics.RecordCacheLatency(time.Since(startTime).Milliseconds())
-	}()
-
+func (ocs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error, string) {
 	if exists, _ := ocs.strategy.memoryCache.Exists(objectID); exists {
 		rc, length, err := ocs.strategy.memoryCache.GetStream(objectID)
 		if err == nil {
 			ocs.recordStrategyHit("MEMORY")
 			log.Printf("CACHE HIT: MEMORY layer for object %s (size: %d)", objectID, length)
-			return rc, length, nil
+			return rc, length, nil, "MEMORY"
 		}
 	}
 
@@ -116,7 +121,7 @@ func (ocs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, 
 			// Async: promote to memory cache if small enough
 			go ocs.promoteToMemory(objectID, length)
 
-			return rc, length, nil
+			return rc, length, nil, "FILESYSTEM"
 		}
 	}
 
@@ -129,13 +134,13 @@ func (ocs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, 
 			// Async: promote to optimal cache
 			go ocs.promoteToOptimalCache(objectID, length)
 
-			return rc, length, nil
+			return rc, length, nil, "REDIS"
 		}
 	}
 
 	// Complete cache miss
 	ocs.recordStrategyMiss("ALL_LAYERS")
-	return nil, 0, fmt.Errorf("object %s not found in any cache layer", objectID)
+	return nil, 0, fmt.Errorf("object %s not found in any cache layer", objectID), "NO_CACHE"
 }
 
 // GetObjectOrLoad with intelligent caching strategy
@@ -183,14 +188,6 @@ func (ocs *CacheService) GetStatistics() (*OptimizedCacheStatistics, error) {
 // ClearCache clears all cache layers
 func (ocs *CacheService) ClearCache() error {
 	return ocs.strategy.ClearAll()
-}
-
-// Private helper methods
-
-type PreloadObject struct {
-	ID         uuid.UUID
-	StorageKey string
-	Size       int64
 }
 
 func (ocs *CacheService) groupObjectsByStrategy(objectIDs []uuid.UUID, storageKeys []string, sizes map[uuid.UUID]int64) map[string][]PreloadObject {
@@ -335,12 +332,4 @@ func (ocs *CacheService) calculateOptimalCacheUsage() map[string]float64 {
 	}
 
 	return usage
-}
-
-// OptimizedCacheStatistics represents comprehensive cache statistics
-type OptimizedCacheStatistics struct {
-	MultiLayer        MultiLayerCacheStats `json:"multiLayer"`
-	HitsByStrategy    map[string]int64     `json:"hitsByStrategy"`
-	MissesByStrategy  map[string]int64     `json:"missesByStrategy"`
-	OptimalCacheUsage map[string]float64   `json:"optimalCacheUsage"`
 }
