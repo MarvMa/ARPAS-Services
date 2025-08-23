@@ -76,11 +76,25 @@ export interface ObjectMetric {
     timestamp: number;
     simulationType: 'optimized' | 'unoptimized';
     simulationId: string;
-    downloadSource?: 'cache' | 'minio' | 'unknown' | 'baseline' | 'error';
+    downloadSource?: string; // 'cache' | 'minio' | 'unknown' | 'baseline' | 'error';
     cacheHit?: boolean;
     compressionRatio?: number;
     error?: string;
     isBaseline?: boolean;
+
+    detailedLatencies?: {
+        dbLookupMs?: number;
+        firstByteMs?: number;
+        cacheMemoryMs?: number;
+        cacheFilesystemMs?: number;
+        cacheRedisMs?: number;
+        minioMs?: number;
+        streamMs?: number;
+        promotionMs?: number;
+        cacheWaterfallMs?: number;
+    };
+    cacheLayerUsed?: string;
+    optimizationMode?: string;
 }
 
 export interface ScientificMetrics {
@@ -109,9 +123,20 @@ export interface ScientificMetrics {
                     server: number;
                     client: number;
                     network: number;
+                    dbLookup?: number;
+                    firstByte?: number;
+                    cacheMemory?: number;
+                    cacheFilesystem?: number;
+                    cacheRedis?: number;
+                    minio?: number;
+                    stream?: number;
+                    promotion?: number;
+                    cacheWaterfall?: number;
                 };
                 cacheHit: boolean;
                 downloadSource: string;
+                cacheLayerUsed?: string;
+                optimizationMode?: string;
                 sizeBytes: number;
                 success: boolean;
                 error?: string;
@@ -125,6 +150,16 @@ export interface ScientificMetrics {
                 p95Latency: number;
                 cacheHitRate: number;
                 successRate: number;
+                detailedLatencies: {
+                    dbLookup: { mean: number; max: number; count: number };
+                    firstByte: { mean: number; max: number; count: number };
+                    cacheAccess: {
+                        memory: { hits: number; avgLatency: number };
+                        filesystem: { hits: number; avgLatency: number };
+                        redis: { hits: number; avgLatency: number };
+                    };
+                    cacheLayerDistribution: Map<string, number>;
+                }
             };
         };
     };
@@ -225,3 +260,4 @@ export function isValidStorageObject(obj: any): obj is StorageObjectResponse {
         (obj.altitude === undefined || typeof obj.altitude === 'number')
     );
 }
+

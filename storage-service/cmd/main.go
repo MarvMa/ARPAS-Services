@@ -32,26 +32,47 @@ func main() {
 	objectRepo := repository.NewObjectRepository(db)
 	objectService := services.NewObjectService(objectRepo, minioClient, cfg.MinioBucket, cfg)
 
-	// Initialize optimized multi-layer cache service
-	cacheService := services.NewCacheService(redisClient, minioClient, cfg.MinioBucket, cfg.CacheTTL)
+	// ========== INSTRUMENTIERUNG BEGINNT HIER ==========
 
-	// Initialize handlers
+	// 1. Erstelle den instrumentierten Cache Service
+	instrumentedCacheService := services.NewInstrumentedCacheService(
+		redisClient,
+		minioClient,
+		cfg.MinioBucket,
+		cfg.CacheTTL,
+	)
+
+	// 2. Erstelle die instrumentierten Handler
 	predictionHandler := handlers.NewPredictionHandler(objectService)
-	cacheHandler := handlers.NewCacheHandler(cacheService, objectService)
-	objectHandler := handlers.NewObjectHandler(objectService, cacheService)
+
+	// Verwende den instrumentierten Cache Handler
+	instrumentedCacheHandler := handlers.NewInstrumentedCacheHandler(
+		instrumentedCacheService,
+		objectService,
+	)
+
+	// Verwende den instrumentierten Object Handler
+	instrumentedObjectHandler := handlers.NewInstrumentedObjectHandler(
+		objectService,
+		instrumentedCacheService,
+	)
+
+	// ========== INSTRUMENTIERUNG ENDET HIER ==========
 
 	app := fiber.New(fiber.Config{
 		BodyLimit:         500 * 1024 * 1024, // 500 MB
 		ReadTimeout:       5 * time.Minute,
 		WriteTimeout:      5 * time.Minute,
-		ServerHeader:      "Storage Service v2.0 (Optimized)",
+		ServerHeader:      "Storage Service v2.0 (Instrumented)",
 		DisableKeepalive:  false,
-		StreamRequestBody: true, // Enable streaming for better performance
+		StreamRequestBody: true,
 	})
 
-	// Enhanced Logger Middleware with cache information
+	// Enhanced Logger Middleware mit Latenz-Informationen
 	app.Use(logger.New(logger.Config{
-		Format:     "[${time}] ${status} - ${method} ${path} ${query} - ${ip} - ${latency} - ${header:x-download-source} - ${header:x-cache-strategy}\n",
+		Format: "[${time}] ${status} - ${method} ${path} ${query} - ${ip} - ${latency} - " +
+			"Cache:${header:x-cache-hit} Layer:${header:x-cache-layer-used} " +
+			"TotalMs:${header:x-latency-total-ms} FirstByteMs:${header:x-latency-first-byte-ms}\n",
 		TimeFormat: "2006-01-02 15:04:05",
 		Output:     os.Stdout,
 	}))
@@ -59,12 +80,13 @@ func main() {
 	// Register Prometheus metrics endpoint
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
-	// Enhanced Health check endpoint with cache status
+	// Enhanced Health check endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
-		// Quick cache health check
 		cacheHealth := "unknown"
-		if stats, err := cacheService.GetStatistics(); err == nil {
-			totalObjects := stats.MultiLayer.Memory.Objects + stats.MultiLayer.FileSystem.Objects + stats.MultiLayer.Redis.Objects
+		if stats, err := instrumentedCacheService.GetStatistics(); err == nil {
+			totalObjects := stats.MultiLayer.Memory.Objects +
+				stats.MultiLayer.FileSystem.Objects +
+				stats.MultiLayer.Redis.Objects
 			if totalObjects > 0 {
 				cacheHealth = "active"
 			} else {
@@ -73,10 +95,11 @@ func main() {
 		}
 
 		return c.JSON(fiber.Map{
-			"status":      "healthy",
-			"version":     "2.0-optimized",
-			"cacheHealth": cacheHealth,
-			"timestamp":   time.Now(),
+			"status":       "healthy",
+			"version":      "2.0-instrumented",
+			"cacheHealth":  cacheHealth,
+			"timestamp":    time.Now(),
+			"instrumented": true,
 		})
 	})
 
@@ -86,21 +109,30 @@ func main() {
 	// Prediction routes
 	api.Post("/predict", predictionHandler.GetPredictedModels)
 
-	// Object routes (using optimized handler)
-	api.Get("/objects", objectHandler.ListObjects)
-	api.Get("/objects/:id", objectHandler.GetObject)
-	api.Post("/objects/upload", objectHandler.UploadObject)
-	api.Delete("/objects/:id", objectHandler.DeleteObject)
-	api.Get("/objects/:id/download", objectHandler.DownloadObject) // Optimized download with multi-layer caching
+	api.Get("/objects", instrumentedObjectHandler.ListObjects)
+	api.Get("/objects/:id", instrumentedObjectHandler.GetObject)
+	api.Post("/objects/upload", instrumentedObjectHandler.UploadObject)
+	api.Delete("/objects/:id", instrumentedObjectHandler.DeleteObject)
 
-	// Enhanced Cache routes with multi-layer support
+	api.Get("/objects/:id/download", instrumentedObjectHandler.DownloadObject)
+
 	cacheGroup := app.Group("/cache")
+	cacheGroup.Post("/preload", instrumentedCacheHandler.PreloadObjects)
+	cacheGroup.Delete("/object/:id", instrumentedCacheHandler.InvalidateObject)
+	cacheGroup.Get("/stats", instrumentedCacheHandler.GetCacheStats)
+	cacheGroup.Post("/clear", instrumentedCacheHandler.ClearCache)
 
-	// Preloading
-	cacheGroup.Post("/preload", cacheHandler.PreloadObjects) // Intelligent multi-layer preloading
+	// Neue Endpoints für erweiterte Metriken
+	metricsGroup := app.Group("/api/metrics")
 
-	// Cache management
-	cacheGroup.Delete("/object/:id", cacheHandler.InvalidateObject) // Invalidate from all layers
+	// Endpoint für detaillierte Download-Metriken
+	metricsGroup.Get("/downloads/latest", func(c *fiber.Ctx) error {
+		// Implementierung für letzte Download-Metriken
+		return c.JSON(fiber.Map{
+			"message": "Latest download metrics",
+			"info":    "Check response headers of download endpoint for detailed metrics",
+		})
+	})
 
 	// Swagger documentation
 	app.Get("/swagger/*", swagger.New(swagger.Config{
@@ -108,35 +140,9 @@ func main() {
 		DeepLinking:  false,
 		DocExpansion: "list",
 		OAuth: &swagger.OAuthConfig{
-			AppName: "Storage Service API v2.0",
+			AppName: "Storage Service API v2.0 (Instrumented)",
 		},
 	}))
-
-	// Log registered routes with descriptions
-	routes := app.GetRoutes()
-	log.Println("Registered routes (Storage Service v2.0 with Optimized Multi-Layer Caching):")
-	routeDescriptions := map[string]string{
-		"GET /api/storage/objects/:id/download": "Multi-layer caching (Memory→FileSystem→Redis→MinIO)",
-		"POST /cache/preload":                   "Intelligent multi-layer preloading",
-		"GET /cache/stats":                      "Comprehensive cache statistics",
-		"GET /health":                           "Health check with cache status",
-	}
-
-	for _, r := range routes {
-		description := routeDescriptions[r.Method+" "+r.Path]
-		if description != "" {
-			log.Printf("  %s %s - %s\n", r.Method, r.Path, description)
-		} else {
-			log.Printf("  %s %s\n", r.Method, r.Path)
-		}
-	}
-
-	// Log cache strategy configuration
-	log.Println("\nOptimized Cache Strategy Configuration:")
-	log.Printf("  Layer 1 (Memory):     Files ≤ %d MB (up to 1GB total)", services.SmallFileThreshold/(1024*1024))
-	log.Printf("  Layer 2 (FileSystem): Files ≤ %d MB (up to 5GB total)", services.MediumFileThreshold/(1024*1024))
-	log.Printf("  Layer 3 (Redis):      Files ≤ %d MB (configurable total)", services.LargeFileThreshold/(1024*1024))
-	log.Printf("  Layer 4 (MinIO):      Direct access for files > %d MB", services.LargeFileThreshold/(1024*1024))
 
 	// Start the server
 	port := os.Getenv("STORAGE_PORT")
@@ -148,22 +154,18 @@ func main() {
 		}
 	}
 
+	log.Printf("\n🚀 Storage Service v2.0 INSTRUMENTED starting on port %s", port)
+	log.Printf("📊 Full latency instrumentation enabled")
+	log.Printf("📈 Check response headers for detailed metrics")
+
 	log.Fatal(app.Listen(":" + port))
 }
-
-// Existing helper functions remain the same but with enhanced logging
 
 func InitConfig() *config.Config {
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Config error: %v", err)
 	}
-
-	log.Printf("Configuration loaded:")
-	log.Printf("  Cache TTL: %v", cfg.CacheTTL)
-	log.Printf("  Redis: %s:%s", cfg.RedisHost, cfg.RedisPort)
-	log.Printf("  MinIO: %s", cfg.MinioEndpoint)
-
 	return cfg
 }
 
@@ -172,7 +174,6 @@ func ConnectDatabase(cfg *config.Config) *gorm.DB {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	log.Printf("Database connected: %s:%s/%s", cfg.DBHost, cfg.DBPort, cfg.DBName)
 	return db
 }
 
@@ -181,13 +182,9 @@ func MigrateDatabase(db *gorm.DB) {
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
-
-	// Ensure spatial indexes exist for prediction queries
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_objects_lat_lon ON objects (latitude, longitude)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_objects_lat ON objects (latitude)`)
 	db.Exec(`CREATE INDEX IF NOT EXISTS idx_objects_lon ON objects (longitude)`)
-
-	log.Printf("Database migration completed with spatial indexes")
 }
 
 func InitMinIOClient(cfg *config.Config) *minio.Client {
@@ -195,7 +192,6 @@ func InitMinIOClient(cfg *config.Config) *minio.Client {
 	if err != nil {
 		log.Fatalf("Failed to initialize MinIO client: %v", err)
 	}
-	log.Printf("MinIO client initialized: %s (bucket: %s)", cfg.MinioEndpoint, cfg.MinioBucket)
 	return minioClient
 }
 
@@ -204,6 +200,5 @@ func InitRedisClient(cfg *config.Config) *storage.RedisClient {
 	if err != nil {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
 	}
-	log.Printf("Redis client initialized: %s:%s", cfg.RedisHost, cfg.RedisPort)
 	return redisClient
 }
