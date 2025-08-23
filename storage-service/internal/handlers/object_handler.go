@@ -402,6 +402,7 @@ func (h *ObjectHandler) setMinIOResponseHeaders(c *fiber.Ctx, obj *models.Object
 	c.Set("X-Cache-Hit", "false")
 	c.Set("X-Cache-Layer-Used", cacheMetrics.LayerUsed)
 	c.Set("X-Cache-Layer-Latency-Ms", fmt.Sprintf("%.2f", cacheMetrics.LayerLatencyMs))
+	c.Set("X-Optimization-Mode", "direct-minio")
 
 	// Serialize cache metrics to JSON header
 	if metricsJson, err := json.Marshal(cacheMetrics); err == nil {

@@ -356,27 +356,40 @@ const App: React.FC = () => {
             const results = await simulationService.stopSimulation();
 
             if (results) {
-                const dockerMetricsCount = Object.keys(results.dockerTimeSeries).length;
+                const dockerMetricsCount = Object.keys(results.dockerTimeSeries || {}).length;
+                const objectMetricsCount = Object.keys(results.objectMetrics || {}).length;
+                const profileMetricsCount = Object.keys(results.profileMetrics || {}).length;
+
+                const avgLatency = results.aggregatedStats?.latency?.mean || 0;
+                const cacheHitRate = results.aggregatedStats?.cache?.hitRate || 0;
+                const successRate = results.aggregatedStats?.success?.rate || 0;
 
                 console.log('Simulation completed with comprehensive metrics:', {
                     type: results.simulationType,
-                    objects: Object.keys(results.objectMetrics).length,
-                    profiles: Object.keys(results.profileMetrics).length,
+                    objects: objectMetricsCount,
+                    profiles: profileMetricsCount,
                     dockerServices: dockerMetricsCount,
-                    avgLatency: results.aggregatedStats.latency.mean.toFixed(2) + 'ms',
-                    cacheHitRate: results.aggregatedStats.cache.hitRate.toFixed(1) + '%',
-                    successRate: results.aggregatedStats.success.rate.toFixed(1) + '%'
+                    avgLatency: avgLatency.toFixed(2) + 'ms',
+                    cacheHitRate: cacheHitRate.toFixed(1) + '%',
+                    successRate: successRate.toFixed(1) + '%',
+                    duration: results.duration?.totalMs ? `${(results.duration.totalMs / 1000).toFixed(1)}s` : 'N/A'
                 });
 
-                alert(`Simulation completed successfully! 
-                    Type: ${results.simulationType}
-                    Objects: ${Object.keys(results.objectMetrics).length}
-                    Avg Latency: ${results.aggregatedStats.latency.mean.toFixed(2)}ms
-                    Cache Hit Rate: ${results.aggregatedStats.cache.hitRate.toFixed(1)}%
-                    Success Rate: ${results.aggregatedStats.success.rate.toFixed(1)}%
-                    ${dockerMetricsCount > 0 ? `Docker Services Monitored: ${dockerMetricsCount}` : 'No Docker metrics collected'}
-                    
-                    Results saved and downloaded!`);
+                const alertMessage = `Simulation completed successfully!
+                        Type: ${results.simulationType || 'Unknown'}
+                        Duration: ${results.duration?.totalMs ? `${(results.duration.totalMs / 1000).toFixed(1)}s` : 'N/A'}
+                        Objects Downloaded: ${objectMetricsCount}
+                        Profiles: ${profileMetricsCount}
+                        Avg Latency: ${avgLatency.toFixed(2)}ms
+                        Cache Hit Rate: ${cacheHitRate.toFixed(1)}%
+                        Success Rate: ${successRate.toFixed(1)}%
+                        ${dockerMetricsCount > 0 ? `Docker Services Monitored: ${dockerMetricsCount}` : 'No Docker metrics collected'}
+                        Results saved and downloaded!`;
+
+                alert(alertMessage);
+            } else {
+                console.warn('No simulation results available');
+                alert('Simulation completed, but no metrics were collected. Check console for details.');
             }
         } catch (error) {
             console.error('Failed to stop simulation:', error);

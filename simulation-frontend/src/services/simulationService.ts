@@ -339,7 +339,6 @@ export class SimulationService {
      * Download object with deduplication
      */
     private async downloadObject(objectId: string, profileId: string): Promise<void> {
-        // Check if this profile has already downloaded this object
         const profileDownloads = this.downloadedObjectsPerProfile.get(profileId);
         if (!profileDownloads) {
             this.downloadedObjectsPerProfile.set(profileId, new Set<string>());
@@ -370,22 +369,31 @@ export class SimulationService {
                     headers
                 }
             );
+            console.log(`Downloaded object ${objectId} for profile ${profileId}, status: ${response.status}`);
 
             const endTime = performance.now();
             const totalLatency = endTime - startTime;
             const sizeBytes = response.data.size || 0;
 
             const extractHeaderValue = (headerName: string): number => {
-                const value = response.headers[headerName.toLowerCase()];
-                return value ? parseFloat(value) : 0;
+                const value = response.headers[headerName.toLowerCase()] ||
+                    response.headers[headerName] ||
+                    response.headers[headerName.toUpperCase()];
+                const parsed = parseFloat(value);
+                return isNaN(parsed) ? 0 : parsed;
             };
 
             const extractHeaderString = (headerName: string): string | undefined => {
-                return response.headers[headerName.toLowerCase()] || undefined;
+                const value = response.headers[headerName.toLowerCase()] ||
+                    response.headers[headerName] ||
+                    response.headers[headerName.toUpperCase()];
+                return value || undefined;
             };
 
+            console.log('Response headers:', Object.keys(response.headers));
+
             const downloadSource = extractHeaderString('x-download-source') || 'unknown';
-            const serverLatency = extractHeaderValue('x-download-latency-ms');
+            const serverLatency = extractHeaderValue('x-download-latency-ms') || extractHeaderValue('x-latency-total-ms');
             const networkLatency = extractHeaderValue('x-network-latency-ms');
 
             const dbLookupMs = extractHeaderValue('x-latency-db-lookup-ms');
@@ -400,7 +408,7 @@ export class SimulationService {
             const cacheWaterfallMs = extractHeaderValue('x-latency-cache-waterfall-ms');
 
             const cacheHitHeader = extractHeaderString('x-cache-hit');
-            const cacheHit = cacheHitHeader === 'true';
+            const cacheHit = cacheHitHeader === 'true' || cacheHitHeader === '1';
             const cacheLayerUsed = extractHeaderString('x-cache-layer-used');
             const optimizationMode = extractHeaderString('x-optimization-mode');
             const objectSize = extractHeaderValue('x-object-size-bytes') || sizeBytes;
@@ -447,20 +455,21 @@ export class SimulationService {
                     cacheWaterfallMs
                 }
             };
-
-
+            
             profileState.metrics.push(metric);
 
             console.log(`Downloaded ${objectId} for ${profileId}:`, {
                 totalLatency: `${totalLatency.toFixed(2)}ms`,
                 serverLatency: `${effectiveServerLatency.toFixed(2)}ms`,
+                clientLatency: `${clientLatency.toFixed(2)}ms`,
                 source: downloadSource,
                 cacheLayer: cacheLayerUsed || 'none',
                 cacheHit,
                 dbLookup: dbLookupMs ? `${dbLookupMs.toFixed(2)}ms` : 'N/A',
                 firstByte: firstByteMs ? `${firstByteMs.toFixed(2)}ms` : 'N/A',
                 size: `${(objectSize / 1024).toFixed(2)}KB`,
-                uniqueDownloads: downloads.size
+                uniqueDownloads: downloads.size,
+                headers: response.headers
             });
         } catch (error) {
             const endTime = performance.now();

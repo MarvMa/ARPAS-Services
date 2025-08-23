@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -117,7 +118,6 @@ func (s *ObjectService) GetObject(id uuid.UUID) (*models.Object, error) {
 
 // GetPredictedModels returns a list of object IDs that are predicted to be visible based on the given prediction request.
 func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]uuid.UUID, error) {
-	// Use configurable radius from config, convert from meters to kilometers for the query
 	radiusMeter := s.Config.PredictionRadius
 
 	objects, err := s.Repo.GetObjectsByLocation(
@@ -125,6 +125,7 @@ func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]uuid
 		req.Position.Longitude,
 		radiusMeter,
 	)
+	log.Printf("Found %d objects", len(objects))
 	if err != nil {
 		return nil, err
 	}

@@ -305,16 +305,3 @@ services:
       - '--storage.tsdb.retention.time=15d'
       - '--web.enable-lifecycle'
     restart: unless-stopped
-
-  sonarqube:
-    image: sonarqube:9.9-community
-    networks:
-      - monitoring-net
-    ports:
-      - "${SONARQUBE_PORT}:9000"
-    environment:
-      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
-    volumes:
-      - sonarqube_data:/opt/sonarqube/data
-      - sonarqube_logs:/opt/sonarqube/logs
-      - sonarqube_ext:/opt/sonarqube/extensions

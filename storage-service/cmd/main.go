@@ -122,12 +122,9 @@ func main() {
 	cacheGroup.Get("/stats", instrumentedCacheHandler.GetCacheStats)
 	cacheGroup.Post("/clear", instrumentedCacheHandler.ClearCache)
 
-	// Neue Endpoints für erweiterte Metriken
 	metricsGroup := app.Group("/api/metrics")
 
-	// Endpoint für detaillierte Download-Metriken
 	metricsGroup.Get("/downloads/latest", func(c *fiber.Ctx) error {
-		// Implementierung für letzte Download-Metriken
 		return c.JSON(fiber.Map{
 			"message": "Latest download metrics",
 			"info":    "Check response headers of download endpoint for detailed metrics",
@@ -153,10 +150,6 @@ func main() {
 			log.Printf("Defaulting to port %s", port)
 		}
 	}
-
-	log.Printf("\n🚀 Storage Service v2.0 INSTRUMENTED starting on port %s", port)
-	log.Printf("📊 Full latency instrumentation enabled")
-	log.Printf("📈 Check response headers for detailed metrics")
 
 	log.Fatal(app.Listen(":" + port))
 }

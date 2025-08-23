@@ -117,6 +117,7 @@ func (h *InstrumentedObjectHandler) handleOptimizedDownloadWithMetrics(c *fiber.
 // handleDirectMinIODownloadWithMetrics handles direct MinIO download with metrics
 func (h *InstrumentedObjectHandler) handleDirectMinIODownloadWithMetrics(c *fiber.Ctx, obj *models.Object, metrics *metrics.LatencyMetrics) error {
 	// Start MinIO timing
+	log.Printf("Direct MinIO download for object %s (key: %s)", obj.ID, obj.StorageKey)
 	metrics.StartMinIO()
 
 	// Get object size

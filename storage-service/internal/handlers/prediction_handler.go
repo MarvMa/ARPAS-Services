@@ -33,6 +33,13 @@ func NewPredictionHandler(objectService *services.ObjectService) *PredictionHand
 func (h *PredictionHandler) GetPredictedModels(c *fiber.Ctx) error {
 	var req models.PredictionRequest
 
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":   "invalid request body",
+			"details": err.Error(),
+		})
+	}
+
 	modelIDs, err := h.objectService.GetPredictedModels(req)
 
 	if err != nil {

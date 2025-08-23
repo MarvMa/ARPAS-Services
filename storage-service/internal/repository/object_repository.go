@@ -35,7 +35,7 @@ func (r *ObjectRepositoryImpl) CreateObject(object *models.Object) error {
 // GetObject retrieves an Object by its ID from the database.
 func (r *ObjectRepositoryImpl) GetObject(id uuid.UUID) (*models.Object, error) {
 	var object models.Object
-	err := r.db.First(&object, "id = ?", id).Error
+	err := r.db.Take(&object, "id = ?", id).Error
 	return &object, err
 }
 
@@ -59,13 +59,10 @@ func (r *ObjectRepositoryImpl) ListObjects() ([]models.Object, error) {
 // GetObjectsByLocation retrieves Objects within a specified radius from a given latitude and longitude using the Haversine formula.
 func (r *ObjectRepositoryImpl) GetObjectsByLocation(lat, lon float64, radiusMeter float64) ([]models.Object, error) {
 	var objects []models.Object
-
 	minLat, maxLat, minLon, maxLon := utils.CalculateBoundingBox(lat, lon, radiusMeter)
-
 	err := r.db.
 		Where("latitude IS NOT NULL AND longitude IS NOT NULL").
 		Where("latitude BETWEEN ? AND ? AND longitude BETWEEN ? AND ?", minLat, maxLat, minLon, maxLon).
 		Find(&objects).Error
-
 	return objects, err
 }

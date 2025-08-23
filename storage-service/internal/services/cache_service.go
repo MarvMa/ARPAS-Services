@@ -54,7 +54,7 @@ func (ocs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UU
 		return fmt.Errorf("objectIDs and storageKeys must have the same length")
 	}
 
-	log.Printf("Starting optimized preload for %d objects", len(objectIDs))
+	log.Printf("Starting preload for %d objects", len(objectIDs))
 	startTime := time.Now()
 
 	objectSizes := make(map[uuid.UUID]int64)
@@ -118,7 +118,6 @@ func (ocs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, 
 			ocs.recordStrategyHit("FILESYSTEM")
 			log.Printf("CACHE HIT: FILESYSTEM layer for object %s (size: %d)", objectID, length)
 
-			// Async: promote to memory cache if small enough
 			go ocs.promoteToMemory(objectID, length)
 
 			return rc, length, nil, "FILESYSTEM"
