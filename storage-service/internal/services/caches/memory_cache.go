@@ -16,6 +16,7 @@ import (
 type MemoryCache struct {
 	data        sync.Map // map[string][]byte
 	metadata    sync.Map // map[string]*MemoryCacheEntry
+	mu          sync.RWMutex
 	maxSize     int64
 	currentSize int64
 	ttl         time.Duration

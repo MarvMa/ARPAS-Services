@@ -333,12 +333,8 @@ func (h *ObjectHandler) handleDirectMinIODownload(c *fiber.Ctx, obj *models.Obje
 }
 
 func (h *ObjectHandler) streamWithMetrics(c *fiber.Ctx, reader io.ReadCloser, objectID uuid.UUID, source string, startTime time.Time, size int64) error {
-	defer reader.Close()
-
-	// Set body stream
 	c.Context().SetBodyStream(&eofCloser{reader}, int(size))
 
-	// Log performance metrics
 	latency := time.Since(startTime).Milliseconds()
 
 	// Different log formats for different sources
@@ -349,7 +345,7 @@ func (h *ObjectHandler) streamWithMetrics(c *fiber.Ctx, reader io.ReadCloser, ob
 		log.Printf("perf dl_end_e2e source=minio id=%s total_ms=%d size=%d", objectID, latency, size)
 	}
 
-	return c.SendStatus(fiber.StatusOK)
+	return nil
 }
 
 func (h *ObjectHandler) setCacheResponseHeaders(c *fiber.Ctx, obj *models.Object, clen int64, cacheMetrics *CacheMetricsHeader) {
@@ -412,6 +408,7 @@ func (h *ObjectHandler) setMinIOResponseHeaders(c *fiber.Ctx, obj *models.Object
 	if clen > 0 {
 		c.Set(fiber.HeaderContentLength, strconv.FormatInt(clen, 10))
 	}
+	c.Status(fiber.StatusOK)
 }
 
 type eofCloser struct{ io.ReadCloser }

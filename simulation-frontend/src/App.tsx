@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef, useCallback} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {SimulationControls} from './components/SimulationControls';
 import {MapViewer} from './components/MapViewer';
 import {ObjectManager} from './components/ObjectManager';
@@ -8,7 +8,7 @@ import {DataCollector} from './services/dataCollector';
 import {StorageService} from './services/storageService';
 import {ProfileService} from './services/profileService';
 import {DockerMetricsService} from './services/dockerMetricsService';
-import {Profile, SimulationState, SimulationConfig, Object3D} from './types/simulation';
+import {Object3D, Profile, SimulationConfig, SimulationState} from './types/simulation';
 
 // Define the profiles to be loaded automatically
 const PRELOADED_PROFILES: string[] = [
@@ -200,32 +200,47 @@ const App: React.FC = () => {
      */
     useEffect(() => {
         let intervalId: number;
+        let lastStateSnapshot: string = '';
+        let updatePending = false;
 
         const updateSimulationState = () => {
+            if (updatePending) return;
+
             const currentState = simulationService.getSimulationState();
-            setSimulationState(prevState => {
-                // Only update if there's a meaningful change
-                if (!prevState && !currentState) return prevState;
-                if (!prevState && currentState) return currentState;
-                if (prevState && !currentState) return null;
-                if (prevState && currentState) {
-                    // Compare meaningful properties to avoid unnecessary updates
-                    if (prevState.isRunning !== currentState.isRunning ||
-                        prevState.currentTime !== currentState.currentTime ||
-                        Object.keys(prevState.profileStates).length !== Object.keys(currentState.profileStates).length) {
-                        return currentState;
-                    }
-                }
-                return prevState;
-            });
+            const currentSnapshot = currentState ? JSON.stringify({
+                isRunning: currentState.isRunning,
+                processedDataPoints: Math.floor(((currentState.processedDataPoints ?? 0) / 5)) * 5,
+                profileStatesCount: Object.keys(currentState.profileStates).length,
+                currentTime: Math.floor(currentState.currentTime / 1000) * 1000 // Round to nearest second
+            }) : 'null';
+
+            if (currentSnapshot === lastStateSnapshot) return;
+
+            updatePending = true;
+            lastStateSnapshot = currentSnapshot;
+
+            const updateCallback = () => {
+                setSimulationState(prevState => {
+                    if (!prevState && !currentState) return prevState;
+                    if (!prevState && currentState) return currentState;
+                    if (prevState && !currentState) return null;
+
+                    return currentState;
+                });
+                updatePending = false;
+            };
+
+            if (window.requestIdleCallback) {
+                window.requestIdleCallback(updateCallback, {timeout: 100});
+            } else {
+                setTimeout(updateCallback, 0);
+            }
         };
 
-        intervalId = window.setInterval(updateSimulationState, 500);
+        intervalId = window.setInterval(updateSimulationState, 300);
 
         return () => {
-            if (intervalId) {
-                clearInterval(intervalId);
-            }
+            if (intervalId) clearInterval(intervalId);
         };
     }, [simulationService]);
 

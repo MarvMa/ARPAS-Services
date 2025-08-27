@@ -28,6 +28,14 @@ export class SimulationService {
     private profiles: Profile[] = [];
     private downloadedObjectsPerProfile: Map<string, Set<string>> = new Map();
     private dockerMetricsService?: DockerMetricsService;
+    private activeDownloads = new Map<string, Promise<void>>();
+    private webSocketThrottling = new Map<string, {
+        lastSent: number;
+        pendingPoint?: DataPoint;
+        throttleTimer?: number;
+    }>();
+
+    private readonly WS_THROTTLE_MS = 150; // Max one message per 150ms per profile
 
     // Scientific tracking
     private objectDownloadTracking: Map<string, Map<string, Set<string>>> = new Map();
@@ -132,6 +140,57 @@ export class SimulationService {
             return null;
         }
 
+        // Stop all intervals and timers
+        if (this.simulationIntervalId) {
+            clearInterval(this.simulationIntervalId);
+            this.simulationIntervalId = null;
+        }
+
+        // Clear WebSocket throttling timers
+        this.webSocketThrottling.forEach((throttleData) => {
+            if (throttleData.throttleTimer) {
+                clearTimeout(throttleData.throttleTimer);
+            }
+        });
+        this.webSocketThrottling.clear();
+
+        const closePromises = Array.from(this.profileWebSockets.entries()).map(([_, ws]) => {
+            return new Promise<void>((resolve) => {
+                if (ws.readyState === WebSocket.CLOSED) {
+                    resolve();
+                    return;
+                }
+
+                const cleanup = () => {
+                    ws.removeEventListener('close', cleanup);
+                    ws.removeEventListener('error', cleanup);
+                    resolve();
+                };
+
+                ws.addEventListener('close', cleanup);
+                ws.addEventListener('error', cleanup);
+
+                // Force close if not already closing/closed
+                if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                    ws.close(1000, 'Simulation stopped');
+                }
+
+                // Fallback timeout
+                setTimeout(cleanup, 1000);
+            });
+        });
+
+        // Wait for all WebSockets to close
+        await Promise.all(closePromises);
+        this.profileWebSockets.clear();
+
+        // CLEANUP 4: Clear all download tracking
+        this.activeDownloads.clear();
+        this.downloadedObjectsPerProfile.clear();
+        this.objectDownloadTracking.clear();
+        this.baselineMetrics.clear();
+
+
         console.log('Stopping simulation and collecting scientific metrics...');
 
         // Store simulation timing for Docker metrics collection
@@ -169,6 +228,8 @@ export class SimulationService {
             ...preliminaryMetrics,
             dockerTimeSeries: dockerMetrics
         };
+        
+        this.simulationState = null;
 
         try {
             await this.dataCollector.saveScientificResults(finalMetrics);
@@ -336,22 +397,49 @@ export class SimulationService {
     }
 
     /**
-     * Download object with deduplication
+     * Download object from storage service by ID
      */
     private async downloadObject(objectId: string, profileId: string): Promise<void> {
+        const downloadKey = `${profileId}_${objectId}`;
+
+        // Fix Race Condition: Check if download is already in progress for this profile+object
+        if (this.activeDownloads.has(downloadKey)) {
+            // Wait for existing download to complete
+            return this.activeDownloads.get(downloadKey)!;
+        }
+
         const profileDownloads = this.downloadedObjectsPerProfile.get(profileId);
         if (!profileDownloads) {
             this.downloadedObjectsPerProfile.set(profileId, new Set<string>());
         }
 
         const downloads = this.downloadedObjectsPerProfile.get(profileId)!;
+
+        // REDUNDANCY FIX: Double-check after potential async wait
         if (downloads.has(objectId)) {
-            console.log(`Object ${objectId} already downloaded for profile ${profileId}, skipping`);
             return;
         }
 
+        // Create and track download promise
+        const downloadPromise = this.executeDownload(objectId, profileId);
+        this.activeDownloads.set(downloadKey, downloadPromise);
+
+        try {
+            await downloadPromise;
+        } finally {
+            this.activeDownloads.delete(downloadKey);
+        }
+    }
+
+    private async executeDownload(objectId: string, profileId: string): Promise<void> {
         const profileState = this.simulationState?.profileStates[profileId];
         if (!profileState) return;
+
+        // Final Race-Condition Check: Ensure not already downloaded (race condition protection)
+        const downloads = this.downloadedObjectsPerProfile.get(profileId)!;
+        if (downloads.has(objectId)) {
+            return;
+        }
 
         const startTime = performance.now();
         try {
@@ -455,7 +543,7 @@ export class SimulationService {
                     cacheWaterfallMs
                 }
             };
-            
+
             profileState.metrics.push(metric);
 
             console.log(`Downloaded ${objectId} for ${profileId}:`, {
@@ -627,27 +715,68 @@ export class SimulationService {
         }, config.intervalMs);
     }
 
-    /**
-     * Send point to WebSocket
-     */
     private async sendPointToWebSocket(profileId: string, point: DataPoint): Promise<void> {
         const ws = this.profileWebSockets.get(profileId);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            try {
-                const data = {
-                    latitude: point.lat,
-                    longitude: point.lng,
-                    timestamp: new Date(point.timestamp).toISOString(),
-                    speed: point.speed || 0,
-                    altitude: point.altitude || 0,
-                    heading: point.bearing
-                };
-                ws.send(JSON.stringify(data));
-            } catch (error) {
-                console.error(`Failed to send data to WebSocket:`, error);
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        const now = performance.now();
+        let throttleData = this.webSocketThrottling.get(profileId);
+
+        if (!throttleData) {
+            throttleData = {lastSent: 0};
+            this.webSocketThrottling.set(profileId, throttleData);
+        }
+
+        const timeSinceLastSent = now - throttleData.lastSent;
+
+        if (timeSinceLastSent >= this.WS_THROTTLE_MS) {
+            // Send immediately
+            this.actualSendToWebSocket(profileId, point, ws);
+            throttleData.lastSent = now;
+            throttleData.pendingPoint = undefined;
+
+            // Clear any pending timer
+            if (throttleData.throttleTimer) {
+                clearTimeout(throttleData.throttleTimer);
+                throttleData.throttleTimer = undefined;
+            }
+        } else {
+            // Throttle: store latest point and set timer if not already set
+            throttleData.pendingPoint = point;
+
+            if (!throttleData.throttleTimer) {
+                const remainingWait = this.WS_THROTTLE_MS - timeSinceLastSent;
+                throttleData.throttleTimer = window.setTimeout(() => {
+                    const currentThrottleData = this.webSocketThrottling.get(profileId);
+                    if (currentThrottleData?.pendingPoint) {
+                        this.actualSendToWebSocket(profileId, currentThrottleData.pendingPoint, ws);
+                        currentThrottleData.lastSent = performance.now();
+                        currentThrottleData.pendingPoint = undefined;
+                    }
+                    if (currentThrottleData) {
+                        currentThrottleData.throttleTimer = undefined;
+                    }
+                }, remainingWait);
             }
         }
     }
+
+    private actualSendToWebSocket(profileId: string, point: DataPoint, ws: WebSocket): void {
+        try {
+            const data = {
+                latitude: Math.round(point.lat * 1000000) / 1000000, // 6 decimal precision
+                longitude: Math.round(point.lng * 1000000) / 1000000,
+                timestamp: new Date(point.timestamp).toISOString(),
+                speed: point.speed || 0,
+                altitude: point.altitude || 0,
+                heading: point.bearing
+            };
+            ws.send(JSON.stringify(data));
+        } catch (error) {
+            console.error(`WebSocket send failed for ${profileId}:`, error);
+        }
+    }
+
 
     /**
      * Process unoptimized detection

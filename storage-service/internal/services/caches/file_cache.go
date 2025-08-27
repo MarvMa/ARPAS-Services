@@ -1,6 +1,7 @@
 package caches
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
@@ -98,23 +99,21 @@ func (fsc *FileSystemCache) Get(objectID uuid.UUID) ([]byte, error) {
 func (fsc *FileSystemCache) GetStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
 	filePath := fsc.getFilePath(objectID)
 
-	stat, err := os.Stat(filePath)
-	if err != nil {
-		fsc.misses.Add(1)
-		return nil, 0, fmt.Errorf("object not found in file cache")
-	}
-
 	file, err := os.Open(filePath)
 	if err != nil {
 		fsc.misses.Add(1)
-		return nil, 0, fmt.Errorf("failed to open cache file: %w", err)
+		return nil, 0, err
 	}
 
-	// Update access time
-	os.Chtimes(filePath, time.Now(), time.Now())
+	stat, _ := file.Stat()
+
+	// Buffered for Backpressure
+	bufferedFile := bufio.NewReaderSize(file, 64*1024)
+
+	go os.Chtimes(filePath, time.Now(), time.Now())
 
 	fsc.hits.Add(1)
-	return file, stat.Size(), nil
+	return io.NopCloser(bufferedFile), stat.Size(), nil
 }
 
 func (fsc *FileSystemCache) Exists(objectID uuid.UUID) (bool, error) {

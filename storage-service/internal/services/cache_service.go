@@ -103,38 +103,32 @@ func (ocs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UU
 
 // GetFromCacheStream provides optimized streaming with fallback chain
 func (ocs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error, string) {
-	if exists, _ := ocs.strategy.memoryCache.Exists(objectID); exists {
-		rc, length, err := ocs.strategy.memoryCache.GetStream(objectID)
-		if err == nil {
-			ocs.recordStrategyHit("MEMORY")
-			log.Printf("CACHE HIT: MEMORY layer for object %s (size: %d)", objectID, length)
-			return rc, length, nil, "MEMORY"
-		}
+	rc, length, err := ocs.strategy.memoryCache.GetStream(objectID)
+	if err == nil {
+		ocs.recordStrategyHit("MEMORY")
+		log.Printf("CACHE HIT: MEMORY layer for object %s (size: %d)", objectID, length)
+		return rc, length, nil, "MEMORY"
 	}
 
-	if exists, _ := ocs.strategy.fileCache.Exists(objectID); exists {
-		rc, length, err := ocs.strategy.fileCache.GetStream(objectID)
-		if err == nil {
-			ocs.recordStrategyHit("FILESYSTEM")
-			log.Printf("CACHE HIT: FILESYSTEM layer for object %s (size: %d)", objectID, length)
+	rc, length, err = ocs.strategy.fileCache.GetStream(objectID)
+	if err == nil {
+		ocs.recordStrategyHit("FILESYSTEM")
+		log.Printf("CACHE HIT: FILESYSTEM layer for object %s (size: %d)", objectID, length)
 
-			go ocs.promoteToMemory(objectID, length)
+		go ocs.promoteToMemory(objectID, length)
 
-			return rc, length, nil, "FILESYSTEM"
-		}
+		return rc, length, nil, "FILESYSTEM"
 	}
 
-	if exists, _ := ocs.strategy.redisCache.Exists(objectID); exists {
-		rc, length, err := ocs.strategy.redisCache.GetStream(objectID)
-		if err == nil {
-			ocs.recordStrategyHit("REDIS")
-			log.Printf("CACHE HIT: REDIS layer for object %s (size: %d)", objectID, length)
+	rc, length, err = ocs.strategy.redisCache.GetStream(objectID)
+	if err == nil {
+		ocs.recordStrategyHit("REDIS")
+		log.Printf("CACHE HIT: REDIS layer for object %s (size: %d)", objectID, length)
 
-			// Async: promote to optimal cache
-			go ocs.promoteToOptimalCache(objectID, length)
+		// Async: promote to optimal cache
+		go ocs.promoteToOptimalCache(objectID, length)
 
-			return rc, length, nil, "REDIS"
-		}
+		return rc, length, nil, "REDIS"
 	}
 
 	// Complete cache miss

@@ -28,13 +28,9 @@ func main() {
 	minioClient := InitMinIOClient(cfg)
 	redisClient := InitRedisClient(cfg)
 
-	// Initialize services
 	objectRepo := repository.NewObjectRepository(db)
 	objectService := services.NewObjectService(objectRepo, minioClient, cfg.MinioBucket, cfg)
 
-	// ========== INSTRUMENTIERUNG BEGINNT HIER ==========
-
-	// 1. Erstelle den instrumentierten Cache Service
 	instrumentedCacheService := services.NewInstrumentedCacheService(
 		redisClient,
 		minioClient,
@@ -42,22 +38,17 @@ func main() {
 		cfg.CacheTTL,
 	)
 
-	// 2. Erstelle die instrumentierten Handler
 	predictionHandler := handlers.NewPredictionHandler(objectService)
 
-	// Verwende den instrumentierten Cache Handler
 	instrumentedCacheHandler := handlers.NewInstrumentedCacheHandler(
 		instrumentedCacheService,
 		objectService,
 	)
 
-	// Verwende den instrumentierten Object Handler
 	instrumentedObjectHandler := handlers.NewInstrumentedObjectHandler(
 		objectService,
 		instrumentedCacheService,
 	)
-
-	// ========== INSTRUMENTIERUNG ENDET HIER ==========
 
 	app := fiber.New(fiber.Config{
 		BodyLimit:         500 * 1024 * 1024, // 500 MB
@@ -68,7 +59,6 @@ func main() {
 		StreamRequestBody: true,
 	})
 
-	// Enhanced Logger Middleware mit Latenz-Informationen
 	app.Use(logger.New(logger.Config{
 		Format: "[${time}] ${status} - ${method} ${path} ${query} - ${ip} - ${latency} - " +
 			"Cache:${header:x-cache-hit} Layer:${header:x-cache-layer-used} " +
@@ -119,6 +109,7 @@ func main() {
 	cacheGroup := app.Group("/cache")
 	cacheGroup.Post("/preload", instrumentedCacheHandler.PreloadObjects)
 	cacheGroup.Delete("/object/:id", instrumentedCacheHandler.InvalidateObject)
+
 	cacheGroup.Get("/stats", instrumentedCacheHandler.GetCacheStats)
 	cacheGroup.Post("/clear", instrumentedCacheHandler.ClearCache)
 

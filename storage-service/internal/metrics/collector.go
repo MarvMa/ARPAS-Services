@@ -26,9 +26,7 @@ type LatencyMetrics struct {
 	MinIOLatencyMs float64   `json:"minioLatencyMs,omitempty"`
 
 	// Stream metrics
-	FirstByteLatencyMs float64   `json:"firstByteLatencyMs"`
-	StreamStartTime    time.Time `json:"-"`
-	StreamLatencyMs    float64   `json:"streamLatencyMs,omitempty"`
+	FirstByteLatencyMs float64 `json:"firstByteLatencyMs"`
 
 	// Cache promotion metrics
 	PromotionLatencyMs float64 `json:"promotionLatencyMs,omitempty"`
@@ -131,23 +129,6 @@ func (m *LatencyMetrics) EndMinIO() {
 	}
 }
 
-// StartStream marks the start of streaming
-func (m *LatencyMetrics) StartStream() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.StreamStartTime = time.Now()
-}
-
-// EndStream marks the end of streaming
-func (m *LatencyMetrics) EndStream() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if !m.StreamStartTime.IsZero() {
-		m.StreamLatencyMs = float64(time.Since(m.StreamStartTime).Microseconds()) / 1000.0
-		m.Timings["stream"] = m.StreamLatencyMs
-	}
-}
-
 // RecordFirstByte records the time to first byte
 func (m *LatencyMetrics) RecordFirstByte() {
 	m.mu.Lock()
@@ -227,15 +208,22 @@ func (m *LatencyMetrics) GetHeaders() map[string]string {
 		}
 	}
 
-	// MinIO latency if used
+	serverLatency := m.DBLookupLatencyMs
+
+	for _, layer := range m.CacheLayers {
+		if layer.Hit {
+			serverLatency += layer.LatencyMs
+			break // Only count the successful layer
+		}
+	}
+
+	// Add MinIO latency if used
 	if m.MinIOLatencyMs > 0 {
+		serverLatency += m.MinIOLatencyMs
 		headers["X-Latency-MinIO-Ms"] = formatFloat(m.MinIOLatencyMs)
 	}
 
-	// Stream latency if available
-	if m.StreamLatencyMs > 0 {
-		headers["X-Latency-Stream-Ms"] = formatFloat(m.StreamLatencyMs)
-	}
+	headers["X-Latency-Server-Ms"] = formatFloat(serverLatency)
 
 	// Promotion latency if occurred
 	if m.PromotionLatencyMs > 0 {

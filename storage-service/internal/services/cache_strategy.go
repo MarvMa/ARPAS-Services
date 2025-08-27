@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	SmallFileThreshold  = 8 << 20   // 8MB - In-Memory Cache
-	MediumFileThreshold = 32 << 20  // 32MB - File System Cache
-	LargeFileThreshold  = 100 << 20 // 100MB - Redis Cache
+	SmallFileThreshold  = 40 << 20  // 40MB - In-Memory Cache
+	MediumFileThreshold = 80 << 20  // 32MB - File System Cache
+	LargeFileThreshold  = 160 << 20 // 100MB - Redis Cache
 )
 
 // CacheStrategy determines the optimal caching approach based on file size and access patterns
@@ -43,7 +43,7 @@ type StrategyStats struct {
 
 func NewCacheStrategy(redis *storage.RedisClient, minio *minio.Client, bucketName string, ttl time.Duration) *CacheStrategy {
 	return &CacheStrategy{
-		memoryCache: caches.NewMemoryCache(1<<30, ttl),                           // 1GB memory limit
+		memoryCache: caches.NewMemoryCache(8<<30, ttl),                           // 8GB memory limit
 		fileCache:   caches.NewFileSystemCache("/tmp/storage-cache", 5<<30, ttl), // 5GB disk limit
 		redisCache:  caches.NewRedisCache(redis, ttl),
 		minio:       minio,
@@ -200,7 +200,6 @@ func (cs *CacheStrategy) downloadFromMinio(ctx context.Context, storageKey strin
 	if err != nil {
 		return nil, err
 	}
-	defer object.Close()
 
 	return io.ReadAll(object)
 }

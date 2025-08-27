@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +11,6 @@ import (
 	"storage-service/internal/models"
 	"storage-service/internal/services"
 	"strings"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -91,15 +91,13 @@ func (h *InstrumentedObjectHandler) handleOptimizedDownloadWithMetrics(c *fiber.
 	rc, clen, err, layerUsed := h.InstrumentedCache.GetFromCacheStreamWithMetrics(c.Context(), obj.ID, metrics)
 
 	if err == nil && rc != nil {
-		defer rc.Close()
-
 		metrics.RecordFirstByte()
 
 		h.setOptimizedResponseHeaders(c, obj, clen, metrics, cacheStats)
 
-		metrics.StartStream()
-		err = h.streamContent(c, rc, clen)
-		metrics.EndStream()
+		bufferedRc := bufio.NewReaderSize(rc, 32*1024)
+
+		err = h.streamContent(c, bufferedRc, clen)
 
 		metrics.Finalize()
 
@@ -136,7 +134,6 @@ func (h *InstrumentedObjectHandler) handleDirectMinIODownloadWithMetrics(c *fibe
 			"error": true, "message": "unable to retrieve file",
 		})
 	}
-	defer object.Close()
 
 	// Record first byte
 	metrics.RecordFirstByte()
@@ -145,9 +142,7 @@ func (h *InstrumentedObjectHandler) handleDirectMinIODownloadWithMetrics(c *fibe
 	h.setMinIOResponseHeaders(c, obj, clen, metrics)
 
 	// Stream content with metrics
-	metrics.StartStream()
 	err = h.streamContent(c, object, clen)
-	metrics.EndStream()
 
 	// Finalize metrics
 	metrics.Finalize()
@@ -191,6 +186,7 @@ func (h *InstrumentedObjectHandler) setOptimizedResponseHeaders(c *fiber.Ctx, ob
 	// Cache control
 	c.Set("Cache-Control", "public, max-age=3600")
 	c.Set("ETag", fmt.Sprintf("\"%s\"", obj.ID))
+	c.Status(fiber.StatusOK)
 }
 
 // setMinIOResponseHeaders sets comprehensive headers for MinIO downloads
@@ -218,16 +214,12 @@ func (h *InstrumentedObjectHandler) setMinIOResponseHeaders(c *fiber.Ctx, obj *m
 
 // streamContent streams content to the client
 func (h *InstrumentedObjectHandler) streamContent(c *fiber.Ctx, reader io.Reader, size int64) error {
-	// Create a wrapped reader that closes if it's a ReadCloser
-	var bodyReader io.Reader = reader
+	bodyReader := reader
 	if rc, ok := reader.(io.ReadCloser); ok {
 		bodyReader = &autoCloseReader{ReadCloser: rc}
 	}
-
-	// Set the body stream
 	c.Context().SetBodyStream(bodyReader, int(size))
-
-	return c.SendStatus(fiber.StatusOK)
+	return nil
 }
 
 // autoCloseReader automatically closes the reader on EOF
@@ -240,33 +232,5 @@ func (r *autoCloseReader) Read(p []byte) (int, error) {
 	if err == io.EOF {
 		_ = r.ReadCloser.Close()
 	}
-	return n, err
-}
-
-// InstrumentedStreamWriter tracks streaming performance
-type InstrumentedStreamWriter struct {
-	w             io.Writer
-	bytesWritten  int64
-	firstByteTime *time.Time
-	metrics       *metrics.LatencyMetrics
-}
-
-func NewInstrumentedStreamWriter(w io.Writer, metrics *metrics.LatencyMetrics) *InstrumentedStreamWriter {
-	return &InstrumentedStreamWriter{
-		w:       w,
-		metrics: metrics,
-	}
-}
-
-func (isw *InstrumentedStreamWriter) Write(p []byte) (int, error) {
-	// Record first byte
-	if isw.firstByteTime == nil {
-		now := time.Now()
-		isw.firstByteTime = &now
-		isw.metrics.RecordFirstByte()
-	}
-
-	n, err := isw.w.Write(p)
-	isw.bytesWritten += int64(n)
 	return n, err
 }

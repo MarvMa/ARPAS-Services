@@ -28,61 +28,41 @@ func NewInstrumentedCacheService(redis *storage.RedisClient, minio *minio.Client
 
 // GetFromCacheStreamWithMetrics provides optimized streaming with detailed metrics
 func (ics *InstrumentedCacheService) GetFromCacheStreamWithMetrics(ctx context.Context, objectID uuid.UUID, metrics *metrics.LatencyMetrics) (io.ReadCloser, int64, error, string) {
-	// Try Memory Cache
 	memoryLayer := metrics.StartCacheLayerAttempt("MEMORY")
-	if exists, _ := ics.strategy.memoryCache.Exists(objectID); exists {
-		rc, length, err := ics.strategy.memoryCache.GetStream(objectID)
-		metrics.EndCacheLayerAttempt(memoryLayer, err == nil, err, length)
+	rc, length, err := ics.strategy.memoryCache.GetStream(objectID)
+	metrics.EndCacheLayerAttempt(memoryLayer, err == nil, err, length)
 
-		if err == nil {
-			ics.recordStrategyHit("MEMORY")
-			log.Printf("CACHE HIT: MEMORY layer for object %s (size: %d)", objectID, length)
-			return rc, length, nil, "MEMORY"
-		}
-	} else {
-		metrics.EndCacheLayerAttempt(memoryLayer, false, fmt.Errorf("not exists"), 0)
+	if err == nil {
+		go ics.recordStrategyHit("MEMORY")
+		log.Printf("CACHE HIT: MEMORY layer for object %s (size: %d)", objectID, length)
+		return rc, length, nil, "MEMORY"
 	}
 
-	// Try FileSystem Cache
+	// FileSystem
 	fileLayer := metrics.StartCacheLayerAttempt("FILESYSTEM")
-	if exists, _ := ics.strategy.fileCache.Exists(objectID); exists {
-		rc, length, err := ics.strategy.fileCache.GetStream(objectID)
-		metrics.EndCacheLayerAttempt(fileLayer, err == nil, err, length)
+	rc, length, err = ics.strategy.fileCache.GetStream(objectID)
+	metrics.EndCacheLayerAttempt(fileLayer, err == nil, err, length)
 
-		if err == nil {
-			ics.recordStrategyHit("FILESYSTEM")
-			log.Printf("CACHE HIT: FILESYSTEM layer for object %s (size: %d)", objectID, length)
-
-			// Async: promote to memory cache if small enough
-			go ics.promoteToMemoryWithMetrics(objectID, length, metrics)
-
-			return rc, length, nil, "FILESYSTEM"
-		}
-	} else {
-		metrics.EndCacheLayerAttempt(fileLayer, false, fmt.Errorf("not exists"), 0)
+	if err == nil {
+		go ics.recordStrategyHit("FILESYSTEM")
+		log.Printf("CACHE HIT: FILESYSTEM layer for object %s (size: %d)", objectID, length)
+		go ics.promoteToMemoryWithMetrics(objectID, length, metrics)
+		return rc, length, nil, "FILESYSTEM"
 	}
 
-	// Try Redis Cache
+	// Redis
 	redisLayer := metrics.StartCacheLayerAttempt("REDIS")
-	if exists, _ := ics.strategy.redisCache.Exists(objectID); exists {
-		rc, length, err := ics.strategy.redisCache.GetStream(objectID)
-		metrics.EndCacheLayerAttempt(redisLayer, err == nil, err, length)
+	rc, length, err = ics.strategy.redisCache.GetStream(objectID)
+	metrics.EndCacheLayerAttempt(redisLayer, err == nil, err, length)
 
-		if err == nil {
-			ics.recordStrategyHit("REDIS")
-			log.Printf("CACHE HIT: REDIS layer for object %s (size: %d)", objectID, length)
-
-			// Async: promote to optimal cache
-			go ics.promoteToOptimalCacheWithMetrics(objectID, length, metrics)
-
-			return rc, length, nil, "REDIS"
-		}
-	} else {
-		metrics.EndCacheLayerAttempt(redisLayer, false, fmt.Errorf("not exists"), 0)
+	if err == nil {
+		go ics.recordStrategyHit("REDIS")
+		log.Printf("CACHE HIT: REDIS layer for object %s (size: %d)", objectID, length)
+		go ics.promoteToOptimalCacheWithMetrics(objectID, length, metrics)
+		return rc, length, nil, "REDIS"
 	}
 
-	// Complete cache miss
-	ics.recordStrategyMiss("ALL_LAYERS")
+	go ics.recordStrategyMiss("ALL_LAYERS")
 	return nil, 0, fmt.Errorf("object %s not found in any cache layer", objectID), "NO_CACHE"
 }
 

@@ -28,6 +28,9 @@ func newCacheHTTPClient() *http.Client {
 		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		DisableCompression:    true,
+		MaxConnsPerHost:       100,
+		ResponseHeaderTimeout: 5 * time.Second,
+		TLSHandshakeTimeout:   3 * time.Second,
 	}
 	return &http.Client{Transport: tr, Timeout: 30 * time.Second}
 }
