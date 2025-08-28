@@ -1,5 +1,5 @@
 import axios from 'axios';
-import {Object3D, StorageObjectResponse, isValidStorageObject} from '../types/simulation';
+import {Object3D, isValidStorageObject} from '../types/simulation';
 
 /**
  * Service for managing 3D object storage operations
@@ -54,35 +54,6 @@ export class StorageService {
         }
     }
 
-    /**
-     * Gets a specific 3D object by ID
-     */
-    async getObject(id: string): Promise<Object3D> {
-        try {
-            console.log(`Fetching 3D object: ${id}`);
-            const response = await axios.get(`${this.API_BASE}/objects/${id}`, {
-                timeout: 10000
-            });
-
-            // Validate the response object
-            if (!isValidStorageObject(response.data)) {
-                throw new Error(`Invalid object response format for ID: ${id}`);
-            }
-
-            return response.data;
-
-        } catch (error) {
-            console.error(`Failed to fetch 3D object ${id}:`, error);
-            if (axios.isAxiosError(error)) {
-                if (error.response?.status === 404) {
-                    throw new Error(`3D object not found: ${id}`);
-                }
-                const message = error.response?.data?.message || error.message;
-                throw new Error(`Failed to fetch 3D object: ${message}`);
-            }
-            throw new Error(`Failed to fetch 3D object: ${id}`);
-        }
-    }
 
     /**
      * Uploads a new 3D object with optional location data
@@ -222,12 +193,6 @@ export class StorageService {
         }
     }
 
-    /**
-     * Gets the download URL for a 3D object (for direct linking)
-     */
-    getDownloadUrl(id: string): string {
-        return `${this.API_BASE}/objects/${id}/download`;
-    }
 
     /**
      * Checks if the storage service is available and responsive
@@ -256,53 +221,4 @@ export class StorageService {
         }
     }
 
-    /**
-     * Gets storage service statistics (if available)
-     */
-    async getStorageStats(): Promise<{
-        totalObjects: number;
-        totalSize: number;
-        availableSpace?: number;
-    } | null> {
-        try {
-            const response = await axios.get(`${this.API_BASE}/stats`, {
-                timeout: 10000
-            });
-            return response.data;
-        } catch (error) {
-            console.warn('Failed to fetch storage statistics:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Bulk delete objects by IDs
-     */
-    async bulkDeleteObjects(ids: string[]): Promise<{
-        successful: string[];
-        failed: { id: string; error: string }[];
-    }> {
-        const successful: string[] = [];
-        const failed: { id: string; error: string }[] = [];
-
-        console.log(`Starting bulk deletion of ${ids.length} objects...`);
-
-        const deletePromises = ids.map(async (id) => {
-            try {
-                await this.deleteObject(id);
-                successful.push(id);
-            } catch (error) {
-                failed.push({
-                    id,
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                });
-            }
-        });
-
-        await Promise.all(deletePromises);
-
-        console.log(`Bulk deletion completed: ${successful.length} successful, ${failed.length} failed`);
-
-        return { successful, failed };
-    }
 }

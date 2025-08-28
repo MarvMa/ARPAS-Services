@@ -228,7 +228,7 @@ export class SimulationService {
             ...preliminaryMetrics,
             dockerTimeSeries: dockerMetrics
         };
-        
+
         this.simulationState = null;
 
         try {
@@ -289,28 +289,6 @@ export class SimulationService {
     }
 
     /**
-     * Test Docker metrics connectivity
-     */
-    public static async testDockerMetricsConnection(): Promise<boolean> {
-        try {
-            const response = await axios.get('http://localhost/api/docker/metrics/test', {
-                timeout: 10000
-            });
-
-            if (response.status === 200) {
-                console.log('Docker metrics service is available:', response.data);
-                return true;
-            } else {
-                console.warn('Docker metrics service test failed:', response.status);
-                return false;
-            }
-        } catch (error) {
-            console.warn('Docker metrics service connectivity test failed:', error);
-            return false;
-        }
-    }
-
-    /**
      * Establish WebSocket connection for optimized mode
      */
     private async establishWebSocketConnection(profileId: string, profileName: string): Promise<void> {
@@ -353,8 +331,6 @@ export class SimulationService {
                         if (objectIds.length > 0) {
                             profileState.successfulRequests++;
                             await this.processObjectIds(objectIds, profileId);
-                        } else {
-                            await this.recordBaselineMetric(profileId);
                         }
                     }
                 } catch (error) {
@@ -435,32 +411,38 @@ export class SimulationService {
         const profileState = this.simulationState?.profileStates[profileId];
         if (!profileState) return;
 
-        // Final Race-Condition Check: Ensure not already downloaded (race condition protection)
+        // Final Race-Condition Check: Ensure not already downloaded 
         const downloads = this.downloadedObjectsPerProfile.get(profileId)!;
         if (downloads.has(objectId)) {
             return;
         }
 
-        const startTime = performance.now();
+        let startTime = performance.now();
+        let TTFBms = 0;
+        let sawFirstByte = false;
         try {
             const headers: any = {};
             if (this.simulationState?.optimized) {
                 headers['X-Optimization-Mode'] = 'optimized';
                 headers['X-Profile-Id'] = profileId;
             }
-
+            startTime = performance.now();
             const response = await axios.get(
                 `http://localhost/api/storage/objects/${objectId}/download`,
                 {
                     responseType: 'blob',
                     timeout: 30000,
-                    headers
+                    headers: headers,
+                    onDownloadProgress: () => {
+                        if (!sawFirstByte) {
+                            TTFBms = performance.now() - startTime;
+                            sawFirstByte = true;
+                        }
+                    },
                 }
             );
-            console.log(`Downloaded object ${objectId} for profile ${profileId}, status: ${response.status}`);
+            const totalLatency = performance.now() - startTime;
 
-            const endTime = performance.now();
-            const totalLatency = endTime - startTime;
             const sizeBytes = response.data.size || 0;
 
             const extractHeaderValue = (headerName: string): number => {
@@ -478,28 +460,11 @@ export class SimulationService {
                 return value || undefined;
             };
 
-            console.log('Response headers:', Object.keys(response.headers));
 
             const downloadSource = extractHeaderString('x-download-source') || 'unknown';
-            const serverLatency = extractHeaderValue('x-download-latency-ms') || extractHeaderValue('x-latency-total-ms');
-            const networkLatency = extractHeaderValue('x-network-latency-ms');
-
-            const dbLookupMs = extractHeaderValue('x-latency-db-lookup-ms');
-            const firstByteMs = extractHeaderValue('x-latency-first-byte-ms');
-            const totalServerMs = extractHeaderValue('x-latency-total-ms');
-            const cacheMemoryMs = extractHeaderValue('x-latency-cache-memory-ms');
-            const cacheFilesystemMs = extractHeaderValue('x-latency-cache-filesystem-ms');
-            const cacheRedisMs = extractHeaderValue('x-latency-cache-redis-ms');
-            const minioMs = extractHeaderValue('x-latency-minio-ms');
-            const streamMs = extractHeaderValue('x-latency-stream-ms');
-            const promotionMs = extractHeaderValue('x-latency-promotion-ms');
-            const cacheWaterfallMs = extractHeaderValue('x-latency-cache-waterfall-ms');
-
-            const cacheHitHeader = extractHeaderString('x-cache-hit');
-            const cacheHit = cacheHitHeader === 'true' || cacheHitHeader === '1';
-            const cacheLayerUsed = extractHeaderString('x-cache-layer-used');
-            const optimizationMode = extractHeaderString('x-optimization-mode');
-            const objectSize = extractHeaderValue('x-object-size-bytes') || sizeBytes;
+            const serverLatency = extractHeaderValue('x-latency-ms');
+            const cacheHit = extractHeaderString('x-cache-hit') === 'true';
+            const contentLength = extractHeaderValue('content-length');
 
 
             // Mark as downloaded for this profile
@@ -512,50 +477,30 @@ export class SimulationService {
                 profileState.cacheMisses++;
             }
 
-            const effectiveServerLatency = totalServerMs || serverLatency;
-            const clientLatency = Math.max(0, totalLatency - effectiveServerLatency - networkLatency);
 
             const metric: ObjectMetric = {
                 objectId,
                 profileId,
                 downloadLatencyMs: totalLatency,
-                serverLatencyMs: effectiveServerLatency,
-                clientLatencyMs: clientLatency,
-                networkLatencyMs: networkLatency,
-                sizeBytes: objectSize,
+                serverLatencyMs: serverLatency,
+                timeToFirstByteMs: TTFBms,
+                sizeBytes: sizeBytes,
                 timestamp: Date.now(),
                 simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
                 simulationId: this.getCurrentSimulationId(),
-                downloadSource,
-                cacheHit,
-                isBaseline: false,
-                cacheLayerUsed,
-                optimizationMode,
-                detailedLatencies: {
-                    dbLookupMs,
-                    firstByteMs,
-                    cacheMemoryMs,
-                    cacheFilesystemMs,
-                    cacheRedisMs,
-                    minioMs,
-                    streamMs,
-                    promotionMs,
-                    cacheWaterfallMs
-                }
+                downloadSource: downloadSource,
+                cacheHit: cacheHit,
+                success: true,
             };
 
             profileState.metrics.push(metric);
 
             console.log(`Downloaded ${objectId} for ${profileId}:`, {
                 totalLatency: `${totalLatency.toFixed(2)}ms`,
-                serverLatency: `${effectiveServerLatency.toFixed(2)}ms`,
-                clientLatency: `${clientLatency.toFixed(2)}ms`,
+                serverLatency: `${serverLatency.toFixed(2)}ms`,
                 source: downloadSource,
-                cacheLayer: cacheLayerUsed || 'none',
-                cacheHit,
-                dbLookup: dbLookupMs ? `${dbLookupMs.toFixed(2)}ms` : 'N/A',
-                firstByte: firstByteMs ? `${firstByteMs.toFixed(2)}ms` : 'N/A',
-                size: `${(objectSize / 1024).toFixed(2)}KB`,
+                cacheHit: cacheHit,
+                size: `${(contentLength / 1024).toFixed(2)}KB`,
                 uniqueDownloads: downloads.size,
                 headers: response.headers
             });
@@ -571,16 +516,13 @@ export class SimulationService {
                 objectId,
                 profileId,
                 downloadLatencyMs: latency,
-                serverLatencyMs: 0,
-                clientLatencyMs: latency,
-                networkLatencyMs: 0,
+                timeToFirstByteMs: TTFBms,
                 sizeBytes: 0,
                 timestamp: Date.now(),
                 simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
                 simulationId: this.getCurrentSimulationId(),
                 downloadSource: 'error',
-                error: error instanceof Error ? error.message : 'Unknown error',
-                isBaseline: false
+                success: false,
             };
 
             profileState.metrics.push(failureMetric);
@@ -588,31 +530,6 @@ export class SimulationService {
         }
     }
 
-    /**
-     * Record baseline metric when no objects found
-     */
-    private async recordBaselineMetric(profileId: string, detectionLatency: number = 0): Promise<void> {
-        const baselineMetric: ObjectMetric = {
-            objectId: 'BASELINE_NO_OBJECTS',
-            profileId,
-            downloadLatencyMs: detectionLatency,
-            serverLatencyMs: 0,
-            clientLatencyMs: detectionLatency,
-            sizeBytes: 0,
-            timestamp: Date.now(),
-            simulationType: this.simulationState?.optimized ? 'optimized' : 'unoptimized',
-            simulationId: this.getCurrentSimulationId(),
-            downloadSource: 'baseline',
-            isBaseline: true
-        };
-
-        const profileState = this.simulationState?.profileStates[profileId];
-        if (profileState) {
-            profileState.metrics.push(baselineMetric);
-        }
-
-        this.baselineMetrics.get(profileId)?.push(baselineMetric);
-    }
 
     /**
      * Start real-time simulation
@@ -782,10 +699,7 @@ export class SimulationService {
      * Process unoptimized detection
      */
     private async processUnoptimizedDetection(profileId: string, currentPoint: DataPoint): Promise<void> {
-        const detectionStartTime = performance.now();
         const nearbyObjects = this.findObjectsWithinDistance(currentPoint, 10);
-        const detectionEndTime = performance.now();
-        const detectionLatency = detectionEndTime - detectionStartTime;
 
         const profileState = this.simulationState?.profileStates[profileId];
         if (profileState) {
@@ -798,8 +712,6 @@ export class SimulationService {
             if (profileState) {
                 profileState.successfulRequests++;
             }
-        } else {
-            await this.recordBaselineMetric(profileId, detectionLatency);
         }
     }
 
@@ -836,62 +748,39 @@ export class SimulationService {
 
         Object.values(this.simulationState.profileStates).forEach(profileState => {
             profileState.metrics.forEach(metric => {
-                if (!metric.isBaseline) {
-                    allMetrics.push(metric);
+                allMetrics.push(metric);
 
-                    if (!objectMetrics[metric.objectId]) {
-                        objectMetrics[metric.objectId] = {
-                            downloads: [],
-                            statistics: {
-                                totalDownloads: 0,
-                                uniqueProfiles: 0,
-                                averageLatency: 0,
-                                minLatency: Infinity,
-                                maxLatency: 0,
-                                p95Latency: 0,
-                                cacheHitRate: 0,
-                                successRate: 0,
-                                detailedLatencies: {
-                                    dbLookup: {mean: 0, max: 0, count: 0},
-                                    firstByte: {mean: 0, max: 0, count: 0},
-                                    cacheAccess: {
-                                        memory: {hits: 0, avgLatency: 0},
-                                        filesystem: {hits: 0, avgLatency: 0},
-                                        redis: {hits: 0, avgLatency: 0}
-                                    },
-                                    cacheLayerDistribution: new Map<string, number>()
-                                }
-                            }
-                        };
-                    }
-
-                    objectMetrics[metric.objectId].downloads.push({
-                        profileId: metric.profileId,
-                        timestamp: metric.timestamp,
-                        latency: {
-                            total: metric.downloadLatencyMs,
-                            server: metric.serverLatencyMs || 0,
-                            client: metric.clientLatencyMs || 0,
-                            network: metric.networkLatencyMs || 0,
-                            dbLookup: metric.detailedLatencies?.dbLookupMs,
-                            firstByte: metric.detailedLatencies?.firstByteMs,
-                            cacheMemory: metric.detailedLatencies?.cacheMemoryMs,
-                            cacheFilesystem: metric.detailedLatencies?.cacheFilesystemMs,
-                            cacheRedis: metric.detailedLatencies?.cacheRedisMs,
-                            minio: metric.detailedLatencies?.minioMs,
-                            stream: metric.detailedLatencies?.streamMs,
-                            promotion: metric.detailedLatencies?.promotionMs,
-                            cacheWaterfall: metric.detailedLatencies?.cacheWaterfallMs
-                        },
-                        cacheHit: metric.cacheHit || false,
-                        downloadSource: metric.downloadSource || 'unknown',
-                        cacheLayerUsed: metric.cacheLayerUsed,
-                        optimizationMode: metric.optimizationMode,
-                        sizeBytes: metric.sizeBytes,
-                        success: !metric.error,
-                        error: metric.error
-                    });
+                if (!objectMetrics[metric.objectId]) {
+                    objectMetrics[metric.objectId] = {
+                        downloads: [],
+                        statistics: {
+                            totalDownloads: 0,
+                            uniqueProfiles: 0,
+                            averageLatency: 0,
+                            averageTTFB: 0,
+                            minLatency: Infinity,
+                            maxLatency: 0,
+                            p95Latency: 0,
+                            cacheHitRate: 0,
+                            successRate: 0,
+                        }
+                    };
                 }
+
+                objectMetrics[metric.objectId].downloads.push({
+                    profileId: metric.profileId,
+                    timestamp: metric.timestamp,
+                    latency: {
+                        total: metric.downloadLatencyMs,
+                        server: metric.serverLatencyMs || 0,
+                        ttfb: metric.timeToFirstByteMs || 0
+                    },
+                    cacheHit: metric.cacheHit || false,
+                    downloadSource: metric.downloadSource || 'unknown',
+                    optimizationMode: metric.simulationType,
+                    sizeBytes: metric.sizeBytes,
+                    success: !metric.success,
+                });
             });
         });
 
@@ -901,70 +790,27 @@ export class SimulationService {
             const latencies = downloads.map(d => d.latency.total);
             const successfulDownloads = downloads.filter(d => d.success);
             const cacheHits = downloads.filter(d => d.cacheHit);
-            const detailedLatencyStats = {
-                dbLookup: {
-                    mean: 0,
-                    max: 0,
-                    count: 0
-                },
-                firstByte: {
-                    mean: 0,
-                    max: 0,
-                    count: 0
-                },
-                cacheAccess: {
-                    memory: {hits: 0, avgLatency: 0},
-                    filesystem: {hits: 0, avgLatency: 0},
-                    redis: {hits: 0, avgLatency: 0}
-                },
-                cacheLayerDistribution: new Map<string, number>()
-            };
-
-            downloads.forEach(d => {
-                if (d.latency.dbLookup !== undefined) {
-                    detailedLatencyStats.dbLookup.count++;
-                    detailedLatencyStats.dbLookup.mean += d.latency.dbLookup;
-                    detailedLatencyStats.dbLookup.max = Math.max(detailedLatencyStats.dbLookup.max, d.latency.dbLookup);
-                }
-
-                if (d.latency.firstByte !== undefined) {
-                    detailedLatencyStats.firstByte.count++;
-                    detailedLatencyStats.firstByte.mean += d.latency.firstByte;
-                    detailedLatencyStats.firstByte.max = Math.max(detailedLatencyStats.firstByte.max, d.latency.firstByte);
-                }
-
-                if (d.cacheLayerUsed) {
-                    const count = detailedLatencyStats.cacheLayerDistribution.get(d.cacheLayerUsed) || 0;
-                    detailedLatencyStats.cacheLayerDistribution.set(d.cacheLayerUsed, count + 1);
-                }
-            });
-
-            if (detailedLatencyStats.dbLookup.count > 0) {
-                detailedLatencyStats.dbLookup.mean /= detailedLatencyStats.dbLookup.count;
-            }
-            if (detailedLatencyStats.firstByte.count > 0) {
-                detailedLatencyStats.firstByte.mean /= detailedLatencyStats.firstByte.count;
-            }
 
             // data.statistics.detailedLatencies = detailedLatencyStats;
             data.statistics = {
                 totalDownloads: downloads.length,
                 uniqueProfiles: new Set(downloads.map(d => d.profileId)).size,
                 averageLatency: this.calculateMean(latencies),
+                averageTTFB: this.calculateMean(downloads.map(d => d.latency.ttfb)),
                 minLatency: Math.min(...latencies),
                 maxLatency: Math.max(...latencies),
                 p95Latency: this.calculatePercentile(latencies, 95),
                 cacheHitRate: (cacheHits.length / downloads.length) * 100,
                 successRate: (successfulDownloads.length / downloads.length) * 100,
-                detailedLatencies: detailedLatencyStats
             };
 
 
         });
 
         // Aggregated statistics
-        const successfulMetrics = allMetrics.filter(m => !m.error);
+        const successfulMetrics = allMetrics.filter(m => m.success);
         const latencies = successfulMetrics.map(m => m.downloadLatencyMs);
+        const ttfbs = successfulMetrics.map(m => m.timeToFirstByteMs);
         const duration = Date.now() - this.simulationState.startTime;
 
         const aggregatedStats: ScientificMetrics['aggregatedStats'] = {
@@ -979,6 +825,18 @@ export class SimulationService {
                 p99: this.calculatePercentile(latencies, 99),
                 min: latencies.length > 0 ? Math.min(...latencies) : 0,
                 max: latencies.length > 0 ? Math.max(...latencies) : 0
+            },
+            timeToFirstByte:{
+                mean: this.calculateMean(ttfbs),
+                median: this.calculateMedian(ttfbs),
+                stdDev: this.calculateStandardDeviation(ttfbs),
+                p50: this.calculatePercentile(ttfbs, 50),
+                p75: this.calculatePercentile(ttfbs, 75),
+                p90: this.calculatePercentile(ttfbs, 90),
+                p95: this.calculatePercentile(ttfbs, 95),
+                p99: this.calculatePercentile(ttfbs, 99),
+                min: ttfbs.length > 0 ? Math.min(...ttfbs) : 0,
+                max: ttfbs.length > 0 ? Math.max(...ttfbs) : 0
             },
             throughput: {
                 objectsPerSecond: successfulMetrics.length / (duration / 1000),
@@ -1003,7 +861,7 @@ export class SimulationService {
         // Profile metrics
         const profileMetrics: ScientificMetrics['profileMetrics'] = {};
         Object.entries(this.simulationState.profileStates).forEach(([profileId, state]) => {
-            const profileSuccessMetrics = state.metrics.filter(m => !m.error && !m.isBaseline);
+            const profileSuccessMetrics = state.metrics.filter(m => !m.success);
             profileMetrics[profileId] = {
                 name: this.profiles.find(p => p.id === profileId)?.name || profileId,
                 totalObjects: state.downloadedObjects.length,

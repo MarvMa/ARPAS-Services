@@ -108,7 +108,7 @@ const App: React.FC = () => {
             }
         };
 
-        initializeApp();
+        initializeApp().then(r => console.log(r));
 
         return () => {
             isMounted = false;
@@ -454,43 +454,6 @@ const App: React.FC = () => {
         }
     }, [profileService]);
 
-    /**
-     * Exports all profiles to JSON
-     */
-    const handleExportProfiles = useCallback(() => {
-        try {
-            const jsonString = profileService.exportProfiles();
-            const blob = new Blob([jsonString], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `profiles_export_${Date.now()}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-
-            alert('Profiles exported successfully!');
-            console.log('All profiles exported');
-        } catch (error) {
-            console.error('Failed to export profiles:', error);
-            alert('Failed to export profiles.');
-        }
-    }, [profileService]);
-
-    /**
-     * Reloads predefined profiles
-     */
-    const handleReloadProfiles = useCallback(async () => {
-        const confirmed = window.confirm('This will reload all predefined profiles. Continue?');
-        if (confirmed) {
-            profileService.clearAllProfiles();
-            setProfiles([]);
-            setSelectedProfiles([]);
-            await loadPredefinedProfiles();
-        }
-    }, [profileService, loadPredefinedProfiles]);
 
     /**
      * Focus handler for SimulationControls
@@ -501,24 +464,6 @@ const App: React.FC = () => {
         }
     }, []);
 
-    /**
-     * Test Docker metrics connectivity
-     */
-    const handleTestDockerMetrics = useCallback(async () => {
-        try {
-            const result = await dockerMetricsService.testConnection();
-            console.log('Docker metrics test result:', result);
-
-            if (result.status === 'success') {
-                console.log(`Docker metrics service is available!\n\nPrometheus: ${result.prometheus_healthy ? 'Healthy' : 'Unhealthy'}\nActive Targets: ${result.active_targets || 0}\n\n${result.message}`);
-            } else {
-                console.log(`Docker metrics service test failed:\n\n${result.message}`);
-            }
-        } catch (error) {
-            console.error('Docker metrics test failed:', error);
-            alert(`Docker metrics test failed:\n\n${error instanceof Error ? error.message : 'Unknown error'}`);
-        }
-    }, [dockerMetricsService]);
 
     return (
         <div className="app">
@@ -537,14 +482,8 @@ const App: React.FC = () => {
                     <label htmlFor="profile-upload" className="btn-secondary">
                         Load Profiles
                     </label>
-                    <button onClick={handleExportProfiles} className="btn-secondary">
-                        Export Profiles
-                    </button>
-                    {PRELOADED_PROFILES.length > 0 && (
-                        <button onClick={handleReloadProfiles} className="btn-secondary">
-                            Reload Predefined
-                        </button>
-                    )}
+
+
                     <button
                         onClick={() => setIsAddingMode(!isAddingMode)}
                         className={`btn-primary ${isAddingMode ? 'active' : ''}`}
@@ -553,21 +492,6 @@ const App: React.FC = () => {
                     >
                         {isAddingMode ? 'Cancel Adding' : 'Add 3D Object'}
                     </button>
-                    <button
-                        onClick={() => setShowResults(!showResults)}
-                        className="btn-primary"
-                    >
-                        {showResults ? 'Hide' : 'Show'} Results
-                    </button>
-                    {dockerMetricsAvailable && (
-                        <button
-                            onClick={handleTestDockerMetrics}
-                            className="btn-secondary"
-                            title="Test Docker metrics connectivity"
-                        >
-                            Test Docker Metrics
-                        </button>
-                    )}
                 </div>
             </header>
 

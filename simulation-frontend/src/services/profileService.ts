@@ -289,7 +289,7 @@ export class ProfileService {
         try {
             const response = await fetch(url);
             if (!response.ok) {
-                throw new Error(`Failed to fetch profile: ${response.statusText}`);
+                new Error(`Failed to fetch profile: ${response.statusText}`);
             }
 
             const rawData = await response.json();
@@ -329,44 +329,10 @@ export class ProfileService {
     }
 
     /**
-     * Gets a profile by ID
-     */
-    getProfile(profileId: string): Profile | undefined {
-        return this.profiles.find(p => p.id === profileId);
-    }
-
-    /**
      * Exports profiles to JSON format
      */
     exportProfiles(): string {
         return JSON.stringify(this.profiles, null, 2);
-    }
-
-    /**
-     * Imports profiles from JSON string
-     */
-    importProfiles(jsonString: string): Profile[] {
-        try {
-            const importedProfiles: Profile[] = JSON.parse(jsonString);
-
-            // Validate imported profiles
-            const validProfiles = importedProfiles.filter(profile =>
-                profile.id &&
-                profile.name &&
-                Array.isArray(profile.data) &&
-                profile.color
-            );
-
-            // Add unique IDs to avoid conflicts
-            validProfiles.forEach(profile => {
-                profile.id = this.generateProfileId();
-                this.addProfile(profile);
-            });
-
-            return validProfiles;
-        } catch (error) {
-            throw new Error(`Failed to import profiles: ${error instanceof Error ? error.message : 'Invalid JSON'}`);
-        }
     }
 
     /**
@@ -376,68 +342,4 @@ export class ProfileService {
         this.profiles = [];
     }
 
-    /**
-     * Gets summary statistics for a profile
-     */
-    getProfileStatistics(profileId: string): {
-        totalPoints: number;
-        duration: number;
-        distance: number;
-        averageSpeed: number;
-        bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number };
-    } | null {
-        const profile = this.getProfile(profileId);
-        if (!profile || profile.data.length === 0) {
-            return null;
-        }
-
-        const data = profile.data;
-        const lats = data.map(p => p.lat);
-        const lngs = data.map(p => p.lng);
-        const speeds = data.filter(p => p.speed !== undefined).map(p => p.speed!);
-
-        // Calculate total distance using Haversine formula
-        let totalDistance = 0;
-        for (let i = 1; i < data.length; i++) {
-            totalDistance += this.calculateDistance(data[i - 1], data[i]);
-        }
-
-        const duration = data[data.length - 1].timestamp - data[0].timestamp;
-        const averageSpeed = speeds.length > 0
-            ? speeds.reduce((sum, speed) => sum + speed, 0) / speeds.length
-            : 0;
-
-        return {
-            totalPoints: data.length,
-            duration,
-            distance: totalDistance,
-            averageSpeed,
-            bounds: {
-                minLat: Math.min(...lats),
-                maxLat: Math.max(...lats),
-                minLng: Math.min(...lngs),
-                maxLng: Math.max(...lngs)
-            }
-        };
-    }
-
-    /**
-     * Calculates distance between two points using Haversine formula
-     */
-    private calculateDistance(point1: DataPoint, point2: DataPoint): number {
-        const R = 6371000; // Earth's radius in meters
-        const lat1Rad = (point1.lat * Math.PI) / 180;
-        const lat2Rad = (point2.lat * Math.PI) / 180;
-        const deltaLatRad = ((point2.lat - point1.lat) * Math.PI) / 180;
-        const deltaLngRad = ((point2.lng - point1.lng) * Math.PI) / 180;
-
-        const a =
-            Math.sin(deltaLatRad / 2) * Math.sin(deltaLatRad / 2) +
-            Math.cos(lat1Rad) * Math.cos(lat2Rad) *
-            Math.sin(deltaLngRad / 2) * Math.sin(deltaLngRad / 2);
-
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return R * c;
-    }
 }

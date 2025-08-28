@@ -99,55 +99,6 @@ export function interpolateBetweenPoints(
     };
 }
 
-/**
- * Simple real-time position calculation - NO EASING for consistent speed
- */
-export function getRealTimePosition(
-    routePoints: DataPoint[],
-    currentIndex: number,
-    segmentProgress: number // 0 to 1, how far through the current segment
-): { lat: number; lng: number; bearing?: number } | null {
-    if (currentIndex >= routePoints.length - 1) {
-        // At or past the last point
-        const lastPoint = routePoints[routePoints.length - 1];
-        return {
-            lat: lastPoint.lat,
-            lng: lastPoint.lng,
-            bearing: lastPoint.bearing
-        };
-    }
-
-    const currentPoint = routePoints[currentIndex];
-    const nextPoint = routePoints[currentIndex + 1];
-
-    // Clamp segment progress to valid range
-    const clampedProgress = Math.max(0, Math.min(1, segmentProgress));
-
-    // LINEAR interpolation between current and next point - NO EASING
-    const lat = currentPoint.lat + (nextPoint.lat - currentPoint.lat) * clampedProgress;
-    const lng = currentPoint.lng + (nextPoint.lng - currentPoint.lng) * clampedProgress;
-    const bearing = interpolateBearing(clampedProgress, currentPoint.bearing, nextPoint.bearing);
-
-    return {lat, lng, bearing};
-}
-
-/**
- * Calculates segment progress based on timestamps and elapsed simulation time
- */
-export function calculateSegmentProgress(
-    currentPoint: DataPoint,
-    nextPoint: DataPoint,
-    simulationElapsedTime: number
-): number {
-    const segmentDuration = nextPoint.timestamp - currentPoint.timestamp;
-    if (segmentDuration <= 0) return 1;
-
-    // Calculate how much time has passed since this segment started
-    const segmentElapsed = simulationElapsedTime - (currentPoint.timestamp - currentPoint.timestamp);
-    const progress = segmentElapsed / segmentDuration;
-
-    return Math.max(0, Math.min(1, progress));
-}
 
 /**
  * Interpolates bearing/heading values handling circular nature (0-360 degrees)
@@ -241,19 +192,6 @@ export function smoothPoints(points: InterpolatedPoint[], windowSize: number = 3
     return smoothed;
 }
 
-/**
- * Calculates the total distance of a route using Haversine formula
- */
-export function calculateRouteDistance(points: DataPoint[]): number {
-    if (points.length < 2) return 0;
-
-    let totalDistance = 0;
-    for (let i = 1; i < points.length; i++) {
-        totalDistance += calculateDistance(points[i - 1], points[i]);
-    }
-
-    return totalDistance;
-}
 
 /**
  * Calculates distance between two points using Haversine formula
@@ -275,39 +213,3 @@ export function calculateDistance(point1: DataPoint, point2: DataPoint): number 
     return R * c;
 }
 
-/**
- * Finds the closest point on a route to a given coordinate
- */
-export function findClosestPointOnRoute(
-    targetLat: number,
-    targetLng: number,
-    routePoints: DataPoint[]
-): { point: DataPoint; index: number; distance: number } | null {
-    if (routePoints.length === 0) return null;
-
-    let closestPoint = routePoints[0];
-    let closestIndex = 0;
-    let minDistance = calculateDistance(
-        {lat: targetLat, lng: targetLng, timestamp: 0},
-        closestPoint
-    );
-
-    for (let i = 1; i < routePoints.length; i++) {
-        const distance = calculateDistance(
-            {lat: targetLat, lng: targetLng, timestamp: 0},
-            routePoints[i]
-        );
-
-        if (distance < minDistance) {
-            minDistance = distance;
-            closestPoint = routePoints[i];
-            closestIndex = i;
-        }
-    }
-
-    return {
-        point: closestPoint,
-        index: closestIndex,
-        distance: minDistance
-    };
-}

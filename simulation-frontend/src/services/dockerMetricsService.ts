@@ -299,98 +299,10 @@ export class DockerMetricsService {
     }
 
     /**
-     * Validate metrics data quality
-     */
-    validateMetricsQuality(dockerTimeSeries: EnhancedDockerTimeSeries, expectedDurationMs: number): {
-        isValid: boolean;
-        issues: string[];
-        coverage: number;
-        recommendations: string[];
-    } {
-        const issues: string[] = [];
-        const recommendations: string[] = [];
-        const expectedDataPoints = Math.floor(expectedDurationMs / 5000); // Expecting data every 5 seconds
-
-        Object.entries(dockerTimeSeries).forEach(([serviceName, timeSeries]) => {
-            const actualDataPoints = timeSeries.length;
-            const coverage = actualDataPoints / expectedDataPoints;
-
-            if (coverage < 0.8) {
-                issues.push(`${serviceName}: Low data coverage (${Math.round(coverage * 100)}%)`);
-                recommendations.push(`Check ${serviceName} container health during simulation`);
-            }
-
-            // Check for gaps in timestamps
-            if (timeSeries.length > 1) {
-                const timestamps = timeSeries.map(t => t.timestamp).sort((a, b) => a - b);
-                let gapCount = 0;
-
-                for (let i = 1; i < timestamps.length; i++) {
-                    const gap = timestamps[i] - timestamps[i - 1];
-                    if (gap > 10000) { // More than 10 seconds gap
-                        gapCount++;
-                    }
-                }
-
-                if (gapCount > 0) {
-                    issues.push(`${serviceName}: ${gapCount} significant gaps in data`);
-                }
-            }
-
-            // Check for unrealistic values
-            const cpuValues = timeSeries.map(t => t.cpu.percent);
-            const maxCpu = Math.max(...cpuValues);
-            if (maxCpu > 100) {
-                issues.push(`${serviceName}: Unrealistic CPU values (max: ${maxCpu.toFixed(2)}%)`);
-            }
-        });
-
-        const totalCoverage = Object.values(dockerTimeSeries).reduce((sum, timeSeries) => {
-            return sum + (timeSeries.length / expectedDataPoints);
-        }, 0) / Object.keys(dockerTimeSeries).length;
-
-        const isValid = issues.length === 0 && totalCoverage >= 0.8;
-
-        if (!isValid) {
-            recommendations.push('Consider increasing Prometheus scrape frequency');
-            recommendations.push('Verify cAdvisor is properly monitoring all containers');
-        }
-
-        return {
-            isValid,
-            issues,
-            coverage: totalCoverage,
-            recommendations
-        };
-    }
-
-    /**
      * Helper method to calculate average
      */
     private calculateAverage(values: number[]): number {
         if (values.length === 0) return 0;
         return values.reduce((sum, val) => sum + val, 0) / values.length;
-    }
-
-    /**
-     * Get expected services for a simulation type
-     */
-    getExpectedServices(simulationType: 'optimized' | 'unoptimized'): string[] {
-        if (simulationType === 'optimized') {
-            return ['prediction_service', 'storage-service', 'redis', 'minio'];
-        } else {
-            return ['storage-service', 'minio'];
-        }
-    }
-
-    /**
-     * Format file size for display
-     */
-    private formatBytes(bytes: number): string {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 }

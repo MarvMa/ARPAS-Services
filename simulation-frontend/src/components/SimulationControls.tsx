@@ -1,7 +1,6 @@
 import React, {useState, useCallback, useMemo, useEffect} from 'react';
-import { Profile, SimulationState } from '../types/simulation';
-import {DockerMetricsService, DockerMetricsTestResponse} from "../services/dockerMetricsService.ts";
-import {SimulationService} from "../services/simulationService.ts";
+import {Profile, SimulationState} from '../types/simulation';
+import {DockerMetricsService} from "../services/dockerMetricsService.ts";
 
 interface SimulationControlsProps {
     profiles: Profile[];
@@ -32,15 +31,10 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                                                                           onProfileVisibilityToggle,
                                                                           onFocusProfile,
                                                                           dockerMetricsService,
-                                                                          dockerMetricsAvailable = false
                                                                       }) => {
     const [optimized, setOptimized] = useState<boolean>(true);
     const [intervalMs, setIntervalMs] = useState<number>(200); // Default 200ms interval
     const [isStarting, setIsStarting] = useState<boolean>(false);
-
-    const [dockerMetricsStatus, setDockerMetricsStatus] = useState<DockerMetricsTestResponse | null>(null);
-    const [isTestingDockerMetrics, setIsTestingDockerMetrics] = useState<boolean>(false);
-    const [showDockerMetricsDetails, setShowDockerMetricsDetails] = useState<boolean>(false);
 
     /**
      * Memoized derived state
@@ -59,15 +53,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         };
     }, [simulationState, selectedProfiles.length, isStarting, profiles]);
 
-    /**
-     * Test Docker metrics connectivity on mount
-     */
-    useEffect(() => {
-        if (dockerMetricsService && dockerMetricsAvailable) {
-            SimulationService.testDockerMetricsConnection().then(r => alert(`Docker metrics service is available: ${r}`));
-        }
-    }, [dockerMetricsService, dockerMetricsAvailable]);
-    
+
     /**
      * Handles profile selection changes
      */
@@ -113,7 +99,6 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         }
 
 
-
         setIsStarting(true);
         try {
             await onStartSimulation({
@@ -128,7 +113,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
         } finally {
             setIsStarting(false);
         }
-    }, [selectedProfiles, optimized, intervalMs, onStartSimulation, dockerMetricsStatus, dockerMetricsService]);
+    }, [selectedProfiles, optimized, intervalMs, onStartSimulation, dockerMetricsService]);
 
     /**
      * Handles simulation stop
@@ -205,7 +190,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
             return `${seconds}s`;
         }
     };
-    
+
     useEffect(() => {
         if (!simulationState?.isRunning) return;
 
@@ -217,114 +202,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
     }, [simulationState?.isRunning]);
 
     const [_forceUpdate, setForceUpdate] = useState(0);
-    
-    /**
-     * Render Docker metrics status indicator
-     */
-    const renderDockerMetricsStatus = () => {
-        if (!dockerMetricsAvailable || !dockerMetricsService) {
-            return (
-                <div className="docker-metrics-status unavailable">
-                    <span className="status-icon">❌</span>
-                    <span>Docker Metrics: Unavailable</span>
-                </div>
-            );
-        }
-
-        const isHealthy = dockerMetricsStatus?.status === 'success' && dockerMetricsStatus?.prometheus_healthy;
-        const statusClass = isHealthy ? 'healthy' : (dockerMetricsStatus?.status === 'error' ? 'error' : 'warning');
-
-        return (
-            <div className={`docker-metrics-status ${statusClass}`}>
-                <span className="status-icon">
-                    {isHealthy ? '✅' : (dockerMetricsStatus?.status === 'error' ? '❌' : '⚠️')}
-                </span>
-                <span>
-                    Docker Metrics: {isHealthy ? 'Ready' : (dockerMetricsStatus?.status === 'error' ? 'Error' : 'Warning')}
-                </span>
-                <button
-                    onClick={() => setShowDockerMetricsDetails(!showDockerMetricsDetails)}
-                    className="btn-tiny btn-secondary"
-                    title="Show details"
-                >
-                    {showDockerMetricsDetails ? '▼' : '▶'}
-                </button>
-                <button
-                    onClick={SimulationService.testDockerMetricsConnection}
-                    className="btn-tiny btn-secondary"
-                    disabled={isTestingDockerMetrics}
-                    title="Test connection"
-                >
-                    {isTestingDockerMetrics ? '⟳' : '🔄'}
-                </button>
-            </div>
-        );
-    };
-
-    /**
-     * Render Docker metrics details panel
-     */
-    const renderDockerMetricsDetails = () => {
-        if (!showDockerMetricsDetails || !dockerMetricsStatus) return null;
-
-        return (
-            <div className="docker-metrics-details">
-                <h4>Docker Metrics Status Details</h4>
-                <div className="details-grid">
-                    <div className="detail-item">
-                        <label>Service Status:</label>
-                        <span className={dockerMetricsStatus.status}>{dockerMetricsStatus.status}</span>
-                    </div>
-                    <div className="detail-item">
-                        <label>Message:</label>
-                        <span>{dockerMetricsStatus.message}</span>
-                    </div>
-                    {dockerMetricsStatus.prometheus_url && (
-                        <div className="detail-item">
-                            <label>Prometheus URL:</label>
-                            <span className="monospace">{dockerMetricsStatus.prometheus_url}</span>
-                        </div>
-                    )}
-                    {dockerMetricsStatus.prometheus_healthy !== undefined && (
-                        <div className="detail-item">
-                            <label>Prometheus Health:</label>
-                            <span className={dockerMetricsStatus.prometheus_healthy ? 'healthy' : 'unhealthy'}>
-                                {dockerMetricsStatus.prometheus_healthy ? 'Healthy' : 'Unhealthy'}
-                            </span>
-                        </div>
-                    )}
-                    {dockerMetricsStatus.active_targets !== undefined && (
-                        <div className="detail-item">
-                            <label>Active Targets:</label>
-                            <span>{dockerMetricsStatus.active_targets}</span>
-                        </div>
-                    )}
-                </div>
-
-                {optimized && dockerMetricsStatus.status === 'success' && (
-                    <div className="metrics-info">
-                        <p><strong>Expected Services for Optimized Mode:</strong></p>
-                        <ul>
-                            <li>prediction_service - Real-time object prediction</li>
-                            <li>storage-service - Object storage and caching</li>
-                            <li>redis - Cache backend</li>
-                            <li>minio - Object storage backend</li>
-                        </ul>
-                    </div>
-                )}
-
-                {!optimized && dockerMetricsStatus.status === 'success' && (
-                    <div className="metrics-info">
-                        <p><strong>Expected Services for Unoptimized Mode:</strong></p>
-                        <ul>
-                            <li>storage-service - Object storage</li>
-                            <li>minio - Object storage backend</li>
-                        </ul>
-                    </div>
-                )}
-            </div>
-        );
-    };
+   
 
     return (
         <div className="simulation-controls">
@@ -337,15 +215,6 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                     </span>
                 </div>
             </div>
-
-            {/* Docker Metrics Status */}
-            {dockerMetricsService && (
-                <div className="control-group">
-                    <h3>Infrastructure Monitoring</h3>
-                    {renderDockerMetricsStatus()}
-                    {renderDockerMetricsDetails()}
-                </div>
-            )}
 
             {/* Profile Management */}
             <div className="control-group">
@@ -395,7 +264,7 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                                             <span className="data-points">{profile.data.length} points</span>
                                             <div
                                                 className="profile-color"
-                                                style={{ backgroundColor: profile.color }}
+                                                style={{backgroundColor: profile.color}}
                                             ></div>
                                         </div>
                                     </div>
@@ -456,9 +325,13 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                 </label>
                 <div className="mode-description">
                     {optimized ? (
-                        <p>Uses WebSocket connections for real-time object detection with caching optimization. Each profile gets its own WebSocket connection. <strong>Docker metrics will be collected for all optimization services.</strong></p>
+                        <p>Uses WebSocket connections for real-time object detection with caching optimization. Each
+                            profile gets its own WebSocket connection. <strong>Docker metrics will be collected for all
+                                optimization services.</strong></p>
                     ) : (
-                        <p>Downloads 3D objects when within 10 meters proximity without WebSocket connections for performance comparison. <strong>Docker metrics will be collected for core storage services only.</strong></p>
+                        <p>Downloads 3D objects when within 10 meters proximity without WebSocket connections for
+                            performance comparison. <strong>Docker metrics will be collected for core storage services
+                                only.</strong></p>
                     )}
                 </div>
 
@@ -492,7 +365,8 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         </div>
                     </div>
                     <small>
-                        Lower values provide more frequent data transmission and smoother animation but higher computational load.
+                        Lower values provide more frequent data transmission and smoother animation but higher
+                        computational load.
                         {optimized ? ' WebSocket data will be sent at this interval.' : ' Distance checks will be performed at this interval.'}
                     </small>
                 </div>
@@ -523,7 +397,8 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                 </div>
                 <div className="selection-info">
                     <small>
-                        Select profiles to include in the simulation. Each selected profile will {optimized ? 'establish its own WebSocket connection' : 'perform distance-based object detection'}.
+                        Select profiles to include in the simulation. Each selected profile
+                        will {optimized ? 'establish its own WebSocket connection' : 'perform distance-based object detection'}.
                         Map visibility is independent of simulation selection.
                     </small>
                 </div>
@@ -595,7 +470,8 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                         </div>
                         <div className="stat">
                             <span className="stat-label">Mode:</span>
-                            <span className="stat-value">{simulationState.optimized ? 'Optimized' : 'Unoptimized'}</span>
+                            <span
+                                className="stat-value">{simulationState.optimized ? 'Optimized' : 'Unoptimized'}</span>
                         </div>
                         <div className="stat">
                             <span className="stat-label">Interval:</span>
@@ -610,12 +486,6 @@ export const SimulationControls: React.FC<SimulationControlsProps> = ({
                                 }
                             </span>
                         </div>
-                        {dockerMetricsAvailable && dockerMetricsStatus?.status === 'success' && (
-                            <div className="stat">
-                                <span className="stat-label">Docker Metrics:</span>
-                                <span className="stat-value monitoring">Active</span>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}

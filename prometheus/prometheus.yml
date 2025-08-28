@@ -43,13 +43,6 @@ scrape_configs:
       - targets: ['localhost:9090']
     scrape_interval: 1s
 
-  - job_name: 'storage-service'
-    static_configs:
-      - targets: ['storage-service:8000']
-    metrics_path: '/metrics'
-    scrape_interval: 1s
-    scrape_timeout: 1s
-
   - job_name: 'redis'
     static_configs:
       - targets: ['redis:6379']

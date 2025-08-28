@@ -1,6 +1,6 @@
 // Bereinigte dataCollector.ts - nur essenzielle Methoden
 
-import { ScientificMetrics } from '../types/simulation';
+import {ScientificMetrics} from '../types/simulation';
 
 export class DataCollector {
     private scientificResults: ScientificMetrics[] = [];
@@ -38,7 +38,7 @@ export class DataCollector {
      */
     private async downloadIndividualResult(metrics: ScientificMetrics): Promise<void> {
         const filename = `simulation_${metrics.simulationType}_${metrics.simulationId}_${metrics.timestamp.replace(/[:.]/g, '-')}.json`;
-        const blob = new Blob([JSON.stringify(metrics, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(metrics, null, 2)], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -86,7 +86,7 @@ export class DataCollector {
         };
 
         const filename = `scientific_analysis_export_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], {type: 'application/json'});
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -99,64 +99,7 @@ export class DataCollector {
         console.log(`Exported ${this.scientificResults.length} simulations to ${filename}`);
     }
 
-    /**
-     * Export as CSV for scientific analysis tools
-     */
-    async exportAsCSV(): Promise<void> {
-        if (this.scientificResults.length === 0) {
-            throw new Error('No results to export');
-        }
-
-        const headers = [
-            'simulationId', 'simulationType', 'timestamp', 'durationMs',
-            'profileCount', 'objectCount', 'intervalMs',
-            'meanLatency', 'medianLatency', 'p95Latency', 'p99Latency',
-            'minLatency', 'maxLatency', 'stdDevLatency',
-            'cacheHitRate', 'successRate', 'throughput',
-            'totalObjects', 'totalDataBytes'
-        ];
-
-        const rows = this.scientificResults.map(result => [
-            result.simulationId,
-            result.simulationType,
-            result.timestamp,
-            result.duration.totalMs,
-            result.configuration.profileCount,
-            result.configuration.objectCount,
-            result.configuration.intervalMs,
-            result.aggregatedStats.latency.mean.toFixed(2),
-            result.aggregatedStats.latency.median.toFixed(2),
-            result.aggregatedStats.latency.p95.toFixed(2),
-            result.aggregatedStats.latency.p99.toFixed(2),
-            result.aggregatedStats.latency.min.toFixed(2),
-            result.aggregatedStats.latency.max.toFixed(2),
-            result.aggregatedStats.latency.stdDev.toFixed(2),
-            result.aggregatedStats.cache.hitRate.toFixed(2),
-            result.aggregatedStats.success.rate.toFixed(2),
-            result.aggregatedStats.throughput.objectsPerSecond.toFixed(2),
-            Object.keys(result.objectMetrics).length,
-            result.aggregatedStats.throughput.bytesPerSecond * (result.duration.totalMs / 1000)
-        ]);
-
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(row => row.join(','))
-        ].join('\n');
-
-        const filename = `simulation_metrics_${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-
-        console.log(`Exported ${this.scientificResults.length} simulations to CSV: ${filename}`);
-    }
-
+    
     /**
      * Generate comparative analysis between optimized and unoptimized
      */
@@ -165,7 +108,7 @@ export class DataCollector {
         const unoptimized = this.scientificResults.filter(r => r.simulationType === 'unoptimized');
 
         if (optimized.length === 0 || unoptimized.length === 0) {
-            return { message: 'Insufficient data for comparison' };
+            return {message: 'Insufficient data for comparison'};
         }
 
         const calculateAverages = (results: ScientificMetrics[]) => {
@@ -252,7 +195,7 @@ export class DataCollector {
             localStorage.removeItem(this.STORAGE_KEY);
         }
     }
-    
+
     /**
      * Clear all results
      */
@@ -261,5 +204,5 @@ export class DataCollector {
         localStorage.removeItem(this.STORAGE_KEY);
         console.log('All scientific results cleared');
     }
-    
+
 }

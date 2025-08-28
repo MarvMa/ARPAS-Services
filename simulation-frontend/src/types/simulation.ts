@@ -70,31 +70,14 @@ export interface ObjectMetric {
     profileId: string;
     downloadLatencyMs: number;
     serverLatencyMs?: number;
-    clientLatencyMs?: number;
-    networkLatencyMs?: number;
+    timeToFirstByteMs: number;
     sizeBytes: number;
     timestamp: number;
     simulationType: 'optimized' | 'unoptimized';
     simulationId: string;
-    downloadSource?: string; // 'cache' | 'minio' | 'unknown' | 'baseline' | 'error';
+    downloadSource?: string; // 'cache' | 'minio';
     cacheHit?: boolean;
-    compressionRatio?: number;
-    error?: string;
-    isBaseline?: boolean;
-
-    detailedLatencies?: {
-        dbLookupMs?: number;
-        firstByteMs?: number;
-        cacheMemoryMs?: number;
-        cacheFilesystemMs?: number;
-        cacheRedisMs?: number;
-        minioMs?: number;
-        streamMs?: number;
-        promotionMs?: number;
-        cacheWaterfallMs?: number;
-    };
-    cacheLayerUsed?: string;
-    optimizationMode?: string;
+    success: boolean;
 }
 
 export interface ScientificMetrics {
@@ -121,21 +104,10 @@ export interface ScientificMetrics {
                 latency: {
                     total: number;
                     server: number;
-                    client: number;
-                    network: number;
-                    dbLookup?: number;
-                    firstByte?: number;
-                    cacheMemory?: number;
-                    cacheFilesystem?: number;
-                    cacheRedis?: number;
-                    minio?: number;
-                    stream?: number;
-                    promotion?: number;
-                    cacheWaterfall?: number;
+                    ttfb: number
                 };
                 cacheHit: boolean;
                 downloadSource: string;
-                cacheLayerUsed?: string;
                 optimizationMode?: string;
                 sizeBytes: number;
                 success: boolean;
@@ -145,21 +117,12 @@ export interface ScientificMetrics {
                 totalDownloads: number;
                 uniqueProfiles: number;
                 averageLatency: number;
+                averageTTFB: number;
                 minLatency: number;
                 maxLatency: number;
                 p95Latency: number;
                 cacheHitRate: number;
                 successRate: number;
-                detailedLatencies: {
-                    dbLookup: { mean: number; max: number; count: number };
-                    firstByte: { mean: number; max: number; count: number };
-                    cacheAccess: {
-                        memory: { hits: number; avgLatency: number };
-                        filesystem: { hits: number; avgLatency: number };
-                        redis: { hits: number; avgLatency: number };
-                    };
-                    cacheLayerDistribution: Map<string, number>;
-                }
             };
         };
     };
@@ -189,6 +152,18 @@ export interface ScientificMetrics {
     // Aggregated statistics
     aggregatedStats: {
         latency: {
+            mean: number;
+            median: number;
+            stdDev: number;
+            p50: number;
+            p75: number;
+            p90: number;
+            p95: number;
+            p99: number;
+            min: number;
+            max: number;
+        };
+        timeToFirstByte: {
             mean: number;
             median: number;
             stdDev: number;

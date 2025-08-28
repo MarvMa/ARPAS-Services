@@ -132,7 +132,6 @@ func (h *CacheHandler) PreloadAll(c *fiber.Ctx) error {
 	for _, obj := range objects {
 		// Check if already cached
 		if h.cacheService.CheckCached(obj.ID) {
-			log.Printf("Object %s already cached, skipping", obj.ID)
 			continue
 		}
 
