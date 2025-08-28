@@ -32,10 +32,10 @@ type MemoryCache struct {
 
 // CacheEntry holds metadata for cached items
 type CacheEntry struct {
-	Size        int64
-	CreatedAt   time.Time
-	LastAccess  time.Time
-	AccessCount atomic.Int64
+	Size           int64
+	CreatedAtUnix  int64
+	LastAccessUnix int64
+	AccessCount    atomic.Int64
 }
 
 // NewMemoryCache creates a new memory cache
@@ -80,10 +80,11 @@ func (mc *MemoryCache) Store(objectID uuid.UUID, data []byte) error {
 
 	// Store data and metadata
 	mc.data.Store(key, data)
+	now := time.Now().UnixNano()
 	mc.metadata.Store(key, &CacheEntry{
-		Size:       size,
-		CreatedAt:  time.Now(),
-		LastAccess: time.Now(),
+		Size:           size,
+		CreatedAtUnix:  now,
+		LastAccessUnix: now,
 	})
 
 	atomic.AddInt64(&mc.currentSize, size)
@@ -93,28 +94,21 @@ func (mc *MemoryCache) Store(objectID uuid.UUID, data []byte) error {
 	return nil
 }
 
-// Get retrieves an object from the cache
-func (mc *MemoryCache) Get(objectID uuid.UUID) ([]byte, error) {
-	key := objectID.String()
-	if value, ok := mc.data.Load(key); ok {
-		data := value.([]byte)
-		mc.updateAccess(key)
-		mc.hits.Add(1)
-		return data, nil
-	}
-
-	mc.misses.Add(1)
-	return nil, fmt.Errorf("object not found in memory cache")
-}
-
 // GetStream returns a reader for the cached object
 func (mc *MemoryCache) GetStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
-	data, err := mc.Get(objectID)
-	if err != nil {
-		return nil, 0, err
-	}
+	key := objectID.String()
 
-	return io.NopCloser(bytes.NewReader(data)), int64(len(data)), nil
+	if v, ok := mc.data.Load(key); ok {
+		b := v.([]byte)
+		mc.updateAccess(key)
+		mc.hits.Add(1)
+
+		return io.NopCloser(bytes.NewReader(b)), int64(len(b)), nil
+
+	}
+	mc.misses.Add(1)
+
+	return nil, 0, fmt.Errorf("object not found in memory cache")
 }
 
 // Exists checks if an object is in the cache
@@ -203,10 +197,16 @@ func (mc *MemoryCache) CurrentSize() int64 {
 
 // updateAccess updates the last access time and count for an entry
 func (mc *MemoryCache) updateAccess(key string) {
-	if metaValue, ok := mc.metadata.Load(key); ok {
-		entry := metaValue.(*CacheEntry)
-		entry.LastAccess = time.Now()
-		entry.AccessCount.Add(1)
+	if v, ok := mc.metadata.Load(key); ok {
+		entry := v.(*CacheEntry)
+		n := entry.AccessCount.Add(1)
+		if (n & 63) == 0 {
+			now := time.Now().UnixNano()
+			last := atomic.LoadInt64(&entry.LastAccessUnix)
+			if now-last > int64(250*time.Millisecond) {
+				atomic.StoreInt64(&entry.LastAccessUnix, now)
+			}
+		}
 	}
 }
 
@@ -214,15 +214,16 @@ func (mc *MemoryCache) updateAccess(key string) {
 func (mc *MemoryCache) evictLRU() bool {
 	var (
 		oldestKey  string
-		oldestTime time.Time
+		oldestTime int64
 		found      bool
 	)
 
 	mc.metadata.Range(func(key, value interface{}) bool {
 		entry := value.(*CacheEntry)
-		if !found || entry.LastAccess.Before(oldestTime) {
+		ts := atomic.LoadInt64(&entry.LastAccessUnix)
+		if !found || ts < oldestTime {
 			oldestKey = key.(string)
-			oldestTime = entry.LastAccess
+			oldestTime = ts
 			found = true
 		}
 		return true
@@ -260,12 +261,12 @@ func (mc *MemoryCache) cleanupExpired() {
 		return // No TTL set
 	}
 
-	now := time.Now()
+	now := time.Now().UnixNano()
 	var expiredKeys []string
 
 	mc.metadata.Range(func(key, value interface{}) bool {
 		entry := value.(*CacheEntry)
-		if now.Sub(entry.CreatedAt) > mc.ttl {
+		if time.Duration(now-atomic.LoadInt64(&entry.CreatedAtUnix)) > mc.ttl {
 			expiredKeys = append(expiredKeys, key.(string))
 		}
 		return true

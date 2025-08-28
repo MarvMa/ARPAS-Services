@@ -37,11 +37,6 @@ func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
 		})
 	}
 
-	log.Printf("Received preload request for position: Lat=%f, Lon=%f, Alt=%f",
-		request.Position.Latitude,
-		request.Position.Longitude,
-		request.Position.Altitude)
-
 	// Get predicted models based on location
 	predictedModelIDs, err := h.objectService.GetPredictedModels(request)
 	if err != nil {
@@ -71,7 +66,6 @@ func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
 		})
 	}
 
-	// Preload objects
 	err = h.cacheService.PreloadObjects(c.Context(), objectIDs, storageKeys)
 
 	duration := time.Since(startTime)

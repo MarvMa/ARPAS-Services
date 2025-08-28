@@ -49,9 +49,6 @@ func (cs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUI
 		return fmt.Errorf("objectIDs and storageKeys must have the same length")
 	}
 
-	log.Printf("Starting preload for %d objects", len(objectIDs))
-	startTime := time.Now()
-
 	successCount := 0
 	skipCount := 0
 	errorCount := 0
@@ -71,7 +68,6 @@ func (cs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUI
 
 			// Check if already cached to avoid duplicate work
 			if exists, _ := cs.memoryCache.Exists(id); exists {
-				log.Printf("Object %s already cached, skipping", id)
 				skipCount++
 				return
 			}
@@ -100,7 +96,6 @@ func (cs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUI
 			}
 
 			successCount++
-			log.Printf("Preloaded object %s (%d bytes)", id, len(data))
 		}(objectID, storageKeys[i])
 	}
 
@@ -112,10 +107,6 @@ func (cs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUI
 	for err := range errChan {
 		errors = append(errors, err)
 	}
-
-	duration := time.Since(startTime)
-	log.Printf("Preload completed in %v - Success: %d, Skipped: %d, Errors: %d",
-		duration, successCount, skipCount, errorCount)
 
 	if len(errors) > 0 {
 		return fmt.Errorf("preload had %d errors: %v", len(errors), errors[0])
