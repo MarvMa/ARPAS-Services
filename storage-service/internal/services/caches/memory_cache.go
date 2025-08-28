@@ -16,6 +16,7 @@ import (
 type MemoryCache struct {
 	data        sync.Map // map[string][]byte
 	metadata    sync.Map // map[string]*CacheEntry
+	mu          sync.RWMutex
 	maxSize     int64
 	currentSize int64
 	ttl         time.Duration
@@ -95,18 +96,15 @@ func (mc *MemoryCache) Store(objectID uuid.UUID, data []byte) error {
 // Get retrieves an object from the cache
 func (mc *MemoryCache) Get(objectID uuid.UUID) ([]byte, error) {
 	key := objectID.String()
-
-	value, ok := mc.data.Load(key)
-	if !ok {
-		mc.misses.Add(1)
-		return nil, fmt.Errorf("object not found in memory cache")
+	if value, ok := mc.data.Load(key); ok {
+		data := value.([]byte)
+		mc.updateAccess(key)
+		mc.hits.Add(1)
+		return data, nil
 	}
 
-	data := value.([]byte)
-	mc.updateAccess(key)
-	mc.hits.Add(1)
-
-	return data, nil
+	mc.misses.Add(1)
+	return nil, fmt.Errorf("object not found in memory cache")
 }
 
 // GetStream returns a reader for the cached object

@@ -124,6 +124,7 @@ services:
 
     ports:
       - "${STORAGE_PORT}:${STORAGE_PORT}"
+      - "6060:6060"  # pprof profiling
     expose:
       - "${STORAGE_PORT}"
     deploy:

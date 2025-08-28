@@ -128,8 +128,7 @@ func (cs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUI
 func (cs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
 	rc, length, err := cs.memoryCache.GetStream(objectID)
 	if err == nil {
-		log.Printf("Cache HIT for object %s (size: %d)", objectID, length)
-		return rc, length, nil
+		return rc, length, nil // Cache Hit
 	}
 
 	log.Printf("Cache MISS for object %s", objectID)

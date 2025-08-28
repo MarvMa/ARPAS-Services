@@ -47,11 +47,10 @@ func main() {
 		DisableKeepalive:  false,
 		StreamRequestBody: true,
 	})
-
+	
 	app.Use(logger.New(logger.Config{
 		Format: "[${time}] ${status} - ${method} ${path} ${query} - ${ip} - ${latency} - " +
-			"Cache:${header:x-cache-hit} Layer:${header:x-cache-layer-used} " +
-			"TotalMs:${header:x-latency-total-ms} FirstByteMs:${header:x-latency-first-byte-ms}\n",
+			"Optimization-Mode:${header:x-optimization-mode}\n",
 		TimeFormat: "2006-01-02 15:04:05",
 		Output:     os.Stdout,
 	}))
