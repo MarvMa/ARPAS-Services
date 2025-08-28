@@ -12,12 +12,14 @@ import (
 
 // Config holds all configuration values from environment.
 type Config struct {
-	AppPort        string
-	DBHost         string
-	DBPort         string
-	DBUser         string
-	DBPassword     string
-	DBName         string
+	AppPort    string
+	DBHost     string
+	DBPort     string
+	DBUser     string
+	DBPassword string
+	DBName     string
+
+	// MinIO configuration
 	MinioEndpoint  string
 	MinioAccessKey string
 	MinioSecretKey string
@@ -29,9 +31,9 @@ type Config struct {
 	RedisPort string
 
 	// Cache configuration
-	CacheServiceURL string
-	CacheEnabled    bool
-	CacheTTL        time.Duration
+	CacheEnabled      bool
+	CacheMaxSizeBytes int64
+	CacheTTL          time.Duration
 
 	// Prediction settings
 	PredictionRadius     float64
@@ -40,6 +42,7 @@ type Config struct {
 
 // LoadConfig loads configuration from environment variables.
 func LoadConfig() (*Config, error) {
+	// Parse MinIO SSL setting
 	minioSSL := false
 	if sslEnv := os.Getenv("MINIO_SSL"); sslEnv != "" {
 		val, err := strconv.ParseBool(sslEnv)
@@ -49,6 +52,7 @@ func LoadConfig() (*Config, error) {
 		minioSSL = val
 	}
 
+	// Parse cache enabled setting
 	cacheEnabled := true
 	if cacheEnv := os.Getenv("CACHE_ENABLED"); cacheEnv != "" {
 		val, err := strconv.ParseBool(cacheEnv)
@@ -57,7 +61,24 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
-	predictionRadius := 20.0 // default value
+	// Parse cache max size (default 8GB)
+	cacheMaxSize := int64(8 << 30) // 8GB default
+	if sizeEnv := os.Getenv("CACHE_MAX_SIZE_GB"); sizeEnv != "" {
+		if gb, err := strconv.ParseInt(sizeEnv, 10, 64); err == nil {
+			cacheMaxSize = gb << 30
+		}
+	}
+
+	// Parse cache TTL (default 1 hour)
+	cacheTTL := time.Hour
+	if ttlEnv := os.Getenv("CACHE_TTL_MINUTES"); ttlEnv != "" {
+		if minutes, err := strconv.ParseInt(ttlEnv, 10, 64); err == nil {
+			cacheTTL = time.Duration(minutes) * time.Minute
+		}
+	}
+
+	// Parse prediction radius (default 20 meters)
+	predictionRadius := 20.0
 	if radiusEnv := os.Getenv("PREDICTION_RADIUS"); radiusEnv != "" {
 		val, err := strconv.ParseFloat(radiusEnv, 64)
 		if err == nil {
@@ -65,6 +86,7 @@ func LoadConfig() (*Config, error) {
 		}
 	}
 
+	// Parse directional filter setting
 	useDirectionalFilter := false
 	if filterEnv := os.Getenv("USE_DIRECTIONAL_FILTER"); filterEnv != "" {
 		val, err := strconv.ParseBool(filterEnv)
@@ -74,36 +96,43 @@ func LoadConfig() (*Config, error) {
 	}
 
 	config := &Config{
-		AppPort:              getEnvWithDefaultString("APP_PORT", "8000"),
-		DBHost:               getEnvWithDefaultString("DB_HOST", "localhost"),
-		DBPort:               getEnvWithDefaultString("DB_PORT", "5432"),
-		DBUser:               getEnvWithDefaultString("DB_USER", "postgres"),
-		DBPassword:           getEnvWithDefaultString("DB_PASSWORD", ""),
-		DBName:               getEnvWithDefaultString("DB_NAME", "storage_db"),
-		MinioEndpoint:        getEnvWithDefaultString("MINIO_ENDPOINT", "localhost:9000"),
-		MinioAccessKey:       getEnvWithDefaultString("MINIO_ACCESS_KEY", "minioadmin"),
-		MinioSecretKey:       getEnvWithDefaultString("MINIO_SECRET_KEY", "minioadmin"),
-		MinioBucket:          getEnvWithDefaultString("MINIO_BUCKET", "storage-bucket"),
-		MinioSSL:             minioSSL,
-		CacheServiceURL:      getEnvWithDefaultString("CACHE_URL", "http://cache-service:8001"),
-		CacheEnabled:         cacheEnabled,
+		// Application
+		AppPort: getEnvWithDefault("APP_PORT", "8000"),
+
+		// Database
+		DBHost:     getEnvWithDefault("DB_HOST", "localhost"),
+		DBPort:     getEnvWithDefault("DB_PORT", "5432"),
+		DBUser:     getEnvWithDefault("DB_USER", "postgres"),
+		DBPassword: getEnvWithDefault("DB_PASSWORD", ""),
+		DBName:     getEnvWithDefault("DB_NAME", "storage_db"),
+
+		// MinIO
+		MinioEndpoint:  getEnvWithDefault("MINIO_ENDPOINT", "localhost:9000"),
+		MinioAccessKey: getEnvWithDefault("MINIO_ACCESS_KEY", "minioadmin"),
+		MinioSecretKey: getEnvWithDefault("MINIO_SECRET_KEY", "minioadmin"),
+		MinioBucket:    getEnvWithDefault("MINIO_BUCKET", "storage-bucket"),
+		MinioSSL:       minioSSL,
+
+		// Cache
+		CacheEnabled:      cacheEnabled,
+		CacheMaxSizeBytes: cacheMaxSize,
+		CacheTTL:          cacheTTL,
+
+		// Prediction
 		PredictionRadius:     predictionRadius,
 		UseDirectionalFilter: useDirectionalFilter,
-		RedisHost:            getEnvWithDefaultString("REDIS_HOST", "localhost"),
-		RedisPort:            getEnvWithDefaultString("REDIS_PORT", "6379"),
 	}
 
 	return config, nil
 }
 
-func getEnvWithDefaultString(key, defaultValue string) string {
+func getEnvWithDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
 	return defaultValue
 }
 
-// ConnectDatabase initializes a GORM database connection to PostgreSQL.
 func ConnectDatabase(cfg *Config) (*gorm.DB, error) {
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
@@ -122,5 +151,4 @@ func ConnectDatabase(cfg *Config) (*gorm.DB, error) {
 		sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 	}
 	return db, nil
-
 }

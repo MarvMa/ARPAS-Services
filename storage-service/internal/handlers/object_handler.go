@@ -1,13 +1,10 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"storage-service/internal/models"
-	"storage-service/internal/services/cache"
 	_ "storage-service/internal/utils"
 	"strconv"
 	"strings"
@@ -25,29 +22,23 @@ import (
 
 const InvalidUuidError = "invalid UUID"
 const ObjectNotFoundError = "object not found"
+const (
+	HeaderDownloadSource = "X-Download-Source"
+	HeaderCacheHit       = "X-Cache-Hit"
+)
 
-// CacheMetricsHeader represents cache metrics sent via HTTP headers
-type CacheMetricsHeader struct {
-	LayerUsed          string                         `json:"layerUsed"`
-	CacheHit           bool                           `json:"cacheHit"`
-	LayerLatencyMs     float64                        `json:"layerLatencyMs"`
-	LayerStats         *cache.LayerStats              `json:"layerStats,omitempty"`
-	MultiLayerStats    *services.MultiLayerCacheStats `json:"multiLayerStats,omitempty"`
-	OptimalCacheUsage  map[string]float64             `json:"optimalCacheUsage,omitempty"`
-	StrategyEfficiency float64                        `json:"strategyEfficiency"`
-	PromotionOccurred  bool                           `json:"promotionOccurred"`
-	EvictionCaused     bool                           `json:"evictionCaused"`
-}
-
-// ObjectHandler defines handlers for managing 3D object resources.
+// ObjectHandler handles object-related endpoints
 type ObjectHandler struct {
 	Service      *services.ObjectService
 	CacheService *services.CacheService
 }
 
-// NewObjectHandler creates a new ObjectHandler with the given ObjectService.
+// NewObjectHandler creates a new object handler
 func NewObjectHandler(service *services.ObjectService, cacheService *services.CacheService) *ObjectHandler {
-	return &ObjectHandler{Service: service, CacheService: cacheService}
+	return &ObjectHandler{
+		Service:      service,
+		CacheService: cacheService,
+	}
 }
 
 // ListObjects handles GET /objects to retrieve a list of all 3D objects.
@@ -213,210 +204,101 @@ func (h *ObjectHandler) DeleteObject(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-// DownloadObject handles GET /objects/:id/download to stream the GLB file content.
-// Now supports cache integration for optimized mode
-// @Summary Download a 3D object file
-// @Description Download the GLB file for a specific 3D object (supports cache optimization)
-// @Tags objects
-// @Accept json
-// @Produce application/octet-stream
-// @Param id path string true "Object ID"
-// @Param X-Optimization-Mode header string false "Set to 'optimized' to use cache service"
-// @Success 200 {file} binary "GLB file"
-// @Failure 400 {object} map[string]interface{} "Invalid UUID"
-// @Failure 404 {object} map[string]interface{} "Object not found"
-// @Failure 500 {object} map[string]interface{} "Internal server error"
-// @Router /objects/{id}/download [get]
 func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
+	startTime := time.Now()
 	idStr := c.Params("id")
 	optimizationMode := strings.ToLower(c.Get("X-Optimization-Mode"))
 
-	log.Printf("Downloading object - ID: %s, Mode: %s, Method: %s, Path: %s, IP: %s",
-		idStr, optimizationMode, c.Method(), c.Path(), c.IP())
+	log.Printf("Downloading object %s, mode: %s", idStr, optimizationMode)
 
 	objectID, err := uuid.Parse(idStr)
 	if err != nil {
-		log.Printf("Invalid UUID format for download: %s - Error: %v", idStr, err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": true, "message": "invalid UUID",
+			"error": "invalid UUID",
 		})
 	}
 
+	// Get object metadata
 	obj, err := h.Service.GetObject(objectID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error": true, "message": "object not found",
+				"error": "object not found",
 			})
 		}
-		log.Printf("DB error for %s: %v", objectID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": true, "message": "internal error",
+			"error": "internal error",
 		})
 	}
 
-	startTime := time.Now()
-	var cacheMetrics CacheMetricsHeader
-
+	// Try to get from cache first if optimization mode is enabled
 	if optimizationMode == "optimized" {
-		return h.handleOptimizedDownload(c, obj, startTime, &cacheMetrics)
-	}
+		rc, clen, err := h.CacheService.GetFromCacheStream(objectID)
+		if err == nil && rc != nil {
 
-	return h.handleDirectMinIODownload(c, obj, startTime, &cacheMetrics)
-}
+			// Set response headers
+			h.setResponseHeaders(c, obj, clen, true)
 
-func (h *ObjectHandler) handleOptimizedDownload(c *fiber.Ctx, obj *models.Object, startTime time.Time, cacheMetrics *CacheMetricsHeader) error {
+			// Set performance metrics
+			latency := time.Since(startTime)
+			c.Set(HeaderDownloadSource, "cache")
+			c.Set(HeaderCacheHit, "true")
+			c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
 
-	cacheStats, err := h.CacheService.GetStatistics()
-	if err == nil {
-		cacheMetrics.MultiLayerStats = &cacheStats.MultiLayer
-		cacheMetrics.OptimalCacheUsage = cacheStats.OptimalCacheUsage
-	}
+			// Stream from cache
+			c.Context().SetBodyStream(rc, int(clen))
 
-	layerStart := time.Now()
-	rc, clen, err, chn := h.CacheService.GetFromCacheStream(obj.ID)
-	if err == nil && rc != nil {
-		defer rc.Close()
-
-		cacheMetrics.CacheHit = true
-		cacheMetrics.LayerLatencyMs = float64(time.Since(layerStart).Milliseconds())
-
-		// Determine layer based on object size and cache strategy
-		if _, statErr := h.Service.Minio.StatObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.StatObjectOptions{}); statErr == nil {
-			cacheMetrics.LayerUsed = chn
-		} else {
-			cacheMetrics.LayerUsed = "UNKNOWN"
+			log.Printf("Served object %s from cache in %v", objectID, latency)
+			return nil
 		}
-
-		// Set response headers for cached content
-		h.setCacheResponseHeaders(c, obj, clen, cacheMetrics)
-
-		// Stream from cache with performance monitoring
-		return h.streamWithMetrics(c, rc, obj.ID, "CACHE", startTime, clen)
 	}
-
-	log.Printf("Optimized cache miss for %s: %v, falling back to MinIO", obj.ID, err)
 
 	// Fallback to MinIO
-	cacheMetrics.CacheHit = false
-	cacheMetrics.LayerUsed = "MINIO_FALLBACK"
-	return h.handleDirectMinIODownload(c, obj, startTime, cacheMetrics)
-}
-
-func (h *ObjectHandler) handleDirectMinIODownload(c *fiber.Ctx, obj *models.Object, startTime time.Time, cacheMetrics *CacheMetricsHeader) error {
-	// Get object size for metrics
-
-	minioStart := time.Now()
-	var clen int64 = -1
-	if stat, statErr := h.Service.Minio.StatObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.StatObjectOptions{}); statErr == nil {
-		clen = stat.Size
-	}
-
-	// Get object from MinIO
 	object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
 	if err != nil {
-		log.Printf("Failed to retrieve file from MinIO: key=%s err=%v", obj.StorageKey, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": true, "message": "unable to retrieve file",
+			"error": "unable to retrieve file",
 		})
 	}
-	// update cache metrics
-	cacheMetrics.LayerUsed = "MINIO_DIRECT"
-	cacheMetrics.LayerLatencyMs = float64(time.Since(minioStart).Milliseconds())
-	cacheMetrics.CacheHit = false
 
-	// Set response headers for MinIO content
-	h.setMinIOResponseHeaders(c, obj, clen, cacheMetrics)
+	// Get object size
+	stat, _ := object.Stat()
+	clen := stat.Size
 
-	// Stream from MinIO with performance monitoring
-	return h.streamWithMetrics(c, object, obj.ID, "MINIO", startTime, clen)
-}
+	// Set response headers
+	h.setResponseHeaders(c, obj, clen, false)
 
-func (h *ObjectHandler) streamWithMetrics(c *fiber.Ctx, reader io.ReadCloser, objectID uuid.UUID, source string, startTime time.Time, size int64) error {
-	c.Context().SetBodyStream(&eofCloser{reader}, int(size))
+	// Set performance metrics
+	latency := time.Since(startTime)
+	c.Set(HeaderDownloadSource, "minio")
+	c.Set(HeaderCacheHit, "false")
+	c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
 
-	latency := time.Since(startTime).Milliseconds()
+	// Stream from MinIO
+	c.Context().SetBodyStream(object, int(clen))
 
-	// Different log formats for different sources
-	switch source {
-	case "CACHE":
-		log.Printf("perf dl_start_e2e source=optimized-cache id=%s size=%d latency_ms=%d", objectID, size, latency)
-	case "MINIO":
-		log.Printf("perf dl_end_e2e source=minio id=%s total_ms=%d size=%d", objectID, latency, size)
-	}
-
+	log.Printf("Served object %s from storage in %v", objectID, latency)
 	return nil
 }
 
-func (h *ObjectHandler) setCacheResponseHeaders(c *fiber.Ctx, obj *models.Object, clen int64, cacheMetrics *CacheMetricsHeader) {
-	ct := obj.ContentType
-	if ct == "" {
-		ct = "model/gltf-binary"
+func (h *ObjectHandler) setResponseHeaders(c *fiber.Ctx, obj *models.Object, size int64, fromCache bool) {
+	contentType := obj.ContentType
+	if contentType == "" {
+		contentType = "model/gltf-binary"
 	}
 
-	// Standard content headers
-	c.Set(fiber.HeaderContentType, ct)
+	c.Set(fiber.HeaderContentType, contentType)
 	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", obj.ID))
 	c.Set("Content-Encoding", "identity")
 
-	// Enhanced cache information headers
-	c.Set("X-Download-Source", "optimized-cache")
-	c.Set("X-Cache-Strategy", "multi-layer")
-	c.Set("X-Cache-Layer-Used", cacheMetrics.LayerUsed)
-	c.Set("X-Cache-Hit", fmt.Sprintf("%t", cacheMetrics.CacheHit))
-	c.Set("X-Cache-Layer-Latency-Ms", fmt.Sprintf("%.2f", cacheMetrics.LayerLatencyMs))
-	c.Set("X-Strategy-Efficiency", fmt.Sprintf("%.2f", cacheMetrics.StrategyEfficiency))
-	c.Set("X-Optimization-Mode", "optimized")
-
-	// Serialize detailed cache metrics to JSON header
-	if metricsJson, err := json.Marshal(cacheMetrics); err == nil {
-		c.Set("X-Cache-Metrics", string(metricsJson))
+	if size > 0 {
+		c.Set(fiber.HeaderContentLength, fmt.Sprintf("%d", size))
 	}
 
-	if clen > 0 {
-		c.Set(fiber.HeaderContentLength, strconv.FormatInt(clen, 10))
+	if fromCache {
+		c.Set("Cache-Control", "public, max-age=3600")
+		c.Set("ETag", fmt.Sprintf("\"%s\"", obj.ID))
 	}
 
-	// Cache control headers for optimized content
-	c.Set("Cache-Control", "public, max-age=3600")
-	c.Set("ETag", fmt.Sprintf("\"%s\"", obj.ID))
-}
-
-func (h *ObjectHandler) setMinIOResponseHeaders(c *fiber.Ctx, obj *models.Object, clen int64, cacheMetrics *CacheMetricsHeader) {
-	ct := obj.ContentType
-	if ct == "" {
-		ct = "model/gltf-binary"
-	}
-
-	// Standard content headers
-	c.Set(fiber.HeaderContentType, ct)
-	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", obj.ID))
-	c.Set("Content-Encoding", "identity")
-
-	// MinIO-specific headers with metrics
-	c.Set("X-Download-Source", "minio")
-	c.Set("X-Cache-Hit", "false")
-	c.Set("X-Cache-Layer-Used", cacheMetrics.LayerUsed)
-	c.Set("X-Cache-Layer-Latency-Ms", fmt.Sprintf("%.2f", cacheMetrics.LayerLatencyMs))
-	c.Set("X-Optimization-Mode", "direct-minio")
-
-	// Serialize cache metrics to JSON header
-	if metricsJson, err := json.Marshal(cacheMetrics); err == nil {
-		c.Set("X-Cache-Metrics", string(metricsJson))
-	}
-
-	if clen > 0 {
-		c.Set(fiber.HeaderContentLength, strconv.FormatInt(clen, 10))
-	}
 	c.Status(fiber.StatusOK)
-}
-
-type eofCloser struct{ io.ReadCloser }
-
-func (e *eofCloser) Read(p []byte) (int, error) {
-	n, err := e.ReadCloser.Read(p)
-	if err == io.EOF {
-		_ = e.ReadCloser.Close()
-	}
-	return n, err
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/swagger"
 	"github.com/minio/minio-go/v7"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gorm.io/gorm"
@@ -26,27 +25,19 @@ func main() {
 	MigrateDatabase(db)
 
 	minioClient := InitMinIOClient(cfg)
-	redisClient := InitRedisClient(cfg)
 
 	objectRepo := repository.NewObjectRepository(db)
 	objectService := services.NewObjectService(objectRepo, minioClient, cfg.MinioBucket, cfg)
-
-	instrumentedCacheService := services.NewInstrumentedCacheService(
-		redisClient,
+	cacheService := services.NewCacheService(
 		minioClient,
 		cfg.MinioBucket,
+		cfg.CacheMaxSizeBytes,
 		cfg.CacheTTL,
 	)
 
-	instrumentedCacheHandler := handlers.NewInstrumentedCacheHandler(
-		instrumentedCacheService,
-		objectService,
-	)
-
-	instrumentedObjectHandler := handlers.NewInstrumentedObjectHandler(
-		objectService,
-		instrumentedCacheService,
-	)
+	// Initialize handlers
+	cacheHandler := handlers.NewCacheHandler(cacheService, objectService)
+	objectHandler := handlers.NewObjectHandler(objectService, cacheService)
 
 	app := fiber.New(fiber.Config{
 		BodyLimit:         500 * 1024 * 1024, // 500 MB
@@ -70,62 +61,28 @@ func main() {
 
 	// Enhanced Health check endpoint
 	app.Get("/health", func(c *fiber.Ctx) error {
-		cacheHealth := "unknown"
-		if stats, err := instrumentedCacheService.GetStatistics(); err == nil {
-			totalObjects := stats.MultiLayer.Memory.Objects +
-				stats.MultiLayer.FileSystem.Objects +
-				stats.MultiLayer.Redis.Objects
-			if totalObjects > 0 {
-				cacheHealth = "active"
-			} else {
-				cacheHealth = "empty"
-			}
-		}
-
 		return c.JSON(fiber.Map{
-			"status":       "healthy",
-			"version":      "2.0-instrumented",
-			"cacheHealth":  cacheHealth,
-			"timestamp":    time.Now(),
-			"instrumented": true,
+			"status":    "healthy",
+			"version":   "2.0-instrumented",
+			"timestamp": time.Now(),
 		})
 	})
 
 	// API routes
 	api := app.Group("/api/storage")
 
-	api.Get("/objects", instrumentedObjectHandler.ListObjects)
-	api.Get("/objects/:id", instrumentedObjectHandler.GetObject)
-	api.Post("/objects/upload", instrumentedObjectHandler.UploadObject)
-	api.Delete("/objects/:id", instrumentedObjectHandler.DeleteObject)
-
-	api.Get("/objects/:id/download", instrumentedObjectHandler.DownloadObject)
+	api.Get("/objects", objectHandler.ListObjects)
+	api.Get("/objects/:id", objectHandler.GetObject)
+	api.Post("/objects/upload", objectHandler.UploadObject)
+	api.Delete("/objects/:id", objectHandler.DeleteObject)
+	api.Get("/objects/:id/download", objectHandler.DownloadObject)
 
 	cacheGroup := app.Group("/cache")
-	cacheGroup.Post("/preload", instrumentedCacheHandler.PreloadObjects)
-	cacheGroup.Delete("/object/:id", instrumentedCacheHandler.InvalidateObject)
-
-	cacheGroup.Get("/stats", instrumentedCacheHandler.GetCacheStats)
-	cacheGroup.Post("/clear", instrumentedCacheHandler.ClearCache)
-
-	metricsGroup := app.Group("/api/metrics")
-
-	metricsGroup.Get("/downloads/latest", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"message": "Latest download metrics",
-			"info":    "Check response headers of download endpoint for detailed metrics",
-		})
-	})
-
-	// Swagger documentation
-	app.Get("/swagger/*", swagger.New(swagger.Config{
-		URL:          "/swagger/doc.json",
-		DeepLinking:  false,
-		DocExpansion: "list",
-		OAuth: &swagger.OAuthConfig{
-			AppName: "Storage Service API v2.0 (Instrumented)",
-		},
-	}))
+	cacheGroup.Post("/preload", cacheHandler.PreloadObjects)
+	cacheGroup.Post("/preload-all", cacheHandler.PreloadAll)
+	cacheGroup.Delete("/object/:id", cacheHandler.InvalidateObject)
+	cacheGroup.Get("/stats", cacheHandler.GetCacheStats)
+	cacheGroup.Post("/clear", cacheHandler.ClearCache)
 
 	// Start the server
 	port := os.Getenv("STORAGE_PORT")
@@ -172,12 +129,4 @@ func InitMinIOClient(cfg *config.Config) *minio.Client {
 		log.Fatalf("Failed to initialize MinIO client: %v", err)
 	}
 	return minioClient
-}
-
-func InitRedisClient(cfg *config.Config) *storage.RedisClient {
-	redisClient, err := storage.NewRedisClient(cfg.RedisHost, cfg.RedisPort)
-	if err != nil {
-		log.Fatalf("Failed to initialize Redis client: %v", err)
-	}
-	return redisClient
 }
