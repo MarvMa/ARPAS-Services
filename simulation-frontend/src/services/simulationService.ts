@@ -873,7 +873,6 @@ export class SimulationService {
                             server: metric.serverLatencyMs || 0,
                             client: metric.clientLatencyMs || 0,
                             network: metric.networkLatencyMs || 0,
-                            // Füge detaillierte Latenzen hinzu
                             dbLookup: metric.detailedLatencies?.dbLookupMs,
                             firstByte: metric.detailedLatencies?.firstByteMs,
                             cacheMemory: metric.detailedLatencies?.cacheMemoryMs,

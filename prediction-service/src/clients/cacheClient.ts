@@ -1,5 +1,6 @@
 import axios from 'axios';
 import {config} from '../config';
+import {PredictionResult} from "../predictor";
 
 export class CacheClient {
     private readonly baseUrl: string;
@@ -8,14 +9,18 @@ export class CacheClient {
         this.baseUrl = config.storageUrl;
     }
 
-    async preload(ids: number[]): Promise<Boolean> {
+    /**
+     * Send Predicted Location to Storage-Service to preload cache
+     * @param predictionResult
+     */
+    async preload(predictionResult: PredictionResult): Promise<number[]> {
         try {
             console.log(`PATH ${this.baseUrl}/cache/preload`)
-            const response = await axios.post(`${this.baseUrl}/cache/preload`, {ids});
-            return response.status === 200;
+            const response = await axios.post(`${this.baseUrl}/cache/preload`, predictionResult);
+            return response.data;
         } catch (error) {
             console.error('Error preloading cache:', error);
-            return false;
+            return [];
         }
     }
 }

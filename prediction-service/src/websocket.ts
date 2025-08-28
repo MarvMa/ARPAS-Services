@@ -15,19 +15,23 @@ export default fp(async (app: FastifyInstance) => {
 
             socket.on('message', async (message: string) => {
                 try {
-                    console.log("Received message:", message.toString());
                     const sensorData = JSON.parse(message.toString());
-                    const ids = await predictor.predict(sensorData);
+                    const predictionResult = predictor.predict(sensorData);
 
+                    let objectIds: number[] = [];
                     // Only call cache if we have IDs
-                    if (ids && ids.length > 0) {
-                        const cachePreloaded = await cacheClient.preload(ids).catch(console.error);
+                    if (predictionResult) {
+                        const ids = await cacheClient.preload(predictionResult).catch(console.error);
+                        if (Array.isArray(ids)) {
+                            objectIds = ids;
+                        }
                     }
+
 
                     socket.send(JSON.stringify({
                         status: 'success',
                         message: 'Prediction processed',
-                        objectIds: ids || []  // Ensure we always send an array
+                        objectIds: objectIds || []  // Ensure we always send an array
                     }));
                 } catch (error) {
                     console.error('Error processing message:', error);

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"storage-service/internal/models"
 	"storage-service/internal/services"
 	"strings"
 	"time"
@@ -28,31 +29,47 @@ func NewInstrumentedCacheHandler(instrumentedCache *services.InstrumentedCacheSe
 
 // PreloadObjects handles POST /cache/preload with detailed metrics
 func (h *InstrumentedCacheHandler) PreloadObjects(c *fiber.Ctx) error {
+	log.Printf("[PRELOAD] Starting instrumented preload operation")
 	startTime := time.Now()
 
-	log.Printf("[PRELOAD] Starting instrumented preload operation")
-
-	var request struct {
-		IDs []string `json:"ids"`
-	}
+	var request models.PredictionRequest
 
 	if err := c.BodyParser(&request); err != nil {
-		log.Printf("Invalid preload request: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Invalid request format",
+			"error":   "invalid request body",
+			"details": err.Error(),
+		})
+	}
+
+	log.Printf("[DEBUG] Parsed position: Lat=%f, Lon=%f, Alt=%f",
+		request.Position.Latitude,
+		request.Position.Longitude,
+		request.Position.Altitude)
+
+	var requestIDs []string
+	log.Printf("Received prediction request with position data")
+
+	predictedModelIDs, err := h.objectService.GetPredictedModels(request)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"message": "Failed to predict models",
 			"error":   err.Error(),
 		})
 	}
 
-	log.Printf("Received preload request for %d objects", len(request.IDs))
+	// Convert UUID array to string array
+	for _, id := range predictedModelIDs {
+		requestIDs = append(requestIDs, id.String())
+	}
+
+	log.Printf("Received direct preload request for %d objects", len(requestIDs))
 
 	// Parse and validate UUIDs
 	var objectIDs []uuid.UUID
 	var storageKeys []string
 	parseErrors := 0
 
-	for _, idStr := range request.IDs {
+	for _, idStr := range requestIDs {
 		// Handle both UUID and UUID.glb formats
 		cleanID := strings.TrimSuffix(idStr, ".glb")
 
@@ -88,14 +105,10 @@ func (h *InstrumentedCacheHandler) PreloadObjects(c *fiber.Ctx) error {
 
 	// Prepare response
 	status := fiber.StatusOK
-	success := true
-	message := "All objects preloaded successfully"
 
 	if err != nil {
 		log.Printf("Preload error: %v", err)
 		status = fiber.StatusMultiStatus
-		success = false
-		message = "Some objects failed to preload"
 	}
 
 	// Calculate operation latency
@@ -129,14 +142,12 @@ func (h *InstrumentedCacheHandler) PreloadObjects(c *fiber.Ctx) error {
 		log.Printf("Preload completed: %s", preloadMetrics.GetSummary())
 	}
 
-	return c.Status(status).JSON(fiber.Map{
-		"success":          success,
-		"message":          message,
-		"preloaded":        len(objectIDs),
-		"parseErrors":      parseErrors,
-		"operationLatency": operationLatency,
-		"metrics":          preloadMetrics,
-	})
+	var responseIDs []string
+	for _, id := range objectIDs {
+		responseIDs = append(responseIDs, id.String())
+	}
+
+	return c.Status(status).JSON(responseIDs)
 }
 
 // GetCacheStats handles GET /cache/stats with enhanced metrics

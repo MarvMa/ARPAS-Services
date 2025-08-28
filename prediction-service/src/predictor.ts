@@ -1,5 +1,4 @@
 import KalmanFilter from "kalmanjs";
-import {StorageClient} from "./clients/storageClient";
 
 
 export interface SensorData {
@@ -11,137 +10,169 @@ export interface SensorData {
     heading?: number;
 }
 
+interface SmoothedData {
+    latitude: number;
+    longitude: number;
+    altitude: number;
+    timestamp: string;
+}
+
 interface Velocity {
     latitudeVelocity: number;
     longitudeVelocity: number;
     altitudeVelocity: number;
 }
 
-interface PredictionResult {
+export interface PredictionResult {
     position: {
         latitude: number;
         longitude: number;
         altitude: number;
     };
-    viewingDirection: {
-        heading: number;
-        pitch: number;
-    };
-    frustum: {
-        fovHorizontal: number;
-        fovVertical: number;
-        viewDistance: number;
-    }
-
 }
 
 export class Predictor {
     history: SensorData[] = [];
     private readonly maxHistorySize: number = 30;
-    private readonly latKalman: KalmanFilter;
-    private readonly lonKalman: KalmanFilter;
-    private readonly altKalman: KalmanFilter;
-    private readonly storageClient: StorageClient;
+    private readonly smoothedHistory: SmoothedData[] = [];
+
+
+    private readonly latPositionKalman: KalmanFilter;
+    private readonly lonPositionKalman: KalmanFilter;
+    private readonly altPositionKalman: KalmanFilter;
+
+    // Optional: Kalman filters for velocity smoothing
+    private readonly latVelocityKalman: KalmanFilter;
+    private readonly lonVelocityKalman: KalmanFilter;
+    private readonly altVelocityKalman: KalmanFilter;
 
     // Config
-    private readonly DEFAULT_FOV = 60; // degrees
-    private readonly DEFAULT_VIEW_DISTANCE = 100; // meters
     private readonly PREDICTION_TIME_SECONDS = 5;
-    private readonly KALMAN_CONFIG = {
-        R: 0.01, // Measurement noise
-        Q: 3,    // Process noise
-        A: 1     // State transition
+
+    private readonly POSITION_KALMAN_CONFIG = {
+        R: 0.000000002,  // 2 × 10^{-9}
+        Q: 0.0000000000001,  // 1 × 10^{-13}
+        A: 1
+    };
+
+    private readonly VELOCITY_KALMAN_CONFIG = {
+        R: 0.0000000003,  // 3 × 10^{-10}
+        Q: 0.00000000001,  // 1 × 10^{-11}
+        A: 1
     };
 
     constructor() {
-        // R: measurement noise, Q: process noise, A: state transition
-        this.latKalman = new KalmanFilter(this.KALMAN_CONFIG);
-        this.lonKalman = new KalmanFilter(this.KALMAN_CONFIG);
-        this.altKalman = new KalmanFilter(this.KALMAN_CONFIG);
-        this.storageClient = new StorageClient();
+        this.latPositionKalman = new KalmanFilter(this.POSITION_KALMAN_CONFIG);
+        this.lonPositionKalman = new KalmanFilter(this.POSITION_KALMAN_CONFIG);
+        this.altPositionKalman = new KalmanFilter(this.POSITION_KALMAN_CONFIG);
+
+        this.latVelocityKalman = new KalmanFilter(this.VELOCITY_KALMAN_CONFIG);
+        this.lonVelocityKalman = new KalmanFilter(this.VELOCITY_KALMAN_CONFIG);
+        this.altVelocityKalman = new KalmanFilter(this.VELOCITY_KALMAN_CONFIG);
     }
 
-    private calculateHeading(current: SensorData, previous: SensorData): number {
-        if (current.heading !== undefined) {
-            return current.heading;
+    /**
+     * Apply Kalman filter to smooth the Position data
+     * @param sensor
+     * @private
+     */
+    private smoothPosition(sensor: SensorData): SmoothedData {
+        return {
+            latitude: this.latPositionKalman.filter(sensor.latitude),
+            longitude: this.lonPositionKalman.filter(sensor.longitude),
+            altitude: this.altPositionKalman.filter(sensor.altitude),
+            timestamp: sensor.timestamp
+        };
+    }
+
+
+    /**
+     * Calculate velocity based on position changes over time
+     * @param current smoothed current data point
+     * @param previous smoothed previous data point
+     * @private
+     */
+    private calculateVelocity(current: SmoothedData, previous: SmoothedData): Velocity {
+        const timeDiff = (new Date(current.timestamp).getTime() - new Date(previous.timestamp).getTime()) / 1000;
+
+        if (timeDiff === 0) {
+            return {latitudeVelocity: 0, longitudeVelocity: 0, altitudeVelocity: 0};
         }
 
-        const dLat = current.latitude - previous.latitude;
-        const dLon = current.longitude - previous.longitude;
-        return (Math.atan2(dLon, dLat) * 180 / Math.PI + 360) % 360;
-    }
-
-    private calculatePitch(current: SensorData, previous: SensorData): number {
-        const dAlt = current.altitude - previous.altitude;
-        const dLatLon = Math.sqrt(
-            Math.pow(current.latitude - previous.latitude, 2) +
-            Math.pow(current.longitude - previous.longitude, 2)
-        );
-        return Math.atan2(dAlt, dLatLon) * 180 / Math.PI;
-    }
-
-    private calculateVelocity(current: SensorData, previous: SensorData): Velocity {
-        const timeDiff = (new Date(current.timestamp).getTime() - new Date(previous.timestamp).getTime()) / 1000; // in seconds
-
-        return {
+        const rawVelocity = {
             latitudeVelocity: (current.latitude - previous.latitude) / timeDiff,
             longitudeVelocity: (current.longitude - previous.longitude) / timeDiff,
             altitudeVelocity: (current.altitude - previous.altitude) / timeDiff
-        }
-    }
-
-    public async predict(sensor: SensorData): Promise<number[]> {
-        this.history.push(sensor)
-        if (this.history.length > this.maxHistorySize) {
-            this.history.shift(); // Remove the oldest entry if we exceed max size
-        }
-
-        if (this.history.length < 2) {
-            return []; // TODO: Return a default value or handle insufficient data
-        }
-        const current: SensorData = this.history[this.history.length - 1];
-        const previous: SensorData = this.history[this.history.length - 2];
-
-        const velocity: Velocity = this.calculateVelocity(current, previous);
-
-        const predictedLat: number = this.latKalman.filter(current.latitude + velocity.latitudeVelocity * this.PREDICTION_TIME_SECONDS);
-        const predictedLon: number = this.lonKalman.filter(current.longitude + velocity.longitudeVelocity * this.PREDICTION_TIME_SECONDS);
-        const predictedAlt: number = this.altKalman.filter(current.altitude + velocity.altitudeVelocity * this.PREDICTION_TIME_SECONDS);
-
-        const heading: number = this.calculateHeading(current, previous);
-        const pitch: number = this.calculatePitch(current, previous);
-
-        console.info('Predicted position:', predictedLat, predictedLon, predictedAlt);
-        console.info('Predicted heading:', heading);
-        console.info('Predicted pitch:', pitch);
-
-        const prediction: PredictionResult = {
-            position: {
-                latitude: predictedLat,
-                longitude: predictedLon,
-                altitude: predictedAlt
-            },
-            viewingDirection: {
-                heading: heading,
-                pitch: pitch
-            },
-            frustum: {
-                fovHorizontal: this.DEFAULT_FOV,
-                fovVertical: this.DEFAULT_FOV * 0.75,
-                viewDistance: this.DEFAULT_VIEW_DISTANCE
-            }
         };
 
-        return this.getPredictedObjectIds(prediction)
+        // Smooth the calculated velocities
+        return {
+            latitudeVelocity: this.latVelocityKalman.filter(rawVelocity.latitudeVelocity),
+            longitudeVelocity: this.lonVelocityKalman.filter(rawVelocity.longitudeVelocity),
+            altitudeVelocity: this.altVelocityKalman.filter(rawVelocity.altitudeVelocity)
+        };
     }
 
-    private async getPredictedObjectIds(prediction: PredictionResult): Promise<number[]> {
-        try {
-            return await this.storageClient.getPredictedModels(prediction);
-        } catch (error) {
-            console.error('Error fetching prediction from StorageClient:', error);
-        }
-        return [];
+    /**
+     * Predict future location based on current position and velocity
+     * @param currentPosition current smoothed position
+     * @param velocity smoothed velocity
+     * @private
+     */
+    private predictPosition(currentPosition: SmoothedData, velocity: Velocity): SmoothedData {
+        return {
+            latitude: currentPosition.latitude + velocity.latitudeVelocity * this.PREDICTION_TIME_SECONDS,
+            longitude: currentPosition.longitude + velocity.longitudeVelocity * this.PREDICTION_TIME_SECONDS,
+            altitude: currentPosition.altitude + velocity.altitudeVelocity * this.PREDICTION_TIME_SECONDS,
+            timestamp: new Date(new Date(currentPosition.timestamp).getTime() + this.PREDICTION_TIME_SECONDS * 1000).toISOString()
+        };
     }
+
+    /**
+     * Predict future position based on incoming sensor data
+     * @param sensor
+     */
+    public predict(sensor: SensorData): PredictionResult | null {
+        this.history.push(sensor);
+        if (this.history.length > this.maxHistorySize) {
+            this.history.shift();
+        }
+
+        // Smooth the incoming GPS measurement
+        const smoothedData = this.smoothPosition(sensor);
+        this.smoothedHistory.push(smoothedData);
+        if (this.smoothedHistory.length > this.maxHistorySize) {
+            this.smoothedHistory.shift();
+        }
+
+        // Need at least 2 measurements for velocity calculation
+        if (this.smoothedHistory.length < 2) {
+            console.info('Insufficient data for prediction');
+            return null;
+        }
+
+        const currentSmoothed = this.smoothedHistory[this.smoothedHistory.length - 1];
+        const previousSmoothed = this.smoothedHistory[this.smoothedHistory.length - 2];
+
+        // Calculate velocity from positions
+        const velocity = this.calculateVelocity(currentSmoothed, previousSmoothed);
+
+        //  Predict future position
+        const predictedPosition = this.predictPosition(currentSmoothed, velocity);
+
+
+        console.info('Current smoothed position:', currentSmoothed.latitude, currentSmoothed.longitude, currentSmoothed.altitude);
+        console.info('Smoothed velocity:', velocity);
+        console.info('Predicted position:', predictedPosition.latitude, predictedPosition.longitude, predictedPosition.altitude);
+
+        return {
+            position: {
+                latitude: predictedPosition.latitude,
+                longitude: predictedPosition.longitude,
+                altitude: predictedPosition.altitude
+            }
+        };
+    }
+
 
 }

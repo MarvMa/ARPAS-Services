@@ -38,8 +38,6 @@ func main() {
 		cfg.CacheTTL,
 	)
 
-	predictionHandler := handlers.NewPredictionHandler(objectService)
-
 	instrumentedCacheHandler := handlers.NewInstrumentedCacheHandler(
 		instrumentedCacheService,
 		objectService,
@@ -95,9 +93,6 @@ func main() {
 
 	// API routes
 	api := app.Group("/api/storage")
-
-	// Prediction routes
-	api.Post("/predict", predictionHandler.GetPredictedModels)
 
 	api.Get("/objects", instrumentedObjectHandler.ListObjects)
 	api.Get("/objects/:id", instrumentedObjectHandler.GetObject)
