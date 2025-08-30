@@ -7,6 +7,7 @@ import (
 	"log"
 	"storage-service/internal/services/caches"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,67 +50,81 @@ func (cs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUI
 		return fmt.Errorf("objectIDs and storageKeys must have the same length")
 	}
 
-	successCount := 0
-	skipCount := 0
-	errorCount := 0
+	log.Printf("Starting preload for %d objects", len(objectIDs))
+	startTime := time.Now()
 
-	// Process objects with controlled concurrency
-	const maxWorkers = 10
-	sem := make(chan struct{}, maxWorkers)
-	var wg sync.WaitGroup
-	errChan := make(chan error, len(objectIDs))
+	// Pre-filter to avoid unnecessary work
+	var toLoad []struct {
+		ID  uuid.UUID
+		Key string
+	}
 
 	for i, objectID := range objectIDs {
+		if exists, _ := cs.memoryCache.Exists(objectID); !exists {
+			toLoad = append(toLoad, struct {
+				ID  uuid.UUID
+				Key string
+			}{objectID, storageKeys[i]})
+		}
+	}
+
+	if len(toLoad) == 0 {
+		log.Printf("All %d objects already cached", len(objectIDs))
+		return nil
+	}
+
+	const maxWorkers = 20
+	sem := make(chan struct{}, maxWorkers)
+	var wg sync.WaitGroup
+
+	successCount := int32(0)
+	errorCount := int32(0)
+
+	for _, item := range toLoad {
 		wg.Add(1)
 		go func(id uuid.UUID, storageKey string) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			// Check if already cached to avoid duplicate work
-			if exists, _ := cs.memoryCache.Exists(id); exists {
-				skipCount++
-				return
-			}
-
-			// Download from MinIO
 			object, err := cs.minio.GetObject(ctx, cs.bucketName, storageKey, minio.GetObjectOptions{})
 			if err != nil {
-				errChan <- fmt.Errorf("failed to get object %s from storage: %w", id, err)
-				errorCount++
+				atomic.AddInt32(&errorCount, 1)
 				return
 			}
 			defer object.Close()
 
-			data, err := io.ReadAll(object)
+			stat, err := object.Stat()
 			if err != nil {
-				errChan <- fmt.Errorf("failed to read object %s: %w", id, err)
-				errorCount++
+				atomic.AddInt32(&errorCount, 1)
+				return
+			}
+
+			data := make([]byte, stat.Size)
+			_, err = io.ReadFull(object, data)
+			if err != nil {
+				atomic.AddInt32(&errorCount, 1)
 				return
 			}
 
 			// Store in memory cache
 			if err := cs.memoryCache.Store(id, data); err != nil {
-				errChan <- fmt.Errorf("failed to cache object %s: %w", id, err)
-				errorCount++
+				atomic.AddInt32(&errorCount, 1)
 				return
 			}
 
-			successCount++
-		}(objectID, storageKeys[i])
+			atomic.AddInt32(&successCount, 1)
+		}(item.ID, item.Key)
 	}
 
 	wg.Wait()
-	close(errChan)
 
-	// Collect errors
-	var errors []error
-	for err := range errChan {
-		errors = append(errors, err)
-	}
+	duration := time.Since(startTime)
+	log.Printf("Preload completed in %v - Success: %d, Errors: %d",
+		duration, successCount, errorCount)
 
-	if len(errors) > 0 {
-		return fmt.Errorf("preload had %d errors: %v", len(errors), errors[0])
+	if errorCount > 0 {
+		return fmt.Errorf("preload had %d errors", errorCount)
 	}
 
 	return nil
@@ -117,13 +132,7 @@ func (cs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUI
 
 // GetFromCacheStream provides streaming from memory cache
 func (cs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
-	rc, length, err := cs.memoryCache.GetStream(objectID)
-	if err == nil {
-		return rc, length, nil // Cache Hit
-	}
-
-	log.Printf("Cache MISS for object %s", objectID)
-	return nil, 0, fmt.Errorf("object %s not found in cache", objectID)
+	return cs.memoryCache.GetStream(objectID)
 }
 
 // InvalidateObject removes from cache

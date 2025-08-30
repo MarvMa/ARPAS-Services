@@ -1,7 +1,6 @@
 package caches
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -32,10 +31,10 @@ type MemoryCache struct {
 
 // CacheEntry holds metadata for cached items
 type CacheEntry struct {
-	Size           int64
-	CreatedAtUnix  int64
-	LastAccessUnix int64
-	AccessCount    atomic.Int64
+	Size        int64
+	CreatedAt   time.Time
+	LastAccess  time.Time
+	AccessCount atomic.Int64
 }
 
 // NewMemoryCache creates a new memory cache
@@ -63,52 +62,89 @@ func (mc *MemoryCache) Store(objectID uuid.UUID, data []byte) error {
 	key := objectID.String()
 	size := int64(len(data))
 
-	// Check if object already exists
+	// Fast path: check if object already exists without deletion
 	if _, exists := mc.data.Load(key); exists {
-		log.Printf("Memory cache: object %s already cached, updating", objectID)
-		// Remove old entry to update
-		mc.Delete(objectID)
+		// Already cached, skip to avoid unnecessary work
+		return nil
 	}
 
-	// Evict items if needed to make space
-	for atomic.LoadInt64(&mc.currentSize)+size > mc.maxSize {
-		if !mc.evictLRU() {
+	// Check space before any operations
+	neededSpace := size
+	currentTotal := atomic.LoadInt64(&mc.currentSize) + neededSpace
+
+	// Batch eviction if needed - more efficient than one-by-one
+	if currentTotal > mc.maxSize {
+		if !mc.makeSpace(neededSpace) {
 			return fmt.Errorf("unable to free space for object of size %d bytes (max: %d, current: %d)",
 				size, mc.maxSize, atomic.LoadInt64(&mc.currentSize))
 		}
 	}
 
-	// Store data and metadata
+	// Store data and metadata atomically
 	mc.data.Store(key, data)
-	now := time.Now().UnixNano()
 	mc.metadata.Store(key, &CacheEntry{
-		Size:           size,
-		CreatedAtUnix:  now,
-		LastAccessUnix: now,
+		Size:       size,
+		CreatedAt:  time.Now(),
+		LastAccess: time.Now(),
 	})
 
 	atomic.AddInt64(&mc.currentSize, size)
-	log.Printf("Memory cache: stored object %s (%d bytes, total: %d MB)",
-		objectID, size, atomic.LoadInt64(&mc.currentSize)/(1024*1024))
 
 	return nil
+}
+
+func (mc *MemoryCache) makeSpace(needed int64) bool {
+	targetSize := mc.maxSize - needed
+
+	for atomic.LoadInt64(&mc.currentSize) > targetSize {
+		if !mc.evictLRU() {
+			return false
+		}
+	}
+	return true
 }
 
 // GetStream returns a reader for the cached object
 func (mc *MemoryCache) GetStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
 	key := objectID.String()
 
-	if v, ok := mc.data.Load(key); ok {
-		b := v.([]byte)
-		mc.updateAccess(key)
-		mc.hits.Add(1)
-
-		return io.NopCloser(bytes.NewReader(b)), int64(len(b)), nil
-
+	// Direct access without going through Get() to avoid unnecessary operations
+	value, ok := mc.data.Load(key)
+	if !ok {
+		mc.misses.Add(1)
+		return nil, 0, fmt.Errorf("object not found in memory cache")
 	}
-	mc.misses.Add(1)
 
-	return nil, 0, fmt.Errorf("object not found in memory cache")
+	data := value.([]byte)
+
+	// Update access in background to not block streaming
+	go mc.updateAccess(key)
+	mc.hits.Add(1)
+
+	return &directReader{
+		data: data,
+		pos:  0,
+	}, int64(len(data)), nil
+}
+
+// directReader provides zero-copy streaming from byte slice
+type directReader struct {
+	data []byte
+	pos  int
+}
+
+func (r *directReader) Read(p []byte) (n int, err error) {
+	if r.pos >= len(r.data) {
+		return 0, io.EOF
+	}
+	n = copy(p, r.data[r.pos:])
+	r.pos += n
+	return n, nil
+}
+
+func (r *directReader) Close() error {
+	r.data = nil
+	return nil
 }
 
 // Exists checks if an object is in the cache
@@ -197,16 +233,13 @@ func (mc *MemoryCache) CurrentSize() int64 {
 
 // updateAccess updates the last access time and count for an entry
 func (mc *MemoryCache) updateAccess(key string) {
-	if v, ok := mc.metadata.Load(key); ok {
-		entry := v.(*CacheEntry)
-		n := entry.AccessCount.Add(1)
-		if (n & 63) == 0 {
-			now := time.Now().UnixNano()
-			last := atomic.LoadInt64(&entry.LastAccessUnix)
-			if now-last > int64(250*time.Millisecond) {
-				atomic.StoreInt64(&entry.LastAccessUnix, now)
-			}
+	if metaValue, ok := mc.metadata.Load(key); ok {
+		entry := metaValue.(*CacheEntry)
+		now := time.Now()
+		if now.Sub(entry.LastAccess) > time.Second {
+			entry.LastAccess = now
 		}
+		entry.AccessCount.Add(1)
 	}
 }
 
@@ -214,28 +247,35 @@ func (mc *MemoryCache) updateAccess(key string) {
 func (mc *MemoryCache) evictLRU() bool {
 	var (
 		oldestKey  string
-		oldestTime int64
+		oldestTime = time.Now() // Start with current time
 		found      bool
 	)
 
+	// Find LRU item
 	mc.metadata.Range(func(key, value interface{}) bool {
 		entry := value.(*CacheEntry)
-		ts := atomic.LoadInt64(&entry.LastAccessUnix)
-		if !found || ts < oldestTime {
+		if entry.LastAccess.Before(oldestTime) {
 			oldestKey = key.(string)
-			oldestTime = ts
+			oldestTime = entry.LastAccess
 			found = true
 		}
 		return true
 	})
 
-	if found {
-		if objectID, err := uuid.Parse(oldestKey); err == nil {
-			return mc.Delete(objectID) == nil
-		}
+	if !found {
+		return false
 	}
 
-	return false
+	metaValue, ok := mc.metadata.LoadAndDelete(oldestKey)
+	if !ok {
+		return false
+	}
+
+	entry := metaValue.(*CacheEntry)
+	mc.data.Delete(oldestKey)
+	atomic.AddInt64(&mc.currentSize, -entry.Size)
+
+	return true
 }
 
 // cleanupRoutine periodically removes expired items
@@ -261,12 +301,11 @@ func (mc *MemoryCache) cleanupExpired() {
 		return // No TTL set
 	}
 
-	now := time.Now().UnixNano()
 	var expiredKeys []string
 
 	mc.metadata.Range(func(key, value interface{}) bool {
 		entry := value.(*CacheEntry)
-		if time.Duration(now-atomic.LoadInt64(&entry.CreatedAtUnix)) > mc.ttl {
+		if time.Since(entry.CreatedAt) > mc.ttl {
 			expiredKeys = append(expiredKeys, key.(string))
 		}
 		return true

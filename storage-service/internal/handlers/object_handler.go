@@ -246,6 +246,14 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			rc = rcCache
 			clen = clenCache
 			fromCache = true
+
+			h.setResponseHeaders(c, obj, clen)
+			c.Set(HeaderDownloadSource, map[bool]string{true: "cache", false: "minio"}[fromCache])
+			c.Set(HeaderCacheHit, map[bool]string{true: "true", false: "false"}[fromCache])
+			c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
+			c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
+			c.Context().SetBodyStream(rcCache, int(clenCache))
+			return nil
 		} else {
 			log.Printf("Cache MISS for object %s: %v", objectID, err)
 		}
@@ -271,17 +279,14 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 		rc = object
 		clen = stat.Size
 		fromCache = false
+
+		h.setResponseHeaders(c, obj, clen)
+		c.Set(HeaderDownloadSource, map[bool]string{true: "cache", false: "minio"}[fromCache])
+		c.Set(HeaderCacheHit, map[bool]string{true: "true", false: "false"}[fromCache])
+		c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
+		c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
+		c.Context().SetBodyStream(rc, int(clen))
 	}
-
-	// Set response headers
-	h.setResponseHeaders(c, obj, clen)
-
-	c.Set(HeaderDownloadSource, map[bool]string{true: "cache", false: "minio"}[fromCache])
-	c.Set(HeaderCacheHit, map[bool]string{true: "true", false: "false"}[fromCache])
-	c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
-	c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
-
-	c.Context().SetBodyStream(rc, int(clen))
 
 	log.Printf("Served object %s from %s in %v (%d bytes)",
 		objectID, map[bool]string{true: "cache", false: "storage"}[fromCache], latency, clen)
