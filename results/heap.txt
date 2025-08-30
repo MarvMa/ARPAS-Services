@@ -1,0 +1,82 @@
+File: storage-service
+Build ID: 84dd8356b464b63bab74a59db84611f946f8af8d
+Type: inuse_space
+Time: 2025-08-30 16:35:36 CEST
+Showing nodes accounting for 45005.78kB, 100% of 45005.78kB total
+      flat  flat%   sum%        cum   cum%
+   40376kB 89.71% 89.71%    40376kB 89.71%  storage-service/internal/services/caches.(*MemoryCache).Store
+    2052kB  4.56% 94.27%     2052kB  4.56%  runtime.allocm
+  528.17kB  1.17% 95.45%   528.17kB  1.17%  regexp.(*bitState).reset
+  513.50kB  1.14% 96.59%   513.50kB  1.14%  regexp/syntax.(*compiler).inst (inline)
+  512.09kB  1.14% 97.72%   512.09kB  1.14%  github.com/jackc/pgx/v5/pgproto3.(*RowDescription).Decode
+  512.01kB  1.14% 98.86%   512.01kB  1.14%  github.com/jackc/pgx/v5/pgconn.(*PgConn).convertRowDescription
+  512.01kB  1.14%   100%   512.01kB  1.14%  github.com/jackc/pgx/v5/pgproto3.(*ParameterDescription).Decode
+         0     0%   100%  1536.11kB  3.41%  database/sql.(*DB).retry
+         0     0%   100%  1536.11kB  3.41%  database/sql.(*Stmt).QueryContext
+         0     0%   100%  1536.11kB  3.41%  database/sql.(*Stmt).QueryContext.func1
+         0     0%   100%  1024.10kB  2.28%  database/sql.(*Stmt).connStmt
+         0     0%   100%  1024.10kB  2.28%  database/sql.(*Stmt).connStmt.func1
+         0     0%   100%  1024.10kB  2.28%  database/sql.(*Stmt).prepareOnConnLocked
+         0     0%   100%  1024.10kB  2.28%  database/sql.(*driverConn).prepareLocked
+         0     0%   100%  1024.10kB  2.28%  database/sql.ctxDriverPrepare
+         0     0%   100%   512.01kB  1.14%  database/sql.ctxDriverStmtQuery
+         0     0%   100%   512.01kB  1.14%  database/sql.rowsiFromStatement
+         0     0%   100%  1024.10kB  2.28%  database/sql.withLock
+         0     0%   100%  1024.10kB  2.28%  github.com/gofiber/fiber/v2.(*App).handler
+         0     0%   100%  1024.10kB  2.28%  github.com/gofiber/fiber/v2.(*App).next
+         0     0%   100%  1024.10kB  2.28%  github.com/gofiber/fiber/v2.(*Ctx).Next
+         0     0%   100%  1024.10kB  2.28%  github.com/gofiber/fiber/v2/middleware/logger.New.func3
+         0     0%   100%  1024.10kB  2.28%  github.com/jackc/pgx/v5.(*Conn).Prepare
+         0     0%   100%   512.01kB  1.14%  github.com/jackc/pgx/v5.(*Conn).Query
+         0     0%   100%   512.01kB  1.14%  github.com/jackc/pgx/v5/pgconn.(*PgConn).ExecPrepared
+         0     0%   100%  1024.10kB  2.28%  github.com/jackc/pgx/v5/pgconn.(*PgConn).Prepare
+         0     0%   100%   512.01kB  1.14%  github.com/jackc/pgx/v5/pgconn.(*PgConn).execExtendedSuffix
+         0     0%   100%  1024.10kB  2.28%  github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage
+         0     0%   100%  1024.10kB  2.28%  github.com/jackc/pgx/v5/pgconn.(*PgConn).receiveMessage
+         0     0%   100%   512.01kB  1.14%  github.com/jackc/pgx/v5/pgconn.(*ResultReader).readUntilRowDescription
+         0     0%   100%   512.01kB  1.14%  github.com/jackc/pgx/v5/pgconn.(*ResultReader).receiveMessage
+         0     0%   100%  1024.10kB  2.28%  github.com/jackc/pgx/v5/pgproto3.(*Frontend).Receive
+         0     0%   100%  1024.10kB  2.28%  github.com/jackc/pgx/v5/stdlib.(*Conn).PrepareContext
+         0     0%   100%   512.01kB  1.14%  github.com/jackc/pgx/v5/stdlib.(*Conn).QueryContext
+         0     0%   100%   512.01kB  1.14%  github.com/jackc/pgx/v5/stdlib.(*Stmt).QueryContext
+         0     0%   100%   528.17kB  1.17%  github.com/minio/minio-go/v7.(*Client).StatObject
+         0     0%   100%   528.17kB  1.17%  github.com/minio/minio-go/v7/pkg/s3utils.CheckValidBucketName (inline)
+         0     0%   100%   528.17kB  1.17%  github.com/minio/minio-go/v7/pkg/s3utils.checkBucketNameCommon
+         0     0%   100%   513.50kB  1.14%  github.com/minio/minio-go/v7/pkg/s3utils.init
+         0     0%   100%  1024.10kB  2.28%  github.com/valyala/fasthttp.(*Server).serveConn
+         0     0%   100%  1024.10kB  2.28%  github.com/valyala/fasthttp.(*workerPool).getCh.func1
+         0     0%   100%  1024.10kB  2.28%  github.com/valyala/fasthttp.(*workerPool).workerFunc
+         0     0%   100%  1536.11kB  3.41%  gorm.io/gorm.(*DB).Find
+         0     0%   100%  1536.11kB  3.41%  gorm.io/gorm.(*PreparedStmtDB).QueryContext
+         0     0%   100%  1536.11kB  3.41%  gorm.io/gorm.(*processor).Execute
+         0     0%   100%  1536.11kB  3.41%  gorm.io/gorm/callbacks.Query
+         0     0%   100%   528.17kB  1.17%  regexp.(*Regexp).MatchString (inline)
+         0     0%   100%   528.17kB  1.17%  regexp.(*Regexp).backtrack
+         0     0%   100%   528.17kB  1.17%  regexp.(*Regexp).doExecute
+         0     0%   100%   528.17kB  1.17%  regexp.(*Regexp).doMatch (inline)
+         0     0%   100%   513.50kB  1.14%  regexp.Compile (inline)
+         0     0%   100%   513.50kB  1.14%  regexp.MustCompile
+         0     0%   100%   513.50kB  1.14%  regexp.compile
+         0     0%   100%   513.50kB  1.14%  regexp/syntax.(*compiler).cap (inline)
+         0     0%   100%   513.50kB  1.14%  regexp/syntax.(*compiler).compile
+         0     0%   100%   513.50kB  1.14%  regexp/syntax.Compile
+         0     0%   100%   513.50kB  1.14%  runtime.doInit (inline)
+         0     0%   100%   513.50kB  1.14%  runtime.doInit1
+         0     0%   100%   513.50kB  1.14%  runtime.main
+         0     0%   100%     1026kB  2.28%  runtime.mcall
+         0     0%   100%     1026kB  2.28%  runtime.mstart
+         0     0%   100%     1026kB  2.28%  runtime.mstart0
+         0     0%   100%     1026kB  2.28%  runtime.mstart1
+         0     0%   100%     2052kB  4.56%  runtime.newm
+         0     0%   100%     1026kB  2.28%  runtime.park_m
+         0     0%   100%     2052kB  4.56%  runtime.resetspinning
+         0     0%   100%     2052kB  4.56%  runtime.schedule
+         0     0%   100%     2052kB  4.56%  runtime.startm
+         0     0%   100%     2052kB  4.56%  runtime.wakep
+         0     0%   100%  1024.10kB  2.28%  storage-service/internal/handlers.(*CacheHandler).PreloadObjects
+         0     0%   100%   512.01kB  1.14%  storage-service/internal/handlers.(*CacheHandler).PreloadObjects.func1
+         0     0%   100%   512.01kB  1.14%  storage-service/internal/repository.(*ObjectRepositoryImpl).GetObjectsBatch
+         0     0%   100%  1024.10kB  2.28%  storage-service/internal/repository.(*ObjectRepositoryImpl).GetObjectsByLocation
+         0     0%   100% 40904.17kB 90.89%  storage-service/internal/services.(*CacheService).preloadWorker
+         0     0%   100%   512.01kB  1.14%  storage-service/internal/services.(*ObjectService).GetObjectsBatch (inline)
+         0     0%   100%  1024.10kB  2.28%  storage-service/internal/services.(*ObjectService).GetPredictedModels

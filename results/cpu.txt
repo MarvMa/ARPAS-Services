@@ -1,0 +1,88 @@
+File: storage-service
+Build ID: 84dd8356b464b63bab74a59db84611f946f8af8d
+Type: cpu
+Time: 2025-08-30 16:35:06 CEST
+Duration: 30s, Total samples = 110ms ( 0.37%)
+Showing nodes accounting for 110ms, 100% of 110ms total
+      flat  flat%   sum%        cum   cum%
+      40ms 36.36% 36.36%       40ms 36.36%  internal/runtime/syscall.Syscall6
+      20ms 18.18% 54.55%       20ms 18.18%  runtime.futex
+      10ms  9.09% 63.64%       10ms  9.09%  github.com/valyala/fasthttp.(*Response).ResetBody
+      10ms  9.09% 72.73%       10ms  9.09%  gorm.io/gorm/logger.(*logger).Trace
+      10ms  9.09% 81.82%       10ms  9.09%  runtime.(*mcentral).partialSwept (inline)
+      10ms  9.09% 90.91%       20ms 18.18%  runtime.netpoll
+      10ms  9.09%   100%       10ms  9.09%  runtime.newobject
+         0     0%   100%       40ms 36.36%  bufio.(*Writer).Write
+         0     0%   100%       10ms  9.09%  database/sql.(*DB).retry
+         0     0%   100%       10ms  9.09%  database/sql.(*Stmt).QueryContext
+         0     0%   100%       10ms  9.09%  database/sql.(*Stmt).QueryContext.func1
+         0     0%   100%       10ms  9.09%  database/sql.ctxDriverStmtQuery
+         0     0%   100%       10ms  9.09%  database/sql.rowsiFromStatement
+         0     0%   100%       30ms 27.27%  github.com/gofiber/fiber/v2.(*App).handler
+         0     0%   100%       30ms 27.27%  github.com/gofiber/fiber/v2.(*App).next
+         0     0%   100%       10ms  9.09%  github.com/gofiber/fiber/v2.(*Ctx).JSON
+         0     0%   100%       30ms 27.27%  github.com/gofiber/fiber/v2.(*Ctx).Next
+         0     0%   100%       30ms 27.27%  github.com/gofiber/fiber/v2/middleware/logger.New.func3
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5.(*Conn).Query
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/pgconn.(*PgConn).ExecPrepared
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/pgconn.(*PgConn).execExtendedSuffix
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/pgconn.(*PgConn).peekMessage
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/pgconn.(*ResultReader).readUntilRowDescription
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/pgconn/internal/bgreader.(*BGReader).Read
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/pgproto3.(*Frontend).Receive
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/pgproto3.(*chunkReader).Next
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/stdlib.(*Conn).QueryContext
+         0     0%   100%       10ms  9.09%  github.com/jackc/pgx/v5/stdlib.(*Stmt).QueryContext
+         0     0%   100%       10ms  9.09%  github.com/valyala/fasthttp.(*Response).SetBodyRaw (inline)
+         0     0%   100%       40ms 36.36%  github.com/valyala/fasthttp.(*Response).Write
+         0     0%   100%       70ms 63.64%  github.com/valyala/fasthttp.(*Server).serveConn
+         0     0%   100%       70ms 63.64%  github.com/valyala/fasthttp.(*workerPool).getCh.func1
+         0     0%   100%       70ms 63.64%  github.com/valyala/fasthttp.(*workerPool).workerFunc
+         0     0%   100%       40ms 36.36%  github.com/valyala/fasthttp.writeResponse
+         0     0%   100%       30ms 27.27%  gorm.io/gorm.(*DB).Find
+         0     0%   100%       10ms  9.09%  gorm.io/gorm.(*DB).scanIntoStruct
+         0     0%   100%       10ms  9.09%  gorm.io/gorm.(*PreparedStmtDB).QueryContext
+         0     0%   100%       30ms 27.27%  gorm.io/gorm.(*processor).Execute
+         0     0%   100%       10ms  9.09%  gorm.io/gorm.Scan
+         0     0%   100%       20ms 18.18%  gorm.io/gorm/callbacks.Query
+         0     0%   100%       10ms  9.09%  gorm.io/gorm/schema.(*Field).setupValuerAndSetter.func15
+         0     0%   100%       10ms  9.09%  internal/poll.(*FD).Read
+         0     0%   100%       40ms 36.36%  internal/poll.(*FD).Write
+         0     0%   100%       50ms 45.45%  internal/poll.ignoringEINTRIO (inline)
+         0     0%   100%       10ms  9.09%  internal/runtime/syscall.EpollWait
+         0     0%   100%       10ms  9.09%  io.ReadAtLeast
+         0     0%   100%       10ms  9.09%  net.(*conn).Read
+         0     0%   100%       40ms 36.36%  net.(*conn).Write
+         0     0%   100%       10ms  9.09%  net.(*netFD).Read
+         0     0%   100%       40ms 36.36%  net.(*netFD).Write
+         0     0%   100%       10ms  9.09%  reflect.Value.Interface (inline)
+         0     0%   100%       10ms  9.09%  reflect.packEface
+         0     0%   100%       10ms  9.09%  reflect.unsafe_New
+         0     0%   100%       10ms  9.09%  reflect.valueInterface
+         0     0%   100%       10ms  9.09%  runtime.(*mcache).nextFree
+         0     0%   100%       10ms  9.09%  runtime.(*mcache).refill
+         0     0%   100%       10ms  9.09%  runtime.(*mcentral).uncacheSpan
+         0     0%   100%       20ms 18.18%  runtime.entersyscall
+         0     0%   100%       20ms 18.18%  runtime.entersyscall_sysmon
+         0     0%   100%       20ms 18.18%  runtime.findRunnable
+         0     0%   100%       20ms 18.18%  runtime.futexwakeup
+         0     0%   100%       10ms  9.09%  runtime.mallocgc
+         0     0%   100%       10ms  9.09%  runtime.mallocgcSmallNoscan
+         0     0%   100%       20ms 18.18%  runtime.mcall
+         0     0%   100%       20ms 18.18%  runtime.notewakeup
+         0     0%   100%       20ms 18.18%  runtime.park_m
+         0     0%   100%       20ms 18.18%  runtime.reentersyscall
+         0     0%   100%       20ms 18.18%  runtime.schedule
+         0     0%   100%       20ms 18.18%  runtime.systemstack
+         0     0%   100%       30ms 27.27%  storage-service/internal/handlers.(*CacheHandler).PreloadObjects
+         0     0%   100%       20ms 18.18%  storage-service/internal/handlers.(*CacheHandler).PreloadObjects.func1
+         0     0%   100%       20ms 18.18%  storage-service/internal/repository.(*ObjectRepositoryImpl).GetObjectsBatch
+         0     0%   100%       20ms 18.18%  storage-service/internal/repository.(*ObjectRepositoryImpl).GetObjectsByLocation
+         0     0%   100%       20ms 18.18%  storage-service/internal/services.(*ObjectService).GetObjectsBatch (inline)
+         0     0%   100%       20ms 18.18%  storage-service/internal/services.(*ObjectService).GetPredictedModels
+         0     0%   100%       30ms 27.27%  syscall.RawSyscall6
+         0     0%   100%       10ms  9.09%  syscall.Read (inline)
+         0     0%   100%       50ms 45.45%  syscall.Syscall
+         0     0%   100%       40ms 36.36%  syscall.Write (inline)
+         0     0%   100%       10ms  9.09%  syscall.read
+         0     0%   100%       40ms 36.36%  syscall.write

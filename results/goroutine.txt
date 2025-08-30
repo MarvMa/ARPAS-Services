@@ -1,0 +1,60 @@
+File: storage-service
+Build ID: 84dd8356b464b63bab74a59db84611f946f8af8d
+Type: goroutine
+Time: 2025-08-30 16:35:36 CEST
+Showing nodes accounting for 24, 100% of 24 total
+      flat  flat%   sum%        cum   cum%
+        22 91.67% 91.67%         22 91.67%  runtime.gopark
+         1  4.17% 95.83%          1  4.17%  runtime.goroutineProfileWithLabels
+         1  4.17%   100%          1  4.17%  syscall.Syscall
+         0     0%   100%          4 16.67%  bufio.(*Reader).Peek
+         0     0%   100%          4 16.67%  bufio.(*Reader).fill
+         0     0%   100%          1  4.17%  database/sql.(*DB).connectionCleaner
+         0     0%   100%          1  4.17%  database/sql.(*DB).connectionOpener
+         0     0%   100%          1  4.17%  github.com/gofiber/fiber/v2.(*App).Listen
+         0     0%   100%          1  4.17%  github.com/gofiber/fiber/v2/middleware/logger.New.func1
+         0     0%   100%          1  4.17%  github.com/valyala/fasthttp.(*Server).Serve
+         0     0%   100%          4 16.67%  github.com/valyala/fasthttp.(*Server).serveConn
+         0     0%   100%          1  4.17%  github.com/valyala/fasthttp.(*workerPool).Start.func2
+         0     0%   100%          8 33.33%  github.com/valyala/fasthttp.(*workerPool).getCh.func1
+         0     0%   100%          8 33.33%  github.com/valyala/fasthttp.(*workerPool).workerFunc
+         0     0%   100%          1  4.17%  github.com/valyala/fasthttp.acceptConn
+         0     0%   100%          1  4.17%  github.com/valyala/fasthttp.updateServerDate.func1
+         0     0%   100%          1  4.17%  gorm.io/gorm/internal/lru.NewLRU[go.shape.string,go.shape.*uint8].func1
+         0     0%   100%          2  8.33%  internal/poll.(*FD).Accept
+         0     0%   100%          5 20.83%  internal/poll.(*FD).Read
+         0     0%   100%          6 25.00%  internal/poll.(*pollDesc).wait
+         0     0%   100%          6 25.00%  internal/poll.(*pollDesc).waitRead (inline)
+         0     0%   100%          1  4.17%  internal/poll.ignoringEINTRIO (inline)
+         0     0%   100%          6 25.00%  internal/poll.runtime_pollWait
+         0     0%   100%          1  4.17%  main.main
+         0     0%   100%          1  4.17%  main.main.func1
+         0     0%   100%          2  8.33%  net.(*TCPListener).Accept
+         0     0%   100%          2  8.33%  net.(*TCPListener).accept
+         0     0%   100%          5 20.83%  net.(*conn).Read
+         0     0%   100%          5 20.83%  net.(*netFD).Read
+         0     0%   100%          2  8.33%  net.(*netFD).accept
+         0     0%   100%          1  4.17%  net/http.(*ServeMux).ServeHTTP
+         0     0%   100%          1  4.17%  net/http.(*Server).ListenAndServe
+         0     0%   100%          1  4.17%  net/http.(*Server).Serve
+         0     0%   100%          1  4.17%  net/http.(*conn).serve
+         0     0%   100%          1  4.17%  net/http.(*connReader).backgroundRead
+         0     0%   100%          1  4.17%  net/http.HandlerFunc.ServeHTTP
+         0     0%   100%          1  4.17%  net/http.ListenAndServe (inline)
+         0     0%   100%          1  4.17%  net/http.serverHandler.ServeHTTP
+         0     0%   100%          1  4.17%  net/http/pprof.Index
+         0     0%   100%          1  4.17%  net/http/pprof.handler.ServeHTTP
+         0     0%   100%          9 37.50%  runtime.chanrecv
+         0     0%   100%          9 37.50%  runtime.chanrecv2
+         0     0%   100%          1  4.17%  runtime.main
+         0     0%   100%          6 25.00%  runtime.netpollblock
+         0     0%   100%          1  4.17%  runtime.pprof_goroutineProfileWithLabels
+         0     0%   100%          4 16.67%  runtime.selectgo
+         0     0%   100%          1  4.17%  runtime/pprof.(*Profile).WriteTo
+         0     0%   100%          1  4.17%  runtime/pprof.writeGoroutine
+         0     0%   100%          1  4.17%  runtime/pprof.writeRuntimeProfile
+         0     0%   100%          5 20.83%  storage-service/internal/services.(*CacheService).preloadWorker
+         0     0%   100%          1  4.17%  storage-service/internal/services/caches.(*MemoryCache).cleanupRoutine
+         0     0%   100%          1  4.17%  syscall.Read (inline)
+         0     0%   100%          1  4.17%  syscall.read
+         0     0%   100%          3 12.50%  time.Sleep

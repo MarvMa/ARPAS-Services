@@ -1,0 +1,806 @@
+{
+  "optimized": [
+    {
+      "ttfb": 5.1734000007854775,
+      "total_time": 5.365800010622479,
+      "size": 21556,
+      "server_latency": 0.04,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 15.777900000102818,
+      "total_time": 12692.974499994307,
+      "size": 31830796,
+      "server_latency": 2.71,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 3.891999993356876,
+      "total_time": 4.0714999922784045,
+      "size": 41432,
+      "server_latency": 0.06,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.5060999944107607,
+      "total_time": 1277.141999991727,
+      "size": 9505484,
+      "server_latency": 0.04,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.3601000031922013,
+      "total_time": 4.4686000037472695,
+      "size": 315220,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.9307999977609143,
+      "total_time": 37.768200010759756,
+      "size": 1409872,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.9582000026712194,
+      "total_time": 5.29820000519976,
+      "size": 345144,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.887600003508851,
+      "total_time": 29.905900009907782,
+      "size": 1327608,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.8558999949600548,
+      "total_time": 11080.833700005314,
+      "size": 30037692,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.8721000018995255,
+      "total_time": 63.68490000022575,
+      "size": 2140196,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.835600000456907,
+      "total_time": 11952.959899994312,
+      "size": 31636428,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.303100009565242,
+      "total_time": 233.27520000748336,
+      "size": 4050504,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.780800005188212,
+      "total_time": 4.12769999820739,
+      "size": 136688,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.490400005830452,
+      "total_time": 8949.877599996398,
+      "size": 27011536,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.8395999872591347,
+      "total_time": 1236.4527999889106,
+      "size": 9469412,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.597200004151091,
+      "total_time": 4645.162800006801,
+      "size": 18445292,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.758699996978976,
+      "total_time": 4.132900008698925,
+      "size": 86732,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.918100002920255,
+      "total_time": 2872.920499998145,
+      "size": 14331172,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.8780000031692907,
+      "total_time": 2425.1146000024164,
+      "size": 13246000,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.065100001753308,
+      "total_time": 3772.8908999997657,
+      "size": 16477140,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.068899987032637,
+      "total_time": 4.18109999736771,
+      "size": 21556,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.6834999918937683,
+      "total_time": 12157.452400002512,
+      "size": 31830796,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 5.644100005156361,
+      "total_time": 5.836700001964346,
+      "size": 41432,
+      "server_latency": 0.04,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.636200010078028,
+      "total_time": 1266.8499999999767,
+      "size": 9505484,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.7389999924926087,
+      "total_time": 4.89219999872148,
+      "size": 315220,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.6035999946761876,
+      "total_time": 27.125799999339506,
+      "size": 1409872,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.428299998631701,
+      "total_time": 4.552699989289977,
+      "size": 345144,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.377500004717149,
+      "total_time": 23.488099992391653,
+      "size": 1327608,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.680000008898787,
+      "total_time": 11339.71179999935,
+      "size": 30037692,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.8696999981766567,
+      "total_time": 63.49600000248756,
+      "size": 2140196,
+      "server_latency": 0.04,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.489599999738857,
+      "total_time": 12467.772500007413,
+      "size": 31636428,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.5304000086616725,
+      "total_time": 242.494699996314,
+      "size": 4050504,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.5563999990699813,
+      "total_time": 3.8904999964870512,
+      "size": 136688,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.599000003305264,
+      "total_time": 8990.196099999594,
+      "size": 27011536,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.3486000067787245,
+      "total_time": 1393.1354000087595,
+      "size": 9469412,
+      "server_latency": 0.04,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.423499995027669,
+      "total_time": 5109.637899993686,
+      "size": 18445292,
+      "server_latency": 0.03,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.438700008904561,
+      "total_time": 4.794400010723621,
+      "size": 86732,
+      "server_latency": 0.04,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.7341999995987862,
+      "total_time": 3221.5330000035465,
+      "size": 14331172,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.0926999936345965,
+      "total_time": 2644.3538000021363,
+      "size": 13246000,
+      "server_latency": 0.04,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.211000006762333,
+      "total_time": 3906.6033999988576,
+      "size": 16477140,
+      "server_latency": 0.04,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.418700002133846,
+      "total_time": 4.543000002740882,
+      "size": 21556,
+      "server_latency": 0.05,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.01659999624826,
+      "total_time": 12103.486899999552,
+      "size": 31830796,
+      "server_latency": 0.06,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.9069000049494207,
+      "total_time": 4.079300008015707,
+      "size": 41432,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.492599993478507,
+      "total_time": 1245.1007999916328,
+      "size": 9505484,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.9715000020805746,
+      "total_time": 5.071699997643009,
+      "size": 315220,
+      "server_latency": 0.05,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.83960000181105,
+      "total_time": 25.85689999978058,
+      "size": 1409872,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.278299995348789,
+      "total_time": 5.380599992349744,
+      "size": 345144,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.696399988257326,
+      "total_time": 22.611199994571507,
+      "size": 1327608,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 3.555999996024184,
+      "total_time": 10911.685999992187,
+      "size": 30037692,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    },
+    {
+      "ttfb": 4.3631000007735565,
+      "total_time": 63.47000000823755,
+      "size": 2140196,
+      "server_latency": 0.02,
+      "cache_hit": true,
+      "source": "cache"
+    }
+  ],
+  "unoptimized": [
+    {
+      "ttfb": 9.344099991722032,
+      "total_time": 9.4799999933457,
+      "size": 21556,
+      "server_latency": 4.08,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.2898999894969165,
+      "total_time": 12182.288999989396,
+      "size": 31830796,
+      "server_latency": 1.38,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.156300009228289,
+      "total_time": 7.351100008236244,
+      "size": 41432,
+      "server_latency": 2.08,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.3256999894510955,
+      "total_time": 1316.2461999891093,
+      "size": 9505484,
+      "server_latency": 1.54,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.5993000025628135,
+      "total_time": 7.699900001171045,
+      "size": 315220,
+      "server_latency": 1.49,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.721700003254227,
+      "total_time": 57.17020000156481,
+      "size": 1409872,
+      "server_latency": 1.22,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.161499990615994,
+      "total_time": 8.273599989479408,
+      "size": 345144,
+      "server_latency": 1.29,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.067500002449378,
+      "total_time": 27.638600004138425,
+      "size": 1327608,
+      "server_latency": 1.29,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.4751999927684665,
+      "total_time": 11107.689800002845,
+      "size": 30037692,
+      "server_latency": 1.35,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.059000010485761,
+      "total_time": 85.28800000203773,
+      "size": 2140196,
+      "server_latency": 1.64,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.136000000173226,
+      "total_time": 11868.56680001074,
+      "size": 31636428,
+      "server_latency": 1.21,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.774900000891648,
+      "total_time": 234.50219999358524,
+      "size": 4050504,
+      "server_latency": 1.59,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 5.945700002484955,
+      "total_time": 6.315100006759167,
+      "size": 136688,
+      "server_latency": 1.25,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.189000006997958,
+      "total_time": 8896.733999994467,
+      "size": 27011536,
+      "server_latency": 1.28,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.310400000074878,
+      "total_time": 1237.7960000012536,
+      "size": 9469412,
+      "server_latency": 1.33,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 8.23399999353569,
+      "total_time": 4570.25980000617,
+      "size": 18445292,
+      "server_latency": 1.58,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.255200001760386,
+      "total_time": 6.594599995878525,
+      "size": 86732,
+      "server_latency": 1.46,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.312999994610436,
+      "total_time": 2870.176199998241,
+      "size": 14331172,
+      "server_latency": 1.14,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.968300007632934,
+      "total_time": 2467.619500006549,
+      "size": 13246000,
+      "server_latency": 1.48,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.534700009273365,
+      "total_time": 3744.71210000047,
+      "size": 16477140,
+      "server_latency": 1.53,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.554399995366111,
+      "total_time": 6.681500002741814,
+      "size": 21556,
+      "server_latency": 1.57,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.122500009951182,
+      "total_time": 12096.629200008465,
+      "size": 31830796,
+      "server_latency": 1.28,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.347300008405,
+      "total_time": 7.531099996413104,
+      "size": 41432,
+      "server_latency": 2.38,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.751199995051138,
+      "total_time": 1251.0098999919137,
+      "size": 9505484,
+      "server_latency": 1.31,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.392899987986311,
+      "total_time": 7.556999989901669,
+      "size": 315220,
+      "server_latency": 1.43,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.442600002628751,
+      "total_time": 29.319099994609132,
+      "size": 1409872,
+      "server_latency": 1.24,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.040899999788962,
+      "total_time": 7.096099987393245,
+      "size": 345144,
+      "server_latency": 1.21,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.50799999514129,
+      "total_time": 27.33849998912774,
+      "size": 1327608,
+      "server_latency": 1.3,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.956500005093403,
+      "total_time": 10966.312000004109,
+      "size": 30037692,
+      "server_latency": 1.22,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 8.03260000247974,
+      "total_time": 73.49719999183435,
+      "size": 2140196,
+      "server_latency": 1.58,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 8.00280000839848,
+      "total_time": 12000.855000005686,
+      "size": 31636428,
+      "server_latency": 1.65,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 8.56660000863485,
+      "total_time": 244.41179999848828,
+      "size": 4050504,
+      "server_latency": 1.54,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.198599992785603,
+      "total_time": 6.714699993608519,
+      "size": 136688,
+      "server_latency": 1.34,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.299299992155284,
+      "total_time": 8913.867900002515,
+      "size": 27011536,
+      "server_latency": 1.35,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.496999998693354,
+      "total_time": 1258.8650999969104,
+      "size": 9469412,
+      "server_latency": 1.64,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.994499999564141,
+      "total_time": 4635.731000002124,
+      "size": 18445292,
+      "server_latency": 1.47,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.422500009648502,
+      "total_time": 6.767700004274957,
+      "size": 86732,
+      "server_latency": 1.47,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.045499995001592,
+      "total_time": 2838.3512000000337,
+      "size": 14331172,
+      "server_latency": 1.3,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.612299988977611,
+      "total_time": 2561.4957999932813,
+      "size": 13246000,
+      "server_latency": 1.64,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.668899997952394,
+      "total_time": 3757.7368000056595,
+      "size": 16477140,
+      "server_latency": 1.62,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.234100001165643,
+      "total_time": 6.352800002787262,
+      "size": 21556,
+      "server_latency": 1.56,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.891500001074746,
+      "total_time": 12048.408499991638,
+      "size": 31830796,
+      "server_latency": 1.26,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.399399997666478,
+      "total_time": 7.58139998652041,
+      "size": 41432,
+      "server_latency": 2.05,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.8395999987842515,
+      "total_time": 1248.9094999909867,
+      "size": 9505484,
+      "server_latency": 1.39,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.395599993993528,
+      "total_time": 7.488400005968288,
+      "size": 315220,
+      "server_latency": 1.42,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.31240000075195,
+      "total_time": 28.275400007260032,
+      "size": 1409872,
+      "server_latency": 1.25,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.507800004328601,
+      "total_time": 7.616700007929467,
+      "size": 345144,
+      "server_latency": 1.3,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.080900002620183,
+      "total_time": 26.182899993727915,
+      "size": 1327608,
+      "server_latency": 1.41,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.1373999962816015,
+      "total_time": 10824.541699999827,
+      "size": 30037692,
+      "server_latency": 1.35,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.072899999911897,
+      "total_time": 66.07650000660215,
+      "size": 2140196,
+      "server_latency": 1.54,
+      "cache_hit": false,
+      "source": "minio"
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+2025-08-30 10:36:44,716 - __main__ - INFO - Starting storage service benchmark...
+2025-08-30 10:36:44,716 - __main__ - INFO - Starting cache preload...
+2025-08-30 10:36:44,727 - __main__ - INFO - Cache preload completed: {'alreadyCached': 0, 'cacheStats': {'objects': 0, 'sizeBytes': 0, 'sizeMB': 0, 'hits': 0, 'misses': 0, 'hitRate': 0, 'maxSizeBytes': 8589934592, 'maxSizeMB': 8192}, 'duration': '801.71탎', 'preloadedCount': 20, 'status': 'success', 'totalObjects': 20, 'totalSizeMB': 202.0510711669922}
+2025-08-30 10:36:44,727 - __main__ - INFO - Fetching all object IDs...
+2025-08-30 10:36:44,731 - __main__ - INFO - Found 20 objects
+2025-08-30 10:36:44,731 - __main__ - INFO - Starting benchmark for optimized mode
+2025-08-30 10:36:44,732 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 10:36:58,095 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 10:36:58,435 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 10:37:21,542 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 10:38:47,497 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 10:39:06,326 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 10:39:31,660 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 10:39:47,750 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 10:40:50,751 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 10:41:03,535 - __main__ - INFO - Progress: 80/100 requests completed
+2025-08-30 10:41:28,676 - __main__ - INFO - Progress: 90/100 requests completed
+2025-08-30 10:42:21,068 - __main__ - INFO - Progress: 100/100 requests completed
+2025-08-30 10:42:21,068 - __main__ - INFO - Completed 100 successful requests for optimized mode
+2025-08-30 10:42:21,069 - __main__ - INFO - Waiting 5 seconds before unoptimized test...
+2025-08-30 10:42:26,078 - __main__ - INFO - Starting benchmark for unoptimized mode
+2025-08-30 10:42:26,078 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 10:42:38,619 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 10:42:39,261 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 10:43:03,928 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 10:43:47,188 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 10:44:20,977 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 10:44:31,552 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 10:45:04,454 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 10:45:43,542 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 10:46:01,625 - __main__ - INFO - Progress: 80/100 requests completed
+2025-08-30 10:46:26,050 - __main__ - INFO - Progress: 90/100 requests completed
+2025-08-30 10:47:10,531 - __main__ - INFO - Progress: 100/100 requests completed
+2025-08-30 10:47:10,532 - __main__ - INFO - Completed 100 successful requests for unoptimized mode
+2025-08-30 10:47:10,550 - __main__ - INFO - Raw data saved to benchmark_results\benchmark_raw_20250830_103644.csv
+2025-08-30 10:47:11,775 - __main__ - INFO - Excel report saved to benchmark_results\benchmark_results_20250830_103644.xlsx
+2025-08-30 10:47:13,790 - __main__ - INFO - Visualization saved to benchmark_results\benchmark_analysis_20250830_103644.png
+2025-08-30 10:47:15,171 - __main__ - INFO - Report saved to benchmark_results\benchmark_report_20250830_103644.txt
+2025-08-30 11:05:39,681 - __main__ - INFO - Starting storage service benchmark...
+2025-08-30 11:05:39,681 - __main__ - INFO - Starting cache preload...
+2025-08-30 11:05:39,690 - __main__ - INFO - Cache preload completed: {'alreadyCached': 0, 'cacheStats': {'objects': 0, 'sizeBytes': 0, 'sizeMB': 0, 'hits': 0, 'misses': 0, 'hitRate': 0, 'maxSizeBytes': 8589934592, 'maxSizeMB': 8192}, 'duration': '1.117725ms', 'preloadedCount': 20, 'status': 'success', 'totalObjects': 20, 'totalSizeMB': 202.0510711669922}
+2025-08-30 11:05:39,690 - __main__ - INFO - Fetching all object IDs...
+2025-08-30 11:05:39,693 - __main__ - INFO - Found 20 objects
+2025-08-30 11:05:39,694 - __main__ - INFO - Starting benchmark for optimized mode
+2025-08-30 11:05:39,694 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 11:05:52,181 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 11:05:54,597 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 11:06:17,292 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 11:07:07,597 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 11:07:33,880 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 11:07:51,252 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 11:08:29,776 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 11:08:59,332 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 11:10:01,152 - __main__ - ERROR - Request failed for 9f6d8828-b7c8-4be5-85df-80472c11dbc5 in optimized mode: ('Connection broken: IncompleteRead(13097832 bytes read, 5347460 more expected)', IncompleteRead(13097832 bytes read, 5347460 more expected))
+2025-08-30 11:10:06,162 - __main__ - ERROR - Request failed for 1f32ee26-3849-406d-ba29-2e19ad1c8d50 in optimized mode: ('Connection broken: IncompleteRead(20038453 bytes read, 11597975 more expected)', IncompleteRead(20038453 bytes read, 11597975 more expected))
+2025-08-30 11:10:07,387 - __main__ - ERROR - Request failed for 29f4adab-e0f7-40c0-a7a3-0f50ad3688cc in optimized mode: ('Connection broken: IncompleteRead(20595149 bytes read, 9442543 more expected)', IncompleteRead(20595149 bytes read, 9442543 more expected))
+2025-08-30 11:10:08,769 - __main__ - ERROR - Request failed for 0bb63ca1-21f9-4af1-8f37-0e335bf4a0b7 in optimized mode: ('Connection broken: IncompleteRead(21019477 bytes read, 10811319 more expected)', IncompleteRead(21019477 bytes read, 10811319 more expected))
+2025-08-30 11:10:08,872 - __main__ - ERROR - Request failed for 66211446-6212-465c-983c-b2d5db5bb02f in optimized mode: ('Connection broken: IncompleteRead(19797990 bytes read, 7213546 more expected)', IncompleteRead(19797990 bytes read, 7213546 more expected))
+2025-08-30 11:10:09,885 - __main__ - ERROR - Request failed for 22e86e75-d323-4ba3-ab24-a3e99a7a12be in optimized mode: ('Connection aborted.', ConnectionResetError(10054, 'Eine vorhandene Verbindung wurde vom Remotehost geschlossen', None, 10054, None))
+2025-08-30 11:10:09,885 - __main__ - ERROR - Request failed for 50e9a25e-f6d4-446d-b19a-b3f1797873e8 in optimized mode: ('Connection aborted.', ConnectionResetError(10054, 'Eine vorhandene Verbindung wurde vom Remotehost geschlossen', None, 10054, None))
+2025-08-30 11:10:09,902 - __main__ - ERROR - Request failed for 0dd7b36a-39e3-4000-a4a1-532559d89f26 in optimized mode: ('Connection aborted.', ConnectionResetError(10054, 'Eine vorhandene Verbindung wurde vom Remotehost geschlossen', None, 10054, None))
+2025-08-30 11:10:09,903 - __main__ - ERROR - Request failed for 63698160-7c4b-48ce-95a4-59170de53487 in optimized mode: ('Connection aborted.', ConnectionResetError(10054, 'Eine vorhandene Verbindung wurde vom Remotehost geschlossen', None, 10054, None))
+2025-08-30 11:10:10,395 - __main__ - ERROR - Request failed for 1f32ee26-3849-406d-ba29-2e19ad1c8d50 in optimized mode: ('Connection broken: IncompleteRead(31566806 bytes read, 69622 more expected)', IncompleteRead(31566806 bytes read, 69622 more expected))
+2025-08-30 11:11:41,045 - __main__ - INFO - Starting storage service benchmark...
+2025-08-30 11:11:41,045 - __main__ - INFO - Starting cache preload...
+2025-08-30 11:11:41,054 - __main__ - INFO - Cache preload completed: {'alreadyCached': 0, 'cacheStats': {'objects': 0, 'sizeBytes': 0, 'sizeMB': 0, 'hits': 0, 'misses': 0, 'hitRate': 0, 'maxSizeBytes': 8589934592, 'maxSizeMB': 8192}, 'duration': '715.014탎', 'preloadedCount': 20, 'status': 'success', 'totalObjects': 20, 'totalSizeMB': 202.0510711669922}
+2025-08-30 11:11:41,054 - __main__ - INFO - Fetching all object IDs...
+2025-08-30 11:11:41,058 - __main__ - INFO - Found 20 objects
+2025-08-30 11:11:41,059 - __main__ - INFO - Starting benchmark for optimized mode
+2025-08-30 11:11:41,059 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 11:11:55,002 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 11:11:56,456 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 11:12:20,509 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 11:13:14,785 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 11:13:37,712 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 11:13:51,398 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 11:14:19,439 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 11:15:07,329 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 11:15:24,971 - __main__ - INFO - Progress: 80/100 requests completed
+2025-08-30 11:15:51,670 - __main__ - INFO - Progress: 90/100 requests completed
+2025-08-30 11:16:36,812 - __main__ - INFO - Progress: 100/100 requests completed
+2025-08-30 11:16:36,813 - __main__ - INFO - Completed 100 successful requests for optimized mode
+2025-08-30 11:16:36,813 - __main__ - INFO - Waiting 5 seconds before unoptimized test...
+2025-08-30 11:16:41,825 - __main__ - INFO - Starting benchmark for unoptimized mode
+2025-08-30 11:16:41,825 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 11:16:54,555 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 11:16:56,681 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 11:17:22,220 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 11:18:22,039 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 11:21:08,264 - __main__ - INFO - Starting storage service benchmark...
+2025-08-30 11:21:08,264 - __main__ - INFO - Starting cache preload...
+2025-08-30 11:21:08,272 - __main__ - INFO - Cache preload completed: {'alreadyCached': 0, 'cacheStats': {'objects': 0, 'sizeBytes': 0, 'sizeMB': 0, 'hits': 0, 'misses': 0, 'hitRate': 0, 'maxSizeBytes': 8589934592, 'maxSizeMB': 8192}, 'duration': '660.214탎', 'preloadedCount': 20, 'status': 'success', 'totalObjects': 20, 'totalSizeMB': 202.0510711669922}
+2025-08-30 11:21:08,272 - __main__ - INFO - Fetching all object IDs...
+2025-08-30 11:21:08,275 - __main__ - INFO - Found 20 objects
+2025-08-30 11:21:08,275 - __main__ - INFO - Starting benchmark for optimized mode
+2025-08-30 11:21:08,275 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 11:21:21,074 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 11:21:21,672 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 11:21:48,335 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 11:22:43,732 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 11:23:04,911 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 11:23:18,676 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 11:23:41,602 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 11:24:25,250 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 11:24:57,262 - __main__ - INFO - Progress: 80/100 requests completed
+2025-08-30 11:25:09,863 - __main__ - INFO - Progress: 90/100 requests completed
+2025-08-30 11:26:02,859 - __main__ - INFO - Progress: 100/100 requests completed
+2025-08-30 11:26:02,860 - __main__ - INFO - Completed 100 successful requests for optimized mode
+2025-08-30 11:26:02,860 - __main__ - INFO - Waiting 5 seconds before unoptimized test...
+2025-08-30 11:26:07,863 - __main__ - INFO - Starting benchmark for unoptimized mode
+2025-08-30 11:26:07,863 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 11:26:20,817 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 11:26:21,950 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 11:26:51,477 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 12:11:00,354 - __main__ - INFO - Starting storage service benchmark...
+2025-08-30 12:11:00,354 - __main__ - INFO - Starting cache preload...
+2025-08-30 12:11:00,362 - __main__ - INFO - Cache preload completed: {'alreadyCached': 0, 'cacheStats': {'objects': 0, 'sizeBytes': 0, 'sizeMB': 0, 'hits': 0, 'misses': 0, 'hitRate': 0, 'maxSizeBytes': 8589934592, 'maxSizeMB': 8192}, 'duration': '728.023탎', 'preloadedCount': 20, 'status': 'success', 'totalObjects': 20, 'totalSizeMB': 202.0510711669922}
+2025-08-30 12:11:00,362 - __main__ - INFO - Fetching all object IDs...
+2025-08-30 12:11:00,366 - __main__ - INFO - Found 20 objects
+2025-08-30 12:11:00,366 - __main__ - INFO - Starting benchmark for optimized mode
+2025-08-30 12:11:00,366 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 12:11:12,879 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 12:11:13,929 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 12:11:38,579 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 12:12:34,307 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 12:12:54,666 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 12:13:16,287 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 12:13:35,212 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 12:14:11,781 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 12:14:42,500 - __main__ - INFO - Progress: 80/100 requests completed
+2025-08-30 12:15:06,720 - __main__ - INFO - Progress: 90/100 requests completed
+2025-08-30 12:15:50,092 - __main__ - INFO - Progress: 100/100 requests completed
+2025-08-30 12:15:50,093 - __main__ - INFO - Completed 100 successful requests for optimized mode
+2025-08-30 12:15:50,094 - __main__ - INFO - Waiting 5 seconds before unoptimized test...
+2025-08-30 12:15:55,107 - __main__ - INFO - Starting benchmark for unoptimized mode
+2025-08-30 12:15:55,107 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 12:16:07,532 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 12:16:08,426 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 12:16:33,884 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 12:17:27,092 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 12:17:49,465 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 12:18:03,025 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 12:18:34,085 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 12:19:13,515 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 12:19:28,413 - __main__ - INFO - Progress: 80/100 requests completed
+2025-08-30 12:20:07,967 - __main__ - INFO - Progress: 90/100 requests completed
+2025-08-30 12:20:43,651 - __main__ - INFO - Progress: 100/100 requests completed
+2025-08-30 12:20:43,651 - __main__ - INFO - Completed 100 successful requests for unoptimized mode
+2025-08-30 12:20:43,671 - __main__ - INFO - Raw data saved to benchmark_results\benchmark_raw_20250830_121100.csv
+2025-08-30 12:20:44,045 - __main__ - INFO - Excel report saved to benchmark_results\benchmark_results_20250830_121100.xlsx
+2025-08-30 12:20:45,927 - __main__ - INFO - Visualization saved to benchmark_results\benchmark_analysis_20250830_121100.png
+2025-08-30 12:20:47,396 - __main__ - INFO - Report saved to benchmark_results\benchmark_report_20250830_121100.txt
+2025-08-30 16:16:46,537 - __main__ - INFO - Starting storage service benchmark...
+2025-08-30 16:16:46,537 - __main__ - INFO - Starting cache preload...
+2025-08-30 16:16:46,546 - __main__ - INFO - Cache preload completed: {'alreadyCached': 0, 'cacheStats': {'objects': 0, 'sizeBytes': 0, 'sizeMB': 0, 'hits': 0, 'misses': 0, 'hitRate': 0, 'maxSizeBytes': 8589934592, 'maxSizeMB': 8192}, 'duration': '1.340643ms', 'preloadedCount': 20, 'status': 'success', 'totalObjects': 20, 'totalSizeMB': 202.0510711669922}
+2025-08-30 16:16:46,546 - __main__ - INFO - Fetching all object IDs...
+2025-08-30 16:16:46,550 - __main__ - INFO - Found 20 objects
+2025-08-30 16:16:46,550 - __main__ - INFO - Starting benchmark for optimized mode
+2025-08-30 16:16:46,550 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 16:17:02,540 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 16:17:03,656 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 16:17:25,635 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 16:18:33,237 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 16:18:49,523 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 16:19:16,477 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 16:19:42,006 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 16:20:16,955 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 16:20:38,901 - __main__ - INFO - Progress: 80/100 requests completed
+2025-08-30 16:21:27,081 - __main__ - INFO - Progress: 90/100 requests completed
+2025-08-30 16:21:59,444 - __main__ - INFO - Progress: 100/100 requests completed
+2025-08-30 16:21:59,445 - __main__ - INFO - Completed 100 successful requests for optimized mode
+2025-08-30 16:21:59,445 - __main__ - INFO - Waiting 5 seconds before unoptimized test...
+2025-08-30 16:22:04,446 - __main__ - INFO - Starting benchmark for unoptimized mode
+2025-08-30 16:22:04,446 - __main__ - INFO - Running 5 warmup requests...
+2025-08-30 16:22:17,153 - __main__ - INFO - Running 100 benchmark requests...
+2025-08-30 16:22:18,490 - __main__ - INFO - Progress: 10/100 requests completed
+2025-08-30 16:22:43,147 - __main__ - INFO - Progress: 20/100 requests completed
+2025-08-30 16:23:44,081 - __main__ - INFO - Progress: 30/100 requests completed
+2025-08-30 16:24:00,395 - __main__ - INFO - Progress: 40/100 requests completed
+2025-08-30 16:24:22,726 - __main__ - INFO - Progress: 50/100 requests completed
+2025-08-30 16:24:51,963 - __main__ - INFO - Progress: 60/100 requests completed
+2025-08-30 16:25:38,194 - __main__ - INFO - Progress: 70/100 requests completed
+2025-08-30 16:25:53,724 - __main__ - INFO - Progress: 80/100 requests completed
+2025-08-30 16:26:20,662 - __main__ - INFO - Progress: 90/100 requests completed
+2025-08-30 16:27:09,363 - __main__ - INFO - Progress: 100/100 requests completed
+2025-08-30 16:27:09,364 - __main__ - INFO - Completed 100 successful requests for unoptimized mode
+2025-08-30 16:27:09,383 - __main__ - INFO - Raw data saved to benchmark_results\benchmark_raw_20250830_161646.csv
+2025-08-30 16:27:10,687 - __main__ - INFO - Excel report saved to benchmark_results\benchmark_results_20250830_161646.xlsx
+2025-08-30 16:27:12,932 - __main__ - INFO - Visualization saved to benchmark_results\benchmark_analysis_20250830_161646.png
+2025-08-30 16:27:14,616 - __main__ - INFO - Report saved to benchmark_results\benchmark_report_20250830_161646.txt
