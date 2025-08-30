@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
 	"time"
 
@@ -20,28 +19,12 @@ import (
 	"storage-service/internal/utils"
 )
 
-func newCacheHTTPClient() *http.Client {
-	tr := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		MaxIdleConns:          256,
-		MaxIdleConnsPerHost:   128,
-		IdleConnTimeout:       90 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-		DisableCompression:    true,
-		MaxConnsPerHost:       100,
-		ResponseHeaderTimeout: 5 * time.Second,
-		TLSHandshakeTimeout:   3 * time.Second,
-	}
-	return &http.Client{Transport: tr, Timeout: 30 * time.Second}
-}
-
 // ObjectService provides methods for managing 3D objects in storage.
 type ObjectService struct {
 	Repo       *repository.ObjectRepositoryImpl
 	Minio      *minio.Client
 	BucketName string
 	Config     *config.Config
-	cacheHTTP  *http.Client
 }
 
 // NewObjectService creates a new ObjectService with the given repository and storage client.
@@ -51,7 +34,6 @@ func NewObjectService(repo *repository.ObjectRepositoryImpl, minioClient *minio.
 		Minio:      minioClient,
 		BucketName: bucketName,
 		Config:     cfg,
-		cacheHTTP:  newCacheHTTPClient(),
 	}
 }
 
@@ -172,4 +154,8 @@ func (s *ObjectService) DeleteObject(id uuid.UUID) error {
 	}
 	_ = s.Minio.RemoveObject(context.Background(), s.BucketName, obj.StorageKey, minio.RemoveObjectOptions{})
 	return s.Repo.DeleteObject(id)
+}
+
+func (s *ObjectService) GetObjectsBatch(ids []uuid.UUID) ([]models.Object, error) {
+	return s.Repo.GetObjectsBatch(ids)
 }

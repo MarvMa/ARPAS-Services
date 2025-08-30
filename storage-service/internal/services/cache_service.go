@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"storage-service/internal/services/caches"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +18,18 @@ type CacheService struct {
 	minio       *minio.Client
 	bucketName  string
 	mu          sync.RWMutex
+	bufferPool  *BufferPool
+
+	preloadQueue      chan preloadTask
+	preloadInFlight   sync.Map
+	preloadWorkers    int32
+	maxPreloadWorkers int32
+}
+
+type preloadTask struct {
+	ObjectID   uuid.UUID
+	StorageKey string
+	Priority   int
 }
 type PreloadObject struct {
 	ID         uuid.UUID
@@ -39,100 +49,89 @@ type CacheStatistics struct {
 }
 
 func NewCacheService(minio *minio.Client, bucketName string, maxSizeBytes int64, ttl time.Duration) *CacheService {
-	return &CacheService{
-		memoryCache: caches.NewMemoryCache(maxSizeBytes, ttl),
-		minio:       minio,
-		bucketName:  bucketName,
+	cs := &CacheService{
+		memoryCache:       caches.NewMemoryCache(maxSizeBytes, ttl),
+		minio:             minio,
+		bucketName:        bucketName,
+		preloadQueue:      make(chan preloadTask, 1000),
+		maxPreloadWorkers: 5,
+		bufferPool:        NewBufferPool(),
+	}
+	// Start preload workers
+	for i := 0; i < 5; i++ {
+		go cs.preloadWorker()
+	}
+
+	return cs
+}
+
+func (cs *CacheService) preloadWorker() {
+	for task := range cs.preloadQueue {
+		if exists, _ := cs.memoryCache.Exists(task.ObjectID); exists {
+			continue
+		}
+
+		if _, loading := cs.preloadInFlight.LoadOrStore(task.ObjectID, true); loading {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+
+		stat, err := cs.minio.StatObject(ctx, cs.bucketName, task.StorageKey, minio.StatObjectOptions{})
+		if err != nil {
+			cancel()
+			cs.preloadInFlight.Delete(task.ObjectID)
+			continue
+		}
+
+		err = cs.memoryCache.Store(task.ObjectID, func() (io.ReadCloser, int64, error) {
+			object, err := cs.minio.GetObject(ctx, cs.bucketName, task.StorageKey, minio.GetObjectOptions{})
+			if err != nil {
+				return nil, 0, err
+			}
+			return object, stat.Size, nil
+		})
+
+		cancel()
+		cs.preloadInFlight.Delete(task.ObjectID)
 	}
 }
-func (cs *CacheService) PreloadObjects(ctx context.Context, objectIDs []uuid.UUID, storageKeys []string) error {
+
+func (cs *CacheService) PreloadObjects(_ context.Context, objectIDs []uuid.UUID, storageKeys []string) error {
 	if len(objectIDs) != len(storageKeys) {
 		return fmt.Errorf("objectIDs and storageKeys must have the same length")
 	}
 
-	log.Printf("Starting preload for %d objects", len(objectIDs))
-	startTime := time.Now()
-
-	// Pre-filter to avoid unnecessary work
-	var toLoad []struct {
-		ID  uuid.UUID
-		Key string
-	}
-
 	for i, objectID := range objectIDs {
-		if exists, _ := cs.memoryCache.Exists(objectID); !exists {
-			toLoad = append(toLoad, struct {
-				ID  uuid.UUID
-				Key string
-			}{objectID, storageKeys[i]})
+		if exists, _ := cs.memoryCache.Exists(objectID); exists {
+			continue
 		}
-	}
 
-	if len(toLoad) == 0 {
-		log.Printf("All %d objects already cached", len(objectIDs))
-		return nil
-	}
+		if _, loading := cs.preloadInFlight.Load(objectID); loading {
+			continue
+		}
 
-	const maxWorkers = 20
-	sem := make(chan struct{}, maxWorkers)
-	var wg sync.WaitGroup
-
-	successCount := int32(0)
-	errorCount := int32(0)
-
-	for _, item := range toLoad {
-		wg.Add(1)
-		go func(id uuid.UUID, storageKey string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			object, err := cs.minio.GetObject(ctx, cs.bucketName, storageKey, minio.GetObjectOptions{})
-			if err != nil {
-				atomic.AddInt32(&errorCount, 1)
-				return
-			}
-			defer object.Close()
-
-			stat, err := object.Stat()
-			if err != nil {
-				atomic.AddInt32(&errorCount, 1)
-				return
-			}
-
-			data := make([]byte, stat.Size)
-			_, err = io.ReadFull(object, data)
-			if err != nil {
-				atomic.AddInt32(&errorCount, 1)
-				return
-			}
-
-			// Store in memory cache
-			if err := cs.memoryCache.Store(id, data); err != nil {
-				atomic.AddInt32(&errorCount, 1)
-				return
-			}
-
-			atomic.AddInt32(&successCount, 1)
-		}(item.ID, item.Key)
-	}
-
-	wg.Wait()
-
-	duration := time.Since(startTime)
-	log.Printf("Preload completed in %v - Success: %d, Errors: %d",
-		duration, successCount, errorCount)
-
-	if errorCount > 0 {
-		return fmt.Errorf("preload had %d errors", errorCount)
+		select {
+		case cs.preloadQueue <- preloadTask{ObjectID: objectID, StorageKey: storageKeys[i]}:
+		default:
+		}
 	}
 
 	return nil
 }
 
-// GetFromCacheStream provides streaming from memory cache
-func (cs *CacheService) GetFromCacheStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
-	return cs.memoryCache.GetStream(objectID)
+func (cs *CacheService) QueuePreload(objectID uuid.UUID, storageKey string, priority int) {
+	select {
+	case cs.preloadQueue <- preloadTask{
+		ObjectID:   objectID,
+		StorageKey: storageKey,
+		Priority:   priority,
+	}:
+	default:
+	}
+}
+
+func (cs *CacheService) GetFromCache(objectID uuid.UUID) ([]byte, bool) {
+	return cs.memoryCache.GetCache(objectID)
 }
 
 // InvalidateObject removes from cache
@@ -165,4 +164,56 @@ func (cs *CacheService) ClearCache() error {
 func (cs *CacheService) CheckCached(objectID uuid.UUID) bool {
 	exists, _ := cs.memoryCache.Exists(objectID)
 	return exists
+}
+
+type BufferPool struct {
+	pools []*sync.Pool
+}
+
+func NewBufferPool() *BufferPool {
+	bp := &BufferPool{
+		pools: make([]*sync.Pool, 10),
+	}
+
+	for i := range bp.pools {
+		//size := 1 << (i + 12)
+		bp.pools[i] = &sync.Pool{
+			New: func() interface{} {
+				return nil
+			},
+		}
+	}
+	return bp
+}
+
+func (bp *BufferPool) Get(size int) []byte {
+	poolIndex := bp.getPoolIndex(size)
+	if poolIndex >= 0 && poolIndex < len(bp.pools) {
+		if buf := bp.pools[poolIndex].Get(); buf != nil {
+			return buf.([]byte)[:size]
+		}
+	}
+	return make([]byte, size)
+}
+func (bp *BufferPool) getPoolIndex(size int) int {
+	if size <= 0 {
+		return -1
+	}
+	for i := 0; i < len(bp.pools); i++ {
+		if 1<<(i+12) >= size {
+			return i
+		}
+	}
+	return -1
+}
+
+func (bp *BufferPool) Put(buf []byte) {
+	size := cap(buf)
+	for i := range bp.pools {
+		poolSize := 1 << (i + 10)
+		if poolSize == size {
+			bp.pools[i].Put(buf)
+			return
+		}
+	}
 }

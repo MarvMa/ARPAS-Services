@@ -39,6 +39,33 @@ func (r *ObjectRepositoryImpl) GetObject(id uuid.UUID) (*models.Object, error) {
 	return &object, err
 }
 
+func (r *ObjectRepositoryImpl) GetObjectsBatch(ids []uuid.UUID) ([]models.Object, error) {
+	if len(ids) == 0 {
+		return []models.Object{}, nil
+	}
+
+	var objects []models.Object
+
+	query := r.db.Session(&gorm.Session{PrepareStmt: true})
+
+	batchSize := 100
+	for i := 0; i < len(ids); i += batchSize {
+		end := i + batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+
+		var batch []models.Object
+		err := query.Where("id IN ?", ids[i:end]).Find(&batch).Error
+		if err != nil {
+			return nil, err
+		}
+		objects = append(objects, batch...)
+	}
+
+	return objects, nil
+}
+
 // UpdateObject updates an existing Object in the database.
 func (r *ObjectRepositoryImpl) UpdateObject(object *models.Object) error {
 	return r.db.Save(object).Error

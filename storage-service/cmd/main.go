@@ -2,6 +2,8 @@ package main
 
 import (
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"storage-service/internal/config"
 	"storage-service/internal/handlers"
@@ -40,20 +42,34 @@ func main() {
 	objectHandler := handlers.NewObjectHandler(objectService, cacheService)
 
 	app := fiber.New(fiber.Config{
-		BodyLimit:         500 * 1024 * 1024, // 500 MB
-		ReadTimeout:       5 * time.Minute,
-		WriteTimeout:      5 * time.Minute,
-		ServerHeader:      "Storage Service v2.0 (Instrumented)",
-		DisableKeepalive:  false,
-		StreamRequestBody: true,
+		BodyLimit:             500 * 1024 * 1024, // 500 MB
+		ReadTimeout:           5 * time.Minute,
+		WriteTimeout:          5 * time.Minute,
+		ServerHeader:          "Storage Service v2.0 (Instrumented)",
+		DisableKeepalive:      false,
+		StreamRequestBody:     true,
+		Prefork:               false,
+		DisableStartupMessage: true,
+		ReduceMemoryUsage:     false,
+
+		Concurrency:     256 * 1024, // Max concurrent connections
+		ReadBufferSize:  8192,       // Größerer Read Buffer
+		WriteBufferSize: 8192,       // Größerer Write Buffer
 	})
-	
+
 	app.Use(logger.New(logger.Config{
 		Format: "[${time}] ${status} - ${method} ${path} ${query} - ${ip} - ${latency} - " +
 			"Optimization-Mode:${header:x-optimization-mode}\n",
 		TimeFormat: "2006-01-02 15:04:05",
 		Output:     os.Stdout,
 	}))
+
+	go func() {
+		log.Println("Starting pprof server on :6060")
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Fatalf("pprof server failed: %v", err)
+		}
+	}()
 
 	// Register Prometheus metrics endpoint
 	app.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"log"
 	"storage-service/internal/models"
 	"storage-service/internal/services"
@@ -27,8 +26,6 @@ func NewCacheHandler(cacheService *services.CacheService, objectService *service
 
 // PreloadObjects handles POST /cache/preload
 func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
-	startTime := time.Now()
-
 	var request models.PredictionRequest
 	if err := c.BodyParser(&request); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -46,53 +43,23 @@ func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prepare storage keys for preloading
-	var objectIDs []uuid.UUID
-	var storageKeys []string
-
-	for _, id := range predictedModelIDs {
-		obj, err := h.objectService.GetObject(id)
-		if err != nil {
-			log.Printf("Object not found for preload: %s", id)
-			continue
-		}
-		objectIDs = append(objectIDs, id)
-		storageKeys = append(storageKeys, obj.StorageKey)
-	}
-
-	if len(objectIDs) == 0 {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"message": "No objects found for preloading",
-		})
-	}
-
-	err = h.cacheService.PreloadObjects(c.Context(), objectIDs, storageKeys)
-
-	duration := time.Since(startTime)
-
-	// Set response headers
-	c.Set("X-Preload-Duration-Ms", fmt.Sprintf("%.2f", float64(duration.Microseconds())/1000.0))
-	c.Set("X-Preload-Object-Count", fmt.Sprintf("%d", len(objectIDs)))
-
+	c.Status(fiber.StatusOK)
+	err = c.JSON(predictedModelIDs)
 	if err != nil {
-		log.Printf("Preload error: %v", err)
-		return c.Status(fiber.StatusMultiStatus).JSON(fiber.Map{
-			"message":     "Partial preload completed",
-			"error":       err.Error(),
-			"objectCount": len(objectIDs),
-			"duration":    duration.String(),
-		})
+		return err
 	}
 
-	log.Printf("Preload completed for %d objects in %v", len(objectIDs), duration)
+	go func() {
+		if len(predictedModelIDs) > 0 {
+			objects, _ := h.objectService.GetObjectsBatch(predictedModelIDs)
 
-	// Return the list of preloaded object IDs
-	var responseIDs []string
-	for _, id := range objectIDs {
-		responseIDs = append(responseIDs, id.String())
-	}
+			for _, obj := range objects {
+				h.cacheService.QueuePreload(obj.ID, obj.StorageKey, 0)
+			}
+		}
+	}()
 
-	return c.JSON(responseIDs)
+	return nil
 }
 
 func (h *CacheHandler) PreloadAll(c *fiber.Ctx) error {

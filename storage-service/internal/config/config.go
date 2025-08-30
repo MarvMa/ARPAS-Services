@@ -137,7 +137,8 @@ func ConnectDatabase(cfg *Config) (*gorm.DB, error) {
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPassword, cfg.DBName)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		PrepareStmt: true,
+		PrepareStmt:            true,
+		SkipDefaultTransaction: true,
 	})
 	if err != nil {
 		return nil, err
@@ -145,8 +146,8 @@ func ConnectDatabase(cfg *Config) (*gorm.DB, error) {
 
 	sqlDB, err := db.DB()
 	if err == nil {
-		sqlDB.SetMaxOpenConns(25)
-		sqlDB.SetMaxIdleConns(25)
+		sqlDB.SetMaxOpenConns(10)
+		sqlDB.SetMaxIdleConns(5)
 		sqlDB.SetConnMaxLifetime(30 * time.Minute)
 		sqlDB.SetConnMaxIdleTime(5 * time.Minute)
 	}

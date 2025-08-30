@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"log"
+	"net/http"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -13,9 +15,19 @@ import (
 // NewMinioClient initializes a MinIO client and ensures the bucket exists.
 func NewMinioClient(cfg *config.Config) (*minio.Client, error) {
 	// Initialize MinIO client
+	transport := &http.Transport{
+		MaxIdleConns:          100,
+		MaxIdleConnsPerHost:   100,
+		MaxConnsPerHost:       100,
+		IdleConnTimeout:       90 * time.Second,
+		DisableCompression:    true,
+		ResponseHeaderTimeout: 5 * time.Second,
+	}
+
 	minioClient, err := minio.New(cfg.MinioEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
-		Secure: cfg.MinioSSL,
+		Creds:     credentials.NewStaticV4(cfg.MinioAccessKey, cfg.MinioSecretKey, ""),
+		Secure:    cfg.MinioSSL,
+		Transport: transport,
 	})
 	if err != nil {
 		return nil, err

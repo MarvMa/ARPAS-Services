@@ -13,9 +13,11 @@ import (
 )
 
 type MemoryCache struct {
-	data        sync.Map // map[string][]byte
-	metadata    sync.Map // map[string]*CacheEntry
-	mu          sync.RWMutex
+	data         sync.Map // map[string][]byte
+	metadata     sync.Map // map[string]*CacheEntry
+	dataPointers sync.Map // map[string]*[]byte
+
+	// Cache configuration
 	maxSize     int64
 	currentSize int64
 	ttl         time.Duration
@@ -35,6 +37,11 @@ type CacheEntry struct {
 	CreatedAt   time.Time
 	LastAccess  time.Time
 	AccessCount atomic.Int64
+}
+type CacheData struct {
+	data      []byte
+	refCount  int32
+	immutable bool
 }
 
 // NewMemoryCache creates a new memory cache
@@ -58,29 +65,32 @@ func (mc *MemoryCache) Name() string {
 }
 
 // Store adds an object to the cache
-func (mc *MemoryCache) Store(objectID uuid.UUID, data []byte) error {
+func (mc *MemoryCache) Store(objectID uuid.UUID, readerFunc func() (io.ReadCloser, int64, error)) error {
 	key := objectID.String()
-	size := int64(len(data))
 
-	// Fast path: check if object already exists without deletion
 	if _, exists := mc.data.Load(key); exists {
-		// Already cached, skip to avoid unnecessary work
 		return nil
 	}
 
-	// Check space before any operations
-	neededSpace := size
-	currentTotal := atomic.LoadInt64(&mc.currentSize) + neededSpace
+	reader, size, err := readerFunc()
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
 
-	// Batch eviction if needed - more efficient than one-by-one
-	if currentTotal > mc.maxSize {
-		if !mc.makeSpace(neededSpace) {
-			return fmt.Errorf("unable to free space for object of size %d bytes (max: %d, current: %d)",
-				size, mc.maxSize, atomic.LoadInt64(&mc.currentSize))
+	if atomic.LoadInt64(&mc.currentSize)+size > mc.maxSize {
+		if !mc.makeSpace(size) {
+			return fmt.Errorf("insufficient space")
 		}
 	}
 
-	// Store data and metadata atomically
+	data := make([]byte, size)
+	_, err = io.ReadFull(reader, data)
+	if err != nil {
+		return err
+	}
+
+	// Store directly
 	mc.data.Store(key, data)
 	mc.metadata.Store(key, &CacheEntry{
 		Size:       size,
@@ -89,7 +99,6 @@ func (mc *MemoryCache) Store(objectID uuid.UUID, data []byte) error {
 	})
 
 	atomic.AddInt64(&mc.currentSize, size)
-
 	return nil
 }
 
@@ -104,47 +113,20 @@ func (mc *MemoryCache) makeSpace(needed int64) bool {
 	return true
 }
 
-// GetStream returns a reader for the cached object
-func (mc *MemoryCache) GetStream(objectID uuid.UUID) (io.ReadCloser, int64, error) {
+func (mc *MemoryCache) GetCache(objectID uuid.UUID) ([]byte, bool) {
 	key := objectID.String()
 
-	// Direct access without going through Get() to avoid unnecessary operations
-	value, ok := mc.data.Load(key)
-	if !ok {
-		mc.misses.Add(1)
-		return nil, 0, fmt.Errorf("object not found in memory cache")
+	if value, ok := mc.data.Load(key); ok {
+		go func() {
+			mc.hits.Add(1)
+			mc.updateAccess(key)
+		}()
+
+		return value.([]byte), true
 	}
 
-	data := value.([]byte)
-
-	// Update access in background to not block streaming
-	go mc.updateAccess(key)
-	mc.hits.Add(1)
-
-	return &directReader{
-		data: data,
-		pos:  0,
-	}, int64(len(data)), nil
-}
-
-// directReader provides zero-copy streaming from byte slice
-type directReader struct {
-	data []byte
-	pos  int
-}
-
-func (r *directReader) Read(p []byte) (n int, err error) {
-	if r.pos >= len(r.data) {
-		return 0, io.EOF
-	}
-	n = copy(p, r.data[r.pos:])
-	r.pos += n
-	return n, nil
-}
-
-func (r *directReader) Close() error {
-	r.data = nil
-	return nil
+	go mc.misses.Add(1)
+	return nil, false
 }
 
 // Exists checks if an object is in the cache

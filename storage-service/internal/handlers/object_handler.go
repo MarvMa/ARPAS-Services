@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"storage-service/internal/models"
 	_ "storage-service/internal/utils"
 	"strconv"
 	"strings"
@@ -26,6 +25,7 @@ const ObjectNotFoundError = "object not found"
 const (
 	HeaderDownloadSource = "X-Download-Source"
 	HeaderCacheHit       = "X-Cache-Hit"
+	ContentType          = "model/gltf-binary"
 )
 
 // ObjectHandler handles object-related endpoints
@@ -218,6 +218,35 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 		})
 	}
 
+	var rc io.ReadCloser
+	var clen int64
+	var fromCache bool
+	var latency time.Duration
+
+	// Try to get from cache first if optimization mode is enabled
+	if optimizationMode == "optimized" {
+		cacheStartTime := time.Now()
+
+		if data, exists := h.CacheService.GetFromCache(objectID); exists {
+
+			fromCache = true
+
+			c.Set(fiber.HeaderContentType, ContentType)
+			c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", objectID))
+			c.Set("Content-Encoding", "identity")
+			c.Set(HeaderDownloadSource, map[bool]string{true: "cache", false: "minio"}[fromCache])
+			c.Set(HeaderCacheHit, map[bool]string{true: "true", false: "false"}[fromCache])
+			c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
+			c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
+			latency = time.Since(cacheStartTime)
+			c.Context().Response.SetBodyRaw(data)
+			return nil
+
+		}
+	}
+	log.Printf("Cache MISS for object %s: %v", objectID, err)
+	// Fallback to MinIO
+	minioStartTime := time.Now()
 	// Get object metadata
 	obj, err := h.Service.GetObject(objectID)
 	if err != nil {
@@ -231,82 +260,36 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 		})
 	}
 
-	var rc io.ReadCloser
-	var clen int64
-	var fromCache bool
-	var latency time.Duration
-
-	// Try to get from cache first if optimization mode is enabled
-	if optimizationMode == "optimized" {
-		cacheStartTime := time.Now()
-		rcCache, clenCache, err := h.CacheService.GetFromCacheStream(objectID)
-		latency = time.Since(cacheStartTime)
-
-		if err == nil && rcCache != nil {
-			rc = rcCache
-			clen = clenCache
-			fromCache = true
-
-			h.setResponseHeaders(c, obj, clen)
-			c.Set(HeaderDownloadSource, map[bool]string{true: "cache", false: "minio"}[fromCache])
-			c.Set(HeaderCacheHit, map[bool]string{true: "true", false: "false"}[fromCache])
-			c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
-			c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
-			c.Context().SetBodyStream(rcCache, int(clenCache))
-			return nil
-		} else {
-			log.Printf("Cache MISS for object %s: %v", objectID, err)
-		}
+	object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "unable to retrieve file",
+		})
 	}
 
-	if rc == nil {
-		minioStartTime := time.Now()
-		object, err := h.Service.Minio.GetObject(c.Context(), h.Service.BucketName, obj.StorageKey, minio.GetObjectOptions{})
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "unable to retrieve file",
-			})
-		}
-
-		stat, err := object.Stat()
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "unable to get file stats",
-			})
-		}
-
-		latency = time.Since(minioStartTime)
-		rc = object
-		clen = stat.Size
-		fromCache = false
-
-		h.setResponseHeaders(c, obj, clen)
-		c.Set(HeaderDownloadSource, map[bool]string{true: "cache", false: "minio"}[fromCache])
-		c.Set(HeaderCacheHit, map[bool]string{true: "true", false: "false"}[fromCache])
-		c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
-		c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
-		c.Context().SetBodyStream(rc, int(clen))
+	stat, err := object.Stat()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "unable to get file stats",
+		})
 	}
+
+	latency = time.Since(minioStartTime)
+	rc = object
+	clen = stat.Size
+	fromCache = false
+
+	c.Set(fiber.HeaderContentType, ContentType)
+	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", obj.ID))
+	c.Set("Content-Encoding", "identity")
+	c.Set(HeaderDownloadSource, map[bool]string{true: "cache", false: "minio"}[fromCache])
+	c.Set(HeaderCacheHit, map[bool]string{true: "true", false: "false"}[fromCache])
+	c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
+	c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
+	c.Context().SetBodyStream(rc, int(clen))
 
 	log.Printf("Served object %s from %s in %v (%d bytes)",
 		objectID, map[bool]string{true: "cache", false: "storage"}[fromCache], latency, clen)
 
 	return nil
-}
-
-func (h *ObjectHandler) setResponseHeaders(c *fiber.Ctx, obj *models.Object, size int64) {
-	contentType := obj.ContentType
-	if contentType == "" {
-		contentType = "model/gltf-binary"
-	}
-
-	c.Set(fiber.HeaderContentType, contentType)
-	c.Set(fiber.HeaderContentDisposition, fmt.Sprintf("attachment; filename=\"%s.glb\"", obj.ID))
-	c.Set("Content-Encoding", "identity")
-
-	if size > 0 {
-		c.Set(fiber.HeaderContentLength, fmt.Sprintf("%d", size))
-	}
-
-	c.Status(fiber.StatusOK)
 }

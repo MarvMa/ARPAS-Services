@@ -61,6 +61,9 @@ export class Predictor {
         A: 1
     };
 
+    private lastPredictedPosition: { lat: number, lon: number } | null = null;
+    private readonly MINIMUM_MOVEMENT_METERS = 5; // Minimum movement in meters
+
     constructor() {
         this.latPositionKalman = new KalmanFilter(this.POSITION_KALMAN_CONFIG);
         this.lonPositionKalman = new KalmanFilter(this.POSITION_KALMAN_CONFIG);
@@ -113,6 +116,17 @@ export class Predictor {
         };
     }
 
+    private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+        const R = 6371000;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
     /**
      * Predict future location based on current position and velocity
      * @param currentPosition current smoothed position
@@ -160,6 +174,24 @@ export class Predictor {
         //  Predict future position
         const predictedPosition = this.predictPosition(currentSmoothed, velocity);
 
+
+        if (this.lastPredictedPosition) {
+            const distance = this.calculateDistance(
+                this.lastPredictedPosition.lat,
+                this.lastPredictedPosition.lon,
+                predictedPosition.latitude,
+                predictedPosition.longitude
+            );
+
+            if (distance < this.MINIMUM_MOVEMENT_METERS) {
+                return null;
+            }
+        }
+
+        this.lastPredictedPosition = {
+            lat: predictedPosition.latitude,
+            lon: predictedPosition.longitude
+        };
 
         console.info('Current smoothed position:', currentSmoothed.latitude, currentSmoothed.longitude, currentSmoothed.altitude);
         console.info('Smoothed velocity:', velocity);
