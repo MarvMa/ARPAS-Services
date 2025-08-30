@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"storage-service/internal/services/caches"
+	"storage-service/internal/utils"
 	"sync"
 	"time"
 
@@ -18,7 +19,7 @@ type CacheService struct {
 	minio       *minio.Client
 	bucketName  string
 	mu          sync.RWMutex
-	bufferPool  *BufferPool
+	bufferPool  *utils.BufferPool
 
 	preloadQueue      chan preloadTask
 	preloadInFlight   sync.Map
@@ -37,26 +38,15 @@ type PreloadObject struct {
 	Size       int64
 }
 
-type CacheStatistics struct {
-	Objects      int     `json:"objects"`
-	SizeBytes    int64   `json:"sizeBytes"`
-	SizeMB       float64 `json:"sizeMB"`
-	Hits         int64   `json:"hits"`
-	Misses       int64   `json:"misses"`
-	HitRate      float64 `json:"hitRate"`
-	MaxSizeBytes int64   `json:"maxSizeBytes"`
-	MaxSizeMB    float64 `json:"maxSizeMB"`
-}
-
 func NewCacheService(minio *minio.Client, bucketName string, maxSizeBytes int64, ttl time.Duration) *CacheService {
 	cs := &CacheService{
-		memoryCache:       caches.NewMemoryCache(maxSizeBytes, ttl),
 		minio:             minio,
 		bucketName:        bucketName,
 		preloadQueue:      make(chan preloadTask, 1000),
 		maxPreloadWorkers: 5,
-		bufferPool:        NewBufferPool(),
+		bufferPool:        utils.NewBufferPool(),
 	}
+	cs.memoryCache = caches.NewMemoryCache(maxSizeBytes, ttl, cs.bufferPool)
 	// Start preload workers
 	for i := 0; i < 5; i++ {
 		go cs.preloadWorker()
@@ -139,22 +129,6 @@ func (cs *CacheService) InvalidateObject(objectID uuid.UUID) error {
 	return cs.memoryCache.Delete(objectID)
 }
 
-// GetStatistics returns cache statistics
-func (cs *CacheService) GetStatistics() (*CacheStatistics, error) {
-	stats := cs.memoryCache.GetStats()
-
-	return &CacheStatistics{
-		Objects:      stats.Objects,
-		SizeBytes:    stats.SizeBytes,
-		SizeMB:       float64(stats.SizeBytes) / (1024 * 1024),
-		Hits:         stats.Hits,
-		Misses:       stats.Misses,
-		HitRate:      stats.HitRate,
-		MaxSizeBytes: cs.memoryCache.MaxSize(),
-		MaxSizeMB:    float64(cs.memoryCache.MaxSize()) / (1024 * 1024),
-	}, nil
-}
-
 // ClearCache clears the cache
 func (cs *CacheService) ClearCache() error {
 	return cs.memoryCache.Clear()
@@ -164,56 +138,4 @@ func (cs *CacheService) ClearCache() error {
 func (cs *CacheService) CheckCached(objectID uuid.UUID) bool {
 	exists, _ := cs.memoryCache.Exists(objectID)
 	return exists
-}
-
-type BufferPool struct {
-	pools []*sync.Pool
-}
-
-func NewBufferPool() *BufferPool {
-	bp := &BufferPool{
-		pools: make([]*sync.Pool, 10),
-	}
-
-	for i := range bp.pools {
-		//size := 1 << (i + 12)
-		bp.pools[i] = &sync.Pool{
-			New: func() interface{} {
-				return nil
-			},
-		}
-	}
-	return bp
-}
-
-func (bp *BufferPool) Get(size int) []byte {
-	poolIndex := bp.getPoolIndex(size)
-	if poolIndex >= 0 && poolIndex < len(bp.pools) {
-		if buf := bp.pools[poolIndex].Get(); buf != nil {
-			return buf.([]byte)[:size]
-		}
-	}
-	return make([]byte, size)
-}
-func (bp *BufferPool) getPoolIndex(size int) int {
-	if size <= 0 {
-		return -1
-	}
-	for i := 0; i < len(bp.pools); i++ {
-		if 1<<(i+12) >= size {
-			return i
-		}
-	}
-	return -1
-}
-
-func (bp *BufferPool) Put(buf []byte) {
-	size := cap(buf)
-	for i := range bp.pools {
-		poolSize := 1 << (i + 10)
-		if poolSize == size {
-			bp.pools[i].Put(buf)
-			return
-		}
-	}
 }

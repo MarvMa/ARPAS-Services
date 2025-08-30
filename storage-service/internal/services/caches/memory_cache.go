@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"storage-service/internal/services/cache"
+	"storage-service/internal/utils"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,9 +13,8 @@ import (
 )
 
 type MemoryCache struct {
-	data         sync.Map // map[string][]byte
-	metadata     sync.Map // map[string]*CacheEntry
-	dataPointers sync.Map // map[string]*[]byte
+	data     sync.Map // map[string]*[]byte
+	metadata sync.Map // map[string]*CacheEntry
 
 	// Cache configuration
 	maxSize     int64
@@ -29,27 +28,25 @@ type MemoryCache struct {
 	// Cleanup control
 	stopCleanup chan struct{}
 	cleanupDone sync.WaitGroup
+
+	bufferPool *utils.BufferPool
 }
 
 // CacheEntry holds metadata for cached items
 type CacheEntry struct {
 	Size        int64
 	CreatedAt   time.Time
-	LastAccess  time.Time
+	LastAccess  atomic.Int64
 	AccessCount atomic.Int64
-}
-type CacheData struct {
-	data      []byte
-	refCount  int32
-	immutable bool
 }
 
 // NewMemoryCache creates a new memory cache
-func NewMemoryCache(maxSizeBytes int64, ttl time.Duration) *MemoryCache {
+func NewMemoryCache(maxSizeBytes int64, ttl time.Duration, bufferPool *utils.BufferPool) *MemoryCache {
 	mc := &MemoryCache{
 		maxSize:     maxSizeBytes,
 		ttl:         ttl,
 		stopCleanup: make(chan struct{}),
+		bufferPool:  bufferPool,
 	}
 
 	// Start background cleanup
@@ -57,11 +54,6 @@ func NewMemoryCache(maxSizeBytes int64, ttl time.Duration) *MemoryCache {
 	go mc.cleanupRoutine()
 
 	return mc
-}
-
-// Name returns the cache name
-func (mc *MemoryCache) Name() string {
-	return "MEMORY"
 }
 
 // Store adds an object to the cache
@@ -84,19 +76,21 @@ func (mc *MemoryCache) Store(objectID uuid.UUID, readerFunc func() (io.ReadClose
 		}
 	}
 
-	data := make([]byte, size)
+	data := mc.bufferPool.Get(int(size))
 	_, err = io.ReadFull(reader, data)
 	if err != nil {
+		mc.bufferPool.Put(data)
 		return err
 	}
 
-	// Store directly
 	mc.data.Store(key, data)
-	mc.metadata.Store(key, &CacheEntry{
-		Size:       size,
-		CreatedAt:  time.Now(),
-		LastAccess: time.Now(),
-	})
+	now := time.Now()
+	entry := &CacheEntry{
+		Size:      size,
+		CreatedAt: now,
+	}
+	entry.LastAccess.Store(now.UnixNano())
+	mc.metadata.Store(key, entry)
 
 	atomic.AddInt64(&mc.currentSize, size)
 	return nil
@@ -117,15 +111,12 @@ func (mc *MemoryCache) GetCache(objectID uuid.UUID) ([]byte, bool) {
 	key := objectID.String()
 
 	if value, ok := mc.data.Load(key); ok {
-		go func() {
-			mc.hits.Add(1)
-			mc.updateAccess(key)
-		}()
-
+		mc.hits.Add(1)
+		mc.updateAccess(key)
 		return value.([]byte), true
 	}
 
-	go mc.misses.Add(1)
+	mc.misses.Add(1)
 	return nil, false
 }
 
@@ -149,7 +140,6 @@ func (mc *MemoryCache) Delete(objectID uuid.UUID) error {
 	mc.data.Delete(key)
 	atomic.AddInt64(&mc.currentSize, -entry.Size)
 
-	log.Printf("Memory cache: deleted object %s (%d bytes)", objectID, entry.Size)
 	return nil
 }
 
@@ -175,34 +165,6 @@ func (mc *MemoryCache) Clear() error {
 	return nil
 }
 
-// GetStats returns cache statistics
-func (mc *MemoryCache) GetStats() cache.LayerStats {
-	hits := mc.hits.Load()
-	misses := mc.misses.Load()
-	total := hits + misses
-
-	var hitRate float64
-	if total > 0 {
-		hitRate = float64(hits) / float64(total) * 100
-	}
-
-	objectCount := 0
-	mc.data.Range(func(_, _ interface{}) bool {
-		objectCount++
-		return true
-	})
-
-	return cache.LayerStats{
-		Name:         "Memory",
-		Objects:      objectCount,
-		SizeBytes:    atomic.LoadInt64(&mc.currentSize),
-		Hits:         hits,
-		Misses:       misses,
-		HitRate:      hitRate,
-		AvgLatencyMs: 0.1, // Memory access is very fast
-	}
-}
-
 // MaxSize returns the maximum cache size in bytes
 func (mc *MemoryCache) MaxSize() int64 {
 	return mc.maxSize
@@ -217,10 +179,7 @@ func (mc *MemoryCache) CurrentSize() int64 {
 func (mc *MemoryCache) updateAccess(key string) {
 	if metaValue, ok := mc.metadata.Load(key); ok {
 		entry := metaValue.(*CacheEntry)
-		now := time.Now()
-		if now.Sub(entry.LastAccess) > time.Second {
-			entry.LastAccess = now
-		}
+		entry.LastAccess.Store(time.Now().UnixNano())
 		entry.AccessCount.Add(1)
 	}
 }
@@ -229,16 +188,17 @@ func (mc *MemoryCache) updateAccess(key string) {
 func (mc *MemoryCache) evictLRU() bool {
 	var (
 		oldestKey  string
-		oldestTime = time.Now() // Start with current time
+		oldestTime = time.Now().UnixNano()
 		found      bool
 	)
 
 	// Find LRU item
 	mc.metadata.Range(func(key, value interface{}) bool {
 		entry := value.(*CacheEntry)
-		if entry.LastAccess.Before(oldestTime) {
+		lastAccess := entry.LastAccess.Load()
+		if lastAccess < oldestTime {
 			oldestKey = key.(string)
-			oldestTime = entry.LastAccess
+			oldestTime = lastAccess
 			found = true
 		}
 		return true
@@ -254,7 +214,9 @@ func (mc *MemoryCache) evictLRU() bool {
 	}
 
 	entry := metaValue.(*CacheEntry)
-	mc.data.Delete(oldestKey)
+	if val, _ := mc.data.LoadAndDelete(oldestKey); val != nil {
+		mc.bufferPool.Put(val.([]byte))
+	}
 	atomic.AddInt64(&mc.currentSize, -entry.Size)
 
 	return true

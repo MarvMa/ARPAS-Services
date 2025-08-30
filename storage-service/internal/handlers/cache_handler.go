@@ -124,11 +124,6 @@ func (h *CacheHandler) PreloadAll(c *fiber.Ctx) error {
 		"totalSizeMB":    float64(totalSize) / (1024 * 1024),
 	}
 
-	// Get updated cache statistics
-	if updatedStats, err := h.cacheService.GetStatistics(); err == nil {
-		response["cacheStats"] = updatedStats
-	}
-
 	if err != nil {
 		log.Printf("Preload all completed with errors after %v: %v", duration, err)
 		response["error"] = err.Error()
@@ -140,18 +135,6 @@ func (h *CacheHandler) PreloadAll(c *fiber.Ctx) error {
 	response["status"] = "success"
 
 	return c.JSON(response)
-}
-
-// GetCacheStats handles GET /cache/stats
-func (h *CacheHandler) GetCacheStats(c *fiber.Ctx) error {
-	stats, err := h.cacheService.GetStatistics()
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to get cache statistics",
-		})
-	}
-
-	return c.JSON(stats)
 }
 
 // InvalidateObject handles DELETE /cache/object/:id

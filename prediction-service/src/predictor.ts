@@ -47,7 +47,7 @@ export class Predictor {
     private readonly altVelocityKalman: KalmanFilter;
 
     // Config
-    private readonly PREDICTION_TIME_SECONDS = 5;
+    private readonly PREDICTION_TIME_SECONDS = 10;
 
     private readonly POSITION_KALMAN_CONFIG = {
         R: 0.000000002,  // 2 × 10^{-9}

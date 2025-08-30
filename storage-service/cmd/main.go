@@ -45,7 +45,7 @@ func main() {
 		BodyLimit:             500 * 1024 * 1024, // 500 MB
 		ReadTimeout:           5 * time.Minute,
 		WriteTimeout:          5 * time.Minute,
-		ServerHeader:          "Storage Service v2.0 (Instrumented)",
+		ServerHeader:          "Storage Service v2.0",
 		DisableKeepalive:      false,
 		StreamRequestBody:     true,
 		Prefork:               false,
@@ -58,8 +58,7 @@ func main() {
 	})
 
 	app.Use(logger.New(logger.Config{
-		Format: "[${time}] ${status} - ${method} ${path} ${query} - ${ip} - ${latency} - " +
-			"Optimization-Mode:${header:x-optimization-mode}\n",
+		Format:     "${status} - ${method} ${path} - ${latency}\n",
 		TimeFormat: "2006-01-02 15:04:05",
 		Output:     os.Stdout,
 	}))
@@ -96,7 +95,6 @@ func main() {
 	cacheGroup.Post("/preload", cacheHandler.PreloadObjects)
 	cacheGroup.Post("/preload-all", cacheHandler.PreloadAll)
 	cacheGroup.Delete("/object/:id", cacheHandler.InvalidateObject)
-	cacheGroup.Get("/stats", cacheHandler.GetCacheStats)
 	cacheGroup.Post("/clear", cacheHandler.ClearCache)
 
 	// Start the server

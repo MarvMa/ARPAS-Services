@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -239,12 +240,12 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
 			c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
 			latency = time.Since(cacheStartTime)
-			c.Context().Response.SetBodyRaw(data)
+			c.Context().Response.SetBodyStream(bytes.NewReader(data), len(data))
+
 			return nil
 
 		}
 	}
-	log.Printf("Cache MISS for object %s: %v", objectID, err)
 	// Fallback to MinIO
 	minioStartTime := time.Now()
 	// Get object metadata
