@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36" version="27.0.6" pages="5">
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36" version="28.1.2" pages="5">
   <diagram name="Architecture_Backend" id="cSsHOk2Wa60f8mgRbdZm">
     <mxGraphModel dx="784" dy="1102" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0" adaptiveColors="auto">
       <root>
@@ -44,19 +44,11 @@
         <mxCell id="ONmiQpBlXR7nflwjCwtw-4" value="PostgreSQL" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;labelBackgroundColor=none;" parent="1" vertex="1">
           <mxGeometry x="430" y="866" width="80" height="90" as="geometry" />
         </mxCell>
-        <mxCell id="ONmiQpBlXR7nflwjCwtw-7" value="Redis" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;labelBackgroundColor=none;" parent="1" vertex="1">
-          <mxGeometry x="180" y="866" width="80" height="90" as="geometry" />
-        </mxCell>
         <mxCell id="ONmiQpBlXR7nflwjCwtw-8" value="Prometheus" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;" parent="1" vertex="1">
           <mxGeometry x="567" y="696" width="120" height="60" as="geometry" />
         </mxCell>
         <mxCell id="ONmiQpBlXR7nflwjCwtw-9" value="cAdvisor" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;" parent="1" vertex="1">
           <mxGeometry x="567" y="776" width="120" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="ONmiQpBlXR7nflwjCwtw-18" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;fontColor=#143642;startSize=8;endSize=8;" parent="1" source="pYhCz_OLACclpXRN_d7E-1" target="ONmiQpBlXR7nflwjCwtw-7" edge="1">
-          <mxGeometry relative="1" as="geometry">
-            <mxPoint x="220" y="716" as="sourcePoint" />
-          </mxGeometry>
         </mxCell>
         <mxCell id="ONmiQpBlXR7nflwjCwtw-12" value="Prediction-Service" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;" parent="1" vertex="1">
           <mxGeometry x="160" y="656" width="120" height="60" as="geometry" />
@@ -86,7 +78,7 @@
             </Array>
           </mxGeometry>
         </mxCell>
-        <mxCell id="L-0ssP982G4Ml0qSYvgT-1" value="docker-stats" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;" vertex="1" parent="1">
+        <mxCell id="L-0ssP982G4Ml0qSYvgT-1" value="docker-stats" style="rounded=0;whiteSpace=wrap;html=1;labelBackgroundColor=none;" parent="1" vertex="1">
           <mxGeometry x="565" y="860" width="120" height="60" as="geometry" />
         </mxCell>
       </root>
