@@ -132,9 +132,9 @@ services:
         limits:
           memory: 10G
         reservations:
-          memory: 2G
+          memory: 5G
     tmpfs:
-      - /tmp:size=2G,noexec,nosuid
+      - /tmp:size=4G,noexec,nosuid
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=5", "--spider", "http://storage-service:${STORAGE_PORT}/health" ]
       interval: 30s
@@ -144,38 +144,6 @@ services:
     labels:
       sim.group: "storage-service"  # Label for metric filtering
 
-  redis:
-    image: redis:7-alpine
-    networks:
-      - backend-net
-      - monitoring-net
-    volumes:
-      - type: volume
-        source: redis-data
-        target: /data
-    command: >
-      redis-server
-      --io-threads 6
-      --io-threads-do-reads yes
-      --maxmemory 6gb
-      --appendonly no       
-      --save ""
-      --tcp-keepalive 300
-    ports:
-      - "6379:6379"  # Expose for monitoring
-    healthcheck:
-      test: [ "CMD-SHELL", "redis-cli ping | grep PONG" ]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 3G
-        reservations:
-          memory: 2G
-    labels:
-      sim.group: "redis"  # Label for metric filtering
 
   postgres:
     image: postgres:15-alpine

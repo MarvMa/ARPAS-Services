@@ -1,0 +1,48 @@
+================================================================================
+STORAGE SERVICE PERFORMANCE BENCHMARK REPORT
+================================================================================
+
+Timestamp: 20250831_222644
+Configuration:
+  - Base URL: http://localhost:8000
+  - Total Requests per Mode: 100
+  - Concurrent Requests: 10
+  - Warmup Requests: 5
+
+--------------------------------------------------------------------------------
+SUMMARY STATISTICS
+--------------------------------------------------------------------------------
+
+          Mode Mean TTFB (ms) Median TTFB (ms)  Std TTFB (ms)  P95 TTFB (ms)  P99 TTFB (ms) Mean Total Latency (ms)  Median Total Latency (ms)  Std Total Latency (ms)  P95 Total Latency (ms)  P99 Total Latency (ms)  Mean Server Latency (ms)  Cache Hit Rate (%)  Total Requests  Failed Requests  Success Rate (%)
+0    optimized      154.84712        124.12425     133.060389     352.566275     482.081361             4420.462168                 2116.32730             6085.302238            18097.671540            21949.287663                    0.0000               100.0           100.0              0.0             100.0
+1  unoptimized     157.668445        127.54985     141.334868     438.121685     621.090638             4558.042339                 1979.25525             6364.474536            21186.423345            24016.403507                    1.5154                 0.0           100.0              0.0             100.0
+2  Improvement           1.8%             2.7%            NaN            NaN            NaN                    3.0%                        NaN                     NaN                     NaN                     NaN                       NaN                 NaN             NaN              NaN               NaN
+
+--------------------------------------------------------------------------------
+STATISTICAL SIGNIFICANCE TESTS
+--------------------------------------------------------------------------------
+
+T-Test for TTFB:
+  t-statistic: -0.1453
+  p-value: 0.884588
+  Significant (p < 0.05): False
+
+Mann-Whitney U Test for TTFB:
+  U-statistic: 4980.0000
+  p-value: 0.961998
+  Significant (p < 0.05): False
+
+Effect Size (Cohen's d) for TTFB:
+  Cohen's d: 0.0206
+  Interpretation: negligible
+
+--------------------------------------------------------------------------------
+CONCLUSION
+--------------------------------------------------------------------------------
+
+The optimized mode shows a 1.8% improvement in mean TTFB
+and a 3.0% improvement in mean total latency.
+
+The performance improvement is not statistically significant (p >= 0.05).
+
+The effect size is negligible, with Cohen's d = 0.0206.

@@ -47,14 +47,16 @@ func main() {
 		WriteTimeout:          5 * time.Minute,
 		ServerHeader:          "Storage Service v2.0",
 		DisableKeepalive:      false,
-		StreamRequestBody:     true,
+		StreamRequestBody:     false,
 		Prefork:               false,
 		DisableStartupMessage: true,
 		ReduceMemoryUsage:     false,
 
-		Concurrency:     256 * 1024, // Max concurrent connections
-		ReadBufferSize:  8192,       // Größerer Read Buffer
-		WriteBufferSize: 8192,       // Größerer Write Buffer
+		Concurrency:     256 * 1024,
+		ReadBufferSize:  16384,
+		WriteBufferSize: 16384,
+
+		Immutable: true,
 	})
 
 	app.Use(logger.New(logger.Config{

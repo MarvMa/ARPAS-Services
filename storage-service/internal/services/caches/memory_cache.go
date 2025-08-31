@@ -1,24 +1,25 @@
 package caches
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
-	"storage-service/internal/utils"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
+	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 type MemoryCache struct {
-	data     sync.Map // map[string]*[]byte
-	metadata sync.Map // map[string]*CacheEntry
+	cache *lru.Cache[string, *CacheEntry]
 
 	// Cache configuration
+	maxItems    int
 	maxSize     int64
-	currentSize int64
+	currentSize atomic.Int64
 	ttl         time.Duration
 
 	// Statistics
@@ -29,38 +30,55 @@ type MemoryCache struct {
 	stopCleanup chan struct{}
 	cleanupDone sync.WaitGroup
 
-	bufferPool *utils.BufferPool
+	sizeMu sync.RWMutex
 }
 
 // CacheEntry holds metadata for cached items
 type CacheEntry struct {
+	Data        []byte
 	Size        int64
 	CreatedAt   time.Time
-	LastAccess  atomic.Int64
 	AccessCount atomic.Int64
+	mu          sync.RWMutex
 }
 
 // NewMemoryCache creates a new memory cache
-func NewMemoryCache(maxSizeBytes int64, ttl time.Duration, bufferPool *utils.BufferPool) *MemoryCache {
+func NewMemoryCache(maxSizeBytes int64, ttl time.Duration) *MemoryCache {
+	maxItems := 30
+
 	mc := &MemoryCache{
+		maxItems:    maxItems,
 		maxSize:     maxSizeBytes,
 		ttl:         ttl,
 		stopCleanup: make(chan struct{}),
-		bufferPool:  bufferPool,
 	}
 
-	// Start background cleanup
-	mc.cleanupDone.Add(1)
-	go mc.cleanupRoutine()
+	cache, err := lru.NewWithEvict(maxItems, mc.onEvict)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create LRU cache: %v", err))
+	}
+	mc.cache = cache
+
+	if ttl > 0 {
+		mc.cleanupDone.Add(1)
+		go mc.cleanupRoutine()
+	}
 
 	return mc
+}
+
+func (mc *MemoryCache) onEvict(key string, value *CacheEntry) {
+	if value != nil {
+		mc.currentSize.Add(-value.Size)
+		value.Data = nil
+	}
 }
 
 // Store adds an object to the cache
 func (mc *MemoryCache) Store(objectID uuid.UUID, readerFunc func() (io.ReadCloser, int64, error)) error {
 	key := objectID.String()
 
-	if _, exists := mc.data.Load(key); exists {
+	if mc.cache.Contains(key) {
 		return nil
 	}
 
@@ -70,94 +88,77 @@ func (mc *MemoryCache) Store(objectID uuid.UUID, readerFunc func() (io.ReadClose
 	}
 	defer reader.Close()
 
-	if atomic.LoadInt64(&mc.currentSize)+size > mc.maxSize {
-		if !mc.makeSpace(size) {
-			return fmt.Errorf("insufficient space")
+	if size > 50*1024*1024 { // > 50MB
+		return fmt.Errorf("object too large for cache: %d bytes", size)
+	}
+
+	currentSize := mc.currentSize.Load()
+	if currentSize+size > mc.maxSize {
+		for mc.currentSize.Load()+size > mc.maxSize && mc.cache.Len() > 0 {
+			mc.cache.RemoveOldest()
 		}
 	}
 
-	data := mc.bufferPool.Get(int(size))
-	_, err = io.ReadFull(reader, data)
+	data := make([]byte, size)
+	n, err := io.ReadFull(reader, data)
 	if err != nil {
-		mc.bufferPool.Put(data)
-		return err
+		return fmt.Errorf("failed to read: %v", err)
+	}
+	if int64(n) != size {
+		return fmt.Errorf("incomplete read: %d/%d bytes", n, size)
 	}
 
-	mc.data.Store(key, data)
-	now := time.Now()
-	entry := &CacheEntry{
+	item := &CacheEntry{
+		Data:      data,
 		Size:      size,
-		CreatedAt: now,
+		CreatedAt: time.Now(),
 	}
-	entry.LastAccess.Store(now.UnixNano())
-	mc.metadata.Store(key, entry)
 
-	atomic.AddInt64(&mc.currentSize, size)
+	evicted := mc.cache.Add(key, item)
+	if !evicted {
+		mc.currentSize.Add(size)
+	}
+
 	return nil
-}
-
-func (mc *MemoryCache) makeSpace(needed int64) bool {
-	targetSize := mc.maxSize - needed
-
-	for atomic.LoadInt64(&mc.currentSize) > targetSize {
-		if !mc.evictLRU() {
-			return false
-		}
-	}
-	return true
 }
 
 func (mc *MemoryCache) GetCache(objectID uuid.UUID) ([]byte, bool) {
 	key := objectID.String()
-
-	if value, ok := mc.data.Load(key); ok {
-		mc.hits.Add(1)
-		mc.updateAccess(key)
-		return value.([]byte), true
+	item, ok := mc.cache.Get(key)
+	if !ok {
+		mc.misses.Add(1)
+		return nil, false
 	}
 
-	mc.misses.Add(1)
-	return nil, false
+	mc.hits.Add(1)
+	item.AccessCount.Add(1)
+
+	return item.Data, true
+}
+func (mc *MemoryCache) GetCacheReader(objectID uuid.UUID) (io.Reader, int64, bool) {
+	data, ok := mc.GetCache(objectID)
+	if !ok {
+		return nil, 0, false
+	}
+	return bytes.NewReader(data), int64(len(data)), true
 }
 
 // Exists checks if an object is in the cache
 func (mc *MemoryCache) Exists(objectID uuid.UUID) (bool, error) {
 	key := objectID.String()
-	_, exists := mc.data.Load(key)
-	return exists, nil
+	return mc.cache.Contains(key), nil
 }
 
-// Delete removes an object from the cache
 func (mc *MemoryCache) Delete(objectID uuid.UUID) error {
 	key := objectID.String()
-
-	metaValue, ok := mc.metadata.LoadAndDelete(key)
-	if !ok {
-		return nil // Object not in cache
-	}
-
-	entry := metaValue.(*CacheEntry)
-	mc.data.Delete(key)
-	atomic.AddInt64(&mc.currentSize, -entry.Size)
-
+	mc.cache.Remove(key)
 	return nil
 }
 
 // Clear removes all objects from the cache
 func (mc *MemoryCache) Clear() error {
-	// Clear all data
-	mc.data.Range(func(key, _ interface{}) bool {
-		mc.data.Delete(key)
-		return true
-	})
-
-	// Clear all metadata
-	mc.metadata.Range(func(key, _ interface{}) bool {
-		mc.metadata.Delete(key)
-		return true
-	})
-
-	atomic.StoreInt64(&mc.currentSize, 0)
+	mc.cache.Purge()
+	mc.currentSize.Store(0)
 	mc.hits.Store(0)
 	mc.misses.Store(0)
 
@@ -172,57 +173,9 @@ func (mc *MemoryCache) MaxSize() int64 {
 
 // CurrentSize returns the current cache size in bytes
 func (mc *MemoryCache) CurrentSize() int64 {
-	return atomic.LoadInt64(&mc.currentSize)
+	return mc.currentSize.Load()
 }
 
-// updateAccess updates the last access time and count for an entry
-func (mc *MemoryCache) updateAccess(key string) {
-	if metaValue, ok := mc.metadata.Load(key); ok {
-		entry := metaValue.(*CacheEntry)
-		entry.LastAccess.Store(time.Now().UnixNano())
-		entry.AccessCount.Add(1)
-	}
-}
-
-// evictLRU removes the least recently used item
-func (mc *MemoryCache) evictLRU() bool {
-	var (
-		oldestKey  string
-		oldestTime = time.Now().UnixNano()
-		found      bool
-	)
-
-	// Find LRU item
-	mc.metadata.Range(func(key, value interface{}) bool {
-		entry := value.(*CacheEntry)
-		lastAccess := entry.LastAccess.Load()
-		if lastAccess < oldestTime {
-			oldestKey = key.(string)
-			oldestTime = lastAccess
-			found = true
-		}
-		return true
-	})
-
-	if !found {
-		return false
-	}
-
-	metaValue, ok := mc.metadata.LoadAndDelete(oldestKey)
-	if !ok {
-		return false
-	}
-
-	entry := metaValue.(*CacheEntry)
-	if val, _ := mc.data.LoadAndDelete(oldestKey); val != nil {
-		mc.bufferPool.Put(val.([]byte))
-	}
-	atomic.AddInt64(&mc.currentSize, -entry.Size)
-
-	return true
-}
-
-// cleanupRoutine periodically removes expired items
 func (mc *MemoryCache) cleanupRoutine() {
 	defer mc.cleanupDone.Done()
 
@@ -242,27 +195,27 @@ func (mc *MemoryCache) cleanupRoutine() {
 // cleanupExpired removes items that have exceeded TTL
 func (mc *MemoryCache) cleanupExpired() {
 	if mc.ttl <= 0 {
-		return // No TTL set
+		return
 	}
 
-	var expiredKeys []string
+	expiredCount := 0
+	now := time.Now()
 
-	mc.metadata.Range(func(key, value interface{}) bool {
-		entry := value.(*CacheEntry)
-		if time.Since(entry.CreatedAt) > mc.ttl {
-			expiredKeys = append(expiredKeys, key.(string))
-		}
-		return true
-	})
+	// Get all keys
+	keys := mc.cache.Keys()
 
-	for _, key := range expiredKeys {
-		if objectID, err := uuid.Parse(key); err == nil {
-			mc.Delete(objectID)
+	for _, key := range keys {
+		// Peek doesn't update LRU order
+		if item, ok := mc.cache.Peek(key); ok {
+			if now.Sub(item.CreatedAt) > mc.ttl {
+				mc.cache.Remove(key)
+				expiredCount++
+			}
 		}
 	}
 
-	if len(expiredKeys) > 0 {
-		log.Printf("Memory cache: cleaned up %d expired objects", len(expiredKeys))
+	if expiredCount > 0 {
+		log.Printf("Memory cache: removed %d expired objects", expiredCount)
 	}
 }
 

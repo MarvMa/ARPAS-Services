@@ -1,37 +1,31 @@
 File: storage-service
-Build ID: 85895f63dfaf4ec3bb99c89d2f21d128027ad870
+Build ID: e3c710a339b212c68436fcef9509330fa9588c19
 Type: cpu
-Time: 2025-08-30 18:16:27 CEST
-Duration: 30s, Total samples = 120ms (  0.4%)
-Showing nodes accounting for 120ms, 100% of 120ms total
+Time: 2025-08-30 21:33:22 CEST
+Duration: 30s, Total samples = 30ms (  0.1%)
+Showing nodes accounting for 30ms, 100% of 30ms total
       flat  flat%   sum%        cum   cum%
-     120ms   100%   100%      120ms   100%  internal/runtime/syscall.Syscall6
-         0     0%   100%      100ms 83.33%  bufio.(*Writer).Write
-         0     0%   100%       10ms  8.33%  github.com/gofiber/fiber/v2.(*App).handler
-         0     0%   100%       10ms  8.33%  github.com/gofiber/fiber/v2.(*App).next
-         0     0%   100%       10ms  8.33%  github.com/gofiber/fiber/v2.(*Ctx).Next
-         0     0%   100%       10ms  8.33%  github.com/gofiber/fiber/v2/middleware/logger.New.func3
-         0     0%   100%      100ms 83.33%  github.com/valyala/fasthttp.(*Response).Write
-         0     0%   100%      110ms 91.67%  github.com/valyala/fasthttp.(*Server).serveConn
-         0     0%   100%      110ms 91.67%  github.com/valyala/fasthttp.(*workerPool).getCh.func1
-         0     0%   100%      110ms 91.67%  github.com/valyala/fasthttp.(*workerPool).workerFunc
-         0     0%   100%      100ms 83.33%  github.com/valyala/fasthttp.writeResponse
-         0     0%   100%      110ms 91.67%  internal/poll.(*FD).Write
-         0     0%   100%      110ms 91.67%  internal/poll.ignoringEINTRIO (inline)
-         0     0%   100%       10ms  8.33%  internal/runtime/syscall.EpollWait
-         0     0%   100%       10ms  8.33%  log.(*Logger).output
-         0     0%   100%       10ms  8.33%  log.Printf (inline)
-         0     0%   100%      100ms 83.33%  net.(*conn).Write
-         0     0%   100%      100ms 83.33%  net.(*netFD).Write
-         0     0%   100%       10ms  8.33%  os.(*File).Write
-         0     0%   100%       10ms  8.33%  os.(*File).write (inline)
-         0     0%   100%       10ms  8.33%  runtime.findRunnable
-         0     0%   100%       10ms  8.33%  runtime.mcall
-         0     0%   100%       10ms  8.33%  runtime.netpoll
-         0     0%   100%       10ms  8.33%  runtime.park_m
-         0     0%   100%       10ms  8.33%  runtime.schedule
-         0     0%   100%       10ms  8.33%  storage-service/internal/handlers.(*ObjectHandler).DownloadObject
-         0     0%   100%      110ms 91.67%  syscall.RawSyscall6
-         0     0%   100%      110ms 91.67%  syscall.Syscall
-         0     0%   100%      110ms 91.67%  syscall.Write (inline)
-         0     0%   100%      110ms 91.67%  syscall.write
+      20ms 66.67% 66.67%       20ms 66.67%  internal/runtime/syscall.Syscall6
+      10ms 33.33%   100%       10ms 33.33%  runtime.futex
+         0     0%   100%       20ms 66.67%  bufio.(*Writer).Write
+         0     0%   100%       20ms 66.67%  github.com/valyala/fasthttp.(*Response).Write
+         0     0%   100%       20ms 66.67%  github.com/valyala/fasthttp.(*Server).serveConn
+         0     0%   100%       20ms 66.67%  github.com/valyala/fasthttp.(*workerPool).getCh.func1
+         0     0%   100%       20ms 66.67%  github.com/valyala/fasthttp.(*workerPool).workerFunc
+         0     0%   100%       20ms 66.67%  github.com/valyala/fasthttp.writeResponse
+         0     0%   100%       20ms 66.67%  internal/poll.(*FD).Write
+         0     0%   100%       20ms 66.67%  internal/poll.ignoringEINTRIO (inline)
+         0     0%   100%       20ms 66.67%  net.(*conn).Write
+         0     0%   100%       20ms 66.67%  net.(*netFD).Write
+         0     0%   100%       10ms 33.33%  runtime.futexwakeup
+         0     0%   100%       10ms 33.33%  runtime.mcall
+         0     0%   100%       10ms 33.33%  runtime.notewakeup
+         0     0%   100%       10ms 33.33%  runtime.park_m
+         0     0%   100%       10ms 33.33%  runtime.resetspinning
+         0     0%   100%       10ms 33.33%  runtime.schedule
+         0     0%   100%       10ms 33.33%  runtime.startm
+         0     0%   100%       10ms 33.33%  runtime.wakep
+         0     0%   100%       20ms 66.67%  syscall.RawSyscall6
+         0     0%   100%       20ms 66.67%  syscall.Syscall
+         0     0%   100%       20ms 66.67%  syscall.Write (inline)
+         0     0%   100%       20ms 66.67%  syscall.write

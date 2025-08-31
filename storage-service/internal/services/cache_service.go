@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 	"storage-service/internal/services/caches"
-	"storage-service/internal/utils"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,18 +19,18 @@ type CacheService struct {
 	minio       *minio.Client
 	bucketName  string
 	mu          sync.RWMutex
-	bufferPool  *utils.BufferPool
 
-	preloadQueue      chan preloadTask
-	preloadInFlight   sync.Map
-	preloadWorkers    int32
-	maxPreloadWorkers int32
+	preloadQueue     chan preloadTask
+	preloadInFlight  sync.Map
+	preloadSemaphore chan struct{}
+	activePreloads   atomic.Int32
 }
 
 type preloadTask struct {
 	ObjectID   uuid.UUID
 	StorageKey string
 	Priority   int
+	Size       int64
 }
 type PreloadObject struct {
 	ID         uuid.UUID
@@ -40,23 +40,22 @@ type PreloadObject struct {
 
 func NewCacheService(minio *minio.Client, bucketName string, maxSizeBytes int64, ttl time.Duration) *CacheService {
 	cs := &CacheService{
-		minio:             minio,
-		bucketName:        bucketName,
-		preloadQueue:      make(chan preloadTask, 1000),
-		maxPreloadWorkers: 5,
-		bufferPool:        utils.NewBufferPool(),
+		minio:            minio,
+		bucketName:       bucketName,
+		preloadQueue:     make(chan preloadTask, 20),
+		preloadSemaphore: make(chan struct{}, 1),
 	}
-	cs.memoryCache = caches.NewMemoryCache(maxSizeBytes, ttl, cs.bufferPool)
-	// Start preload workers
-	for i := 0; i < 5; i++ {
+	cs.memoryCache = caches.NewMemoryCache(maxSizeBytes, ttl)
+
+	for i := 0; i < 8; i++ {
 		go cs.preloadWorker()
 	}
-
 	return cs
 }
 
 func (cs *CacheService) preloadWorker() {
 	for task := range cs.preloadQueue {
+
 		if exists, _ := cs.memoryCache.Exists(task.ObjectID); exists {
 			continue
 		}
@@ -64,46 +63,32 @@ func (cs *CacheService) preloadWorker() {
 		if _, loading := cs.preloadInFlight.LoadOrStore(task.ObjectID, true); loading {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cs.preloadInFlight.Delete(task.ObjectID)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
 		stat, err := cs.minio.StatObject(ctx, cs.bucketName, task.StorageKey, minio.StatObjectOptions{})
 		if err != nil {
-			cancel()
-			cs.preloadInFlight.Delete(task.ObjectID)
 			continue
 		}
 
-		err = cs.memoryCache.Store(task.ObjectID, func() (io.ReadCloser, int64, error) {
+		cs.memoryCache.Store(task.ObjectID, func() (io.ReadCloser, int64, error) {
 			object, err := cs.minio.GetObject(ctx, cs.bucketName, task.StorageKey, minio.GetObjectOptions{})
 			if err != nil {
 				return nil, 0, err
 			}
 			return object, stat.Size, nil
 		})
-
-		cancel()
-		cs.preloadInFlight.Delete(task.ObjectID)
 	}
 }
-
 func (cs *CacheService) PreloadObjects(_ context.Context, objectIDs []uuid.UUID, storageKeys []string) error {
 	if len(objectIDs) != len(storageKeys) {
 		return fmt.Errorf("objectIDs and storageKeys must have the same length")
 	}
 
-	for i, objectID := range objectIDs {
-		if exists, _ := cs.memoryCache.Exists(objectID); exists {
-			continue
-		}
-
-		if _, loading := cs.preloadInFlight.Load(objectID); loading {
-			continue
-		}
-
-		select {
-		case cs.preloadQueue <- preloadTask{ObjectID: objectID, StorageKey: storageKeys[i]}:
-		default:
-		}
+	for i, id := range objectIDs {
+		cs.QueuePreload(id, storageKeys[i], 0)
 	}
 
 	return nil

@@ -1,8 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-JSON_FILE="points_with_glb.json"
-MODEL_DIR="./3d-models"
+JSON_FILE="points_with_glb_small.json"
+MODEL_DIR="./3d-models-small"
+
+# JSON_FILE="points_with_glb.json"
+# MODEL_DIR="./3d-models"
 
 STORAGE_URL="http://localhost:80/api/storage/objects/upload"
 

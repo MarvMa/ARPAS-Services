@@ -1,48 +1,76 @@
 File: storage-service
-Build ID: 85895f63dfaf4ec3bb99c89d2f21d128027ad870
+Build ID: e3c710a339b212c68436fcef9509330fa9588c19
 Type: inuse_space
-Time: 2025-08-30 18:16:57 CEST
-Showing nodes accounting for 92.20MB, 100% of 92.20MB total
+Time: 2025-08-30 21:33:52 CEST
+Showing nodes accounting for 75.44MB, 100% of 75.44MB total
       flat  flat%   sum%        cum   cum%
-   86.19MB 93.48% 93.48%    86.19MB 93.48%  storage-service/internal/services.NewCacheService.NewBufferPool.NewCacheService.NewBufferPool.func1.func2
-    3.01MB  3.26% 96.74%     3.01MB  3.26%  runtime.allocm
-       1MB  1.09% 97.83%        1MB  1.09%  regexp/syntax.(*compiler).inst (inline)
-    0.50MB  0.55% 98.37%     0.50MB  0.55%  bufio.NewWriterSize (inline)
-    0.50MB  0.54% 98.92%     0.50MB  0.54%  github.com/klauspost/compress/flate.newHuffmanEncoder (inline)
-    0.50MB  0.54% 99.46%     0.50MB  0.54%  github.com/prometheus/client_golang/prometheus.(*goCollector).Describe
-    0.50MB  0.54%   100%     0.50MB  0.54%  runtime.acquireSudog
-         0     0%   100%        1MB  1.09%  github.com/jinzhu/inflection.compile
-         0     0%   100%        1MB  1.09%  github.com/jinzhu/inflection.init.0
-         0     0%   100%     0.50MB  0.54%  github.com/klauspost/compress/flate.generateFixedLiteralEncoding
-         0     0%   100%     0.50MB  0.54%  github.com/klauspost/compress/flate.init
-         0     0%   100%     0.50MB  0.54%  github.com/prometheus/client_golang/prometheus.(*Registry).Register.func1
-         0     0%   100%     0.50MB  0.55%  github.com/valyala/fasthttp.(*Server).serveConn
-         0     0%   100%     0.50MB  0.55%  github.com/valyala/fasthttp.(*workerPool).getCh.func1
-         0     0%   100%     0.50MB  0.55%  github.com/valyala/fasthttp.(*workerPool).workerFunc
-         0     0%   100%     0.50MB  0.55%  github.com/valyala/fasthttp.acquireWriter
-         0     0%   100%        1MB  1.09%  regexp.Compile (inline)
-         0     0%   100%        1MB  1.09%  regexp.MustCompile
-         0     0%   100%        1MB  1.09%  regexp.compile
-         0     0%   100%        1MB  1.09%  regexp/syntax.(*compiler).compile
-         0     0%   100%        1MB  1.09%  regexp/syntax.(*compiler).rune
-         0     0%   100%        1MB  1.09%  regexp/syntax.Compile
-         0     0%   100%     0.50MB  0.54%  runtime.chanrecv
-         0     0%   100%     0.50MB  0.54%  runtime.chanrecv1
-         0     0%   100%     1.50MB  1.63%  runtime.doInit (inline)
-         0     0%   100%     1.50MB  1.63%  runtime.doInit1
-         0     0%   100%     1.50MB  1.63%  runtime.main
-         0     0%   100%        1MB  1.09%  runtime.mcall
-         0     0%   100%        2MB  2.17%  runtime.mstart
-         0     0%   100%        2MB  2.17%  runtime.mstart0
-         0     0%   100%        2MB  2.17%  runtime.mstart1
-         0     0%   100%     3.01MB  3.26%  runtime.newm
-         0     0%   100%        1MB  1.09%  runtime.park_m
-         0     0%   100%     3.01MB  3.26%  runtime.resetspinning
-         0     0%   100%     3.01MB  3.26%  runtime.schedule
-         0     0%   100%     3.01MB  3.26%  runtime.startm
-         0     0%   100%     0.50MB  0.54%  runtime.unique_runtime_registerUniqueMapCleanup.func2
-         0     0%   100%     3.01MB  3.26%  runtime.wakep
-         0     0%   100%    86.19MB 93.48%  storage-service/internal/services.(*CacheService).preloadWorker
-         0     0%   100%    86.19MB 93.48%  storage-service/internal/services/caches.(*MemoryCache).Store
-         0     0%   100%    86.19MB 93.48%  storage-service/internal/utils.(*BufferPool).Get
-         0     0%   100%    86.19MB 93.48%  sync.(*Pool).Get
+   70.91MB 94.00% 94.00%    70.91MB 94.00%  storage-service/internal/services/caches.(*MemoryCache).Store
+    1.50MB  1.99% 95.99%     1.50MB  1.99%  runtime.allocm
+       1MB  1.33% 97.32%        1MB  1.33%  regexp/syntax.(*compiler).inst (inline)
+    0.52MB  0.68% 98.00%     0.52MB  0.68%  io.copyBuffer
+    0.51MB  0.67% 98.67%     0.51MB  0.67%  encoding/xml.map.init.0
+    0.50MB  0.66% 99.34%     0.50MB  0.66%  runtime.(*scavengerState).init
+    0.50MB  0.66%   100%     0.50MB  0.66%  github.com/jackc/pgx/v5/pgconn.(*PgConn).Prepare
+         0     0%   100%     0.52MB  0.68%  bufio.(*Writer).ReadFrom
+         0     0%   100%     0.50MB  0.66%  database/sql.(*DB).PrepareContext
+         0     0%   100%     0.50MB  0.66%  database/sql.(*DB).PrepareContext.func1
+         0     0%   100%     0.50MB  0.66%  database/sql.(*DB).prepare
+         0     0%   100%     0.50MB  0.66%  database/sql.(*DB).prepareDC
+         0     0%   100%     0.50MB  0.66%  database/sql.(*DB).prepareDC.func2
+         0     0%   100%     0.50MB  0.66%  database/sql.(*DB).retry
+         0     0%   100%     0.50MB  0.66%  database/sql.(*driverConn).prepareLocked
+         0     0%   100%     0.50MB  0.66%  database/sql.ctxDriverPrepare
+         0     0%   100%     0.50MB  0.66%  database/sql.withLock
+         0     0%   100%     0.51MB  0.67%  encoding/xml.init
+         0     0%   100%     0.50MB  0.66%  github.com/jackc/pgx/v5.(*Conn).Prepare
+         0     0%   100%     0.50MB  0.66%  github.com/jackc/pgx/v5/stdlib.(*Conn).PrepareContext
+         0     0%   100%     0.50MB  0.66%  github.com/jinzhu/inflection.compile
+         0     0%   100%     0.50MB  0.66%  github.com/jinzhu/inflection.init.0
+         0     0%   100%     0.50MB  0.66%  github.com/minio/minio-go/v7/pkg/s3utils.init
+         0     0%   100%     0.52MB  0.68%  github.com/valyala/fasthttp.(*Response).Write
+         0     0%   100%     0.52MB  0.68%  github.com/valyala/fasthttp.(*Response).writeBodyStream
+         0     0%   100%     0.52MB  0.68%  github.com/valyala/fasthttp.(*Server).serveConn
+         0     0%   100%     0.52MB  0.68%  github.com/valyala/fasthttp.(*workerPool).getCh.func1
+         0     0%   100%     0.52MB  0.68%  github.com/valyala/fasthttp.(*workerPool).workerFunc
+         0     0%   100%     0.52MB  0.68%  github.com/valyala/fasthttp.copyZeroAlloc
+         0     0%   100%     0.52MB  0.68%  github.com/valyala/fasthttp.writeBodyFixedSize
+         0     0%   100%     0.52MB  0.68%  github.com/valyala/fasthttp.writeResponse
+         0     0%   100%     0.50MB  0.66%  gorm.io/driver/postgres.Migrator.HasIndex
+         0     0%   100%     0.50MB  0.66%  gorm.io/driver/postgres.Migrator.HasIndex.func1
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm.(*DB).AutoMigrate
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm.(*DB).Rows
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm.(*DB).Scan
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm.(*PreparedStmtDB).QueryContext
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm.(*PreparedStmtDB).prepare
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm.(*processor).Execute
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm/callbacks.RowQuery
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm/internal/stmt_store.(*lruStore).New
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm/migrator.Migrator.AutoMigrate
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm/migrator.Migrator.AutoMigrate.func1
+         0     0%   100%     0.50MB  0.66%  gorm.io/gorm/migrator.Migrator.RunWithValue
+         0     0%   100%     0.52MB  0.68%  io.Copy (inline)
+         0     0%   100%     0.50MB  0.66%  main.MigrateDatabase
+         0     0%   100%     0.50MB  0.66%  main.main
+         0     0%   100%     0.52MB  0.68%  net.(*TCPConn).ReadFrom
+         0     0%   100%     0.52MB  0.68%  net.(*TCPConn).readFrom
+         0     0%   100%     0.52MB  0.68%  net.genericReadFrom
+         0     0%   100%        1MB  1.33%  regexp.Compile (inline)
+         0     0%   100%        1MB  1.33%  regexp.MustCompile
+         0     0%   100%        1MB  1.33%  regexp.compile
+         0     0%   100%     0.50MB  0.66%  regexp/syntax.(*compiler).compile
+         0     0%   100%     0.50MB  0.66%  regexp/syntax.(*compiler).rune
+         0     0%   100%        1MB  1.33%  regexp/syntax.Compile
+         0     0%   100%     0.50MB  0.66%  runtime.bgscavenge
+         0     0%   100%     1.51MB  2.00%  runtime.doInit (inline)
+         0     0%   100%     1.51MB  2.00%  runtime.doInit1
+         0     0%   100%     2.01MB  2.66%  runtime.main
+         0     0%   100%     1.50MB  1.99%  runtime.mstart
+         0     0%   100%     1.50MB  1.99%  runtime.mstart0
+         0     0%   100%     1.50MB  1.99%  runtime.mstart1
+         0     0%   100%     1.50MB  1.99%  runtime.newm
+         0     0%   100%     1.50MB  1.99%  runtime.resetspinning
+         0     0%   100%     1.50MB  1.99%  runtime.schedule
+         0     0%   100%     1.50MB  1.99%  runtime.startm
+         0     0%   100%     1.50MB  1.99%  runtime.wakep
+         0     0%   100%    70.91MB 94.00%  storage-service/internal/services.(*CacheService).preloadWorker
+         0     0%   100%    70.91MB 94.00%  storage-service/internal/services.(*CacheService).preloadWorker.func1

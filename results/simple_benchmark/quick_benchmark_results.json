@@ -1,804 +1,804 @@
 {
   "optimized": [
     {
-      "ttfb": 5.1734000007854775,
-      "total_time": 5.365800010622479,
+      "ttfb": 3.9969999925233424,
+      "total_time": 4.129800014197826,
       "size": 21556,
-      "server_latency": 0.04,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 15.777900000102818,
-      "total_time": 12692.974499994307,
+      "ttfb": 9.554399992339313,
+      "total_time": 11905.552799988072,
       "size": 31830796,
-      "server_latency": 2.71,
+      "server_latency": 3.56,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 3.891999993356876,
-      "total_time": 4.0714999922784045,
+      "ttfb": 10.79060000483878,
+      "total_time": 11.053599999286234,
       "size": 41432,
-      "server_latency": 0.06,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.5060999944107607,
-      "total_time": 1277.141999991727,
+      "ttfb": 17.31530000688508,
+      "total_time": 1251.2458999990486,
       "size": 9505484,
-      "server_latency": 0.04,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.3601000031922013,
-      "total_time": 4.4686000037472695,
+      "ttfb": 3.561299992725253,
+      "total_time": 4.653900017729029,
       "size": 315220,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.9307999977609143,
-      "total_time": 37.768200010759756,
+      "ttfb": 3.5807999956887215,
+      "total_time": 10.67039999179542,
       "size": 1409872,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.9582000026712194,
-      "total_time": 5.29820000519976,
+      "ttfb": 4.003099980764091,
+      "total_time": 4.9915999989025295,
       "size": 345144,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.887600003508851,
-      "total_time": 29.905900009907782,
+      "ttfb": 3.5918000212404877,
+      "total_time": 9.631399996578693,
       "size": 1327608,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.8558999949600548,
-      "total_time": 11080.833700005314,
+      "ttfb": 3.704800008563325,
+      "total_time": 10553.353800001787,
       "size": 30037692,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.8721000018995255,
-      "total_time": 63.68490000022575,
+      "ttfb": 4.447099985554814,
+      "total_time": 23.897100007161498,
       "size": 2140196,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.835600000456907,
-      "total_time": 11952.959899994312,
+      "ttfb": 3.7881000025663525,
+      "total_time": 11613.701700000092,
       "size": 31636428,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.303100009565242,
-      "total_time": 233.27520000748336,
+      "ttfb": 3.719400003319606,
+      "total_time": 140.17779999994673,
       "size": 4050504,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.780800005188212,
-      "total_time": 4.12769999820739,
+      "ttfb": 3.7370999925769866,
+      "total_time": 4.086100001586601,
       "size": 136688,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.490400005830452,
-      "total_time": 8949.877599996398,
+      "ttfb": 3.555100003723055,
+      "total_time": 8974.64490000857,
       "size": 27011536,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.8395999872591347,
-      "total_time": 1236.4527999889106,
+      "ttfb": 3.9320999931078404,
+      "total_time": 1248.3599999977741,
       "size": 9469412,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.597200004151091,
-      "total_time": 4645.162800006801,
+      "ttfb": 7.765999995172024,
+      "total_time": 4689.8924999986775,
       "size": 18445292,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.758699996978976,
-      "total_time": 4.132900008698925,
+      "ttfb": 4.830899997614324,
+      "total_time": 5.181999993510544,
       "size": 86732,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.918100002920255,
-      "total_time": 2872.920499998145,
+      "ttfb": 3.5084000264760107,
+      "total_time": 3040.4322000104003,
       "size": 14331172,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.8780000031692907,
-      "total_time": 2425.1146000024164,
+      "ttfb": 3.9349999860860407,
+      "total_time": 2570.800799992867,
       "size": 13246000,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.065100001753308,
-      "total_time": 3772.8908999997657,
+      "ttfb": 4.048400005558506,
+      "total_time": 4352.926899999147,
       "size": 16477140,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.068899987032637,
-      "total_time": 4.18109999736771,
+      "ttfb": 4.301399982068688,
+      "total_time": 4.435499984538183,
       "size": 21556,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.6834999918937683,
-      "total_time": 12157.452400002512,
+      "ttfb": 3.6409000167623162,
+      "total_time": 12319.839200004935,
       "size": 31830796,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 5.644100005156361,
-      "total_time": 5.836700001964346,
+      "ttfb": 3.9145999762695283,
+      "total_time": 4.0862000023480505,
       "size": 41432,
-      "server_latency": 0.04,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.636200010078028,
-      "total_time": 1266.8499999999767,
+      "ttfb": 3.8141999975778162,
+      "total_time": 1138.6883000086527,
       "size": 9505484,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.7389999924926087,
-      "total_time": 4.89219999872148,
+      "ttfb": 3.8567000010516495,
+      "total_time": 4.894499987130985,
       "size": 315220,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.6035999946761876,
-      "total_time": 27.125799999339506,
+      "ttfb": 3.825400024652481,
+      "total_time": 10.9342000214383,
       "size": 1409872,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.428299998631701,
-      "total_time": 4.552699989289977,
+      "ttfb": 3.799300000537187,
+      "total_time": 4.7141999821178615,
       "size": 345144,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.377500004717149,
-      "total_time": 23.488099992391653,
+      "ttfb": 4.004999995231628,
+      "total_time": 9.954400011338294,
       "size": 1327608,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.680000008898787,
-      "total_time": 11339.71179999935,
+      "ttfb": 3.8530000019818544,
+      "total_time": 10616.198400006397,
       "size": 30037692,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.8696999981766567,
-      "total_time": 63.49600000248756,
+      "ttfb": 3.8640999991912395,
+      "total_time": 23.088499990990385,
       "size": 2140196,
-      "server_latency": 0.04,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.489599999738857,
-      "total_time": 12467.772500007413,
+      "ttfb": 3.484600019874051,
+      "total_time": 11671.98250000365,
       "size": 31636428,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.5304000086616725,
-      "total_time": 242.494699996314,
+      "ttfb": 4.02110000140965,
+      "total_time": 138.25590000487864,
       "size": 4050504,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.5563999990699813,
-      "total_time": 3.8904999964870512,
+      "ttfb": 4.4024999951943755,
+      "total_time": 4.758499999297783,
       "size": 136688,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.599000003305264,
-      "total_time": 8990.196099999594,
+      "ttfb": 3.6194999993313104,
+      "total_time": 8684.876499988604,
       "size": 27011536,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.3486000067787245,
-      "total_time": 1393.1354000087595,
+      "ttfb": 3.6324000102467835,
+      "total_time": 1107.9125000105705,
       "size": 9469412,
-      "server_latency": 0.04,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.423499995027669,
-      "total_time": 5109.637899993686,
+      "ttfb": 3.8835000013932586,
+      "total_time": 4395.335699984571,
       "size": 18445292,
-      "server_latency": 0.03,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.438700008904561,
-      "total_time": 4.794400010723621,
+      "ttfb": 4.353799973614514,
+      "total_time": 4.685299994889647,
       "size": 86732,
-      "server_latency": 0.04,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.7341999995987862,
-      "total_time": 3221.5330000035465,
+      "ttfb": 3.6254999868106097,
+      "total_time": 2694.6049999969546,
       "size": 14331172,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.0926999936345965,
-      "total_time": 2644.3538000021363,
+      "ttfb": 4.256299987901002,
+      "total_time": 2303.3994999714196,
       "size": 13246000,
-      "server_latency": 0.04,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.211000006762333,
-      "total_time": 3906.6033999988576,
+      "ttfb": 3.792800009250641,
+      "total_time": 3771.231100021396,
       "size": 16477140,
-      "server_latency": 0.04,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.418700002133846,
-      "total_time": 4.543000002740882,
+      "ttfb": 4.033599980175495,
+      "total_time": 4.158999974606559,
       "size": 21556,
-      "server_latency": 0.05,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.01659999624826,
-      "total_time": 12103.486899999552,
+      "ttfb": 3.641700022853911,
+      "total_time": 11804.451900010463,
       "size": 31830796,
-      "server_latency": 0.06,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.9069000049494207,
-      "total_time": 4.079300008015707,
+      "ttfb": 3.931399987777695,
+      "total_time": 4.096899996511638,
       "size": 41432,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.492599993478507,
-      "total_time": 1245.1007999916328,
+      "ttfb": 3.721299988683313,
+      "total_time": 1114.3969999975525,
       "size": 9505484,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.9715000020805746,
-      "total_time": 5.071699997643009,
+      "ttfb": 3.4078000171575695,
+      "total_time": 4.495100001804531,
       "size": 315220,
-      "server_latency": 0.05,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.83960000181105,
-      "total_time": 25.85689999978058,
+      "ttfb": 3.1407999922521412,
+      "total_time": 25.53250000346452,
       "size": 1409872,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.278299995348789,
-      "total_time": 5.380599992349744,
+      "ttfb": 4.066099994815886,
+      "total_time": 5.467699986184016,
       "size": 345144,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.696399988257326,
-      "total_time": 22.611199994571507,
+      "ttfb": 4.00040001841262,
+      "total_time": 12.38170001306571,
       "size": 1327608,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 3.555999996024184,
-      "total_time": 10911.685999992187,
+      "ttfb": 3.851999994367361,
+      "total_time": 10614.742600009777,
       "size": 30037692,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     },
     {
-      "ttfb": 4.3631000007735565,
-      "total_time": 63.47000000823755,
+      "ttfb": 3.9135999977588654,
+      "total_time": 23.692000017035753,
       "size": 2140196,
-      "server_latency": 0.02,
+      "server_latency": 0.0,
       "cache_hit": true,
       "source": "cache"
     }
   ],
   "unoptimized": [
     {
-      "ttfb": 9.344099991722032,
-      "total_time": 9.4799999933457,
+      "ttfb": 8.338099985849112,
+      "total_time": 8.47490000887774,
       "size": 21556,
-      "server_latency": 4.08,
+      "server_latency": 3.26,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 6.2898999894969165,
-      "total_time": 12182.288999989396,
+      "ttfb": 7.0865000016056,
+      "total_time": 11705.61100001214,
       "size": 31830796,
-      "server_latency": 1.38,
+      "server_latency": 1.23,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 7.156300009228289,
-      "total_time": 7.351100008236244,
+      "ttfb": 6.262999988393858,
+      "total_time": 6.442299985792488,
       "size": 41432,
-      "server_latency": 2.08,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.3256999894510955,
-      "total_time": 1316.2461999891093,
-      "size": 9505484,
       "server_latency": 1.54,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 6.5993000025628135,
-      "total_time": 7.699900001171045,
-      "size": 315220,
-      "server_latency": 1.49,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.721700003254227,
-      "total_time": 57.17020000156481,
-      "size": 1409872,
-      "server_latency": 1.22,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.161499990615994,
-      "total_time": 8.273599989479408,
-      "size": 345144,
-      "server_latency": 1.29,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.067500002449378,
-      "total_time": 27.638600004138425,
-      "size": 1327608,
-      "server_latency": 1.29,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.4751999927684665,
-      "total_time": 11107.689800002845,
-      "size": 30037692,
-      "server_latency": 1.35,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.059000010485761,
-      "total_time": 85.28800000203773,
-      "size": 2140196,
-      "server_latency": 1.64,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.136000000173226,
-      "total_time": 11868.56680001074,
-      "size": 31636428,
-      "server_latency": 1.21,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.774900000891648,
-      "total_time": 234.50219999358524,
-      "size": 4050504,
-      "server_latency": 1.59,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 5.945700002484955,
-      "total_time": 6.315100006759167,
-      "size": 136688,
-      "server_latency": 1.25,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.189000006997958,
-      "total_time": 8896.733999994467,
-      "size": 27011536,
+      "ttfb": 5.954699998255819,
+      "total_time": 1100.7988999772351,
+      "size": 9505484,
       "server_latency": 1.28,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 6.310400000074878,
-      "total_time": 1237.7960000012536,
-      "size": 9469412,
-      "server_latency": 1.33,
+      "ttfb": 6.446200015489012,
+      "total_time": 7.580800011055544,
+      "size": 315220,
+      "server_latency": 1.52,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 8.23399999353569,
-      "total_time": 4570.25980000617,
-      "size": 18445292,
-      "server_latency": 1.58,
+      "ttfb": 6.156699993880466,
+      "total_time": 13.232800003606826,
+      "size": 1409872,
+      "server_latency": 1.35,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 6.255200001760386,
-      "total_time": 6.594599995878525,
-      "size": 86732,
-      "server_latency": 1.46,
+      "ttfb": 6.078600010368973,
+      "total_time": 6.997699994826689,
+      "size": 345144,
+      "server_latency": 1.17,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 7.312999994610436,
-      "total_time": 2870.176199998241,
-      "size": 14331172,
+      "ttfb": 6.01379998261109,
+      "total_time": 12.179399986052886,
+      "size": 1327608,
       "server_latency": 1.14,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 7.968300007632934,
-      "total_time": 2467.619500006549,
-      "size": 13246000,
+      "ttfb": 6.35460001649335,
+      "total_time": 10541.181400010828,
+      "size": 30037692,
+      "server_latency": 1.3,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.393399991793558,
+      "total_time": 26.531999988947064,
+      "size": 2140196,
       "server_latency": 1.48,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 7.534700009273365,
-      "total_time": 3744.71210000047,
-      "size": 16477140,
-      "server_latency": 1.53,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.554399995366111,
-      "total_time": 6.681500002741814,
-      "size": 21556,
-      "server_latency": 1.57,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.122500009951182,
-      "total_time": 12096.629200008465,
-      "size": 31830796,
-      "server_latency": 1.28,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.347300008405,
-      "total_time": 7.531099996413104,
-      "size": 41432,
-      "server_latency": 2.38,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.751199995051138,
-      "total_time": 1251.0098999919137,
-      "size": 9505484,
-      "server_latency": 1.31,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.392899987986311,
-      "total_time": 7.556999989901669,
-      "size": 315220,
-      "server_latency": 1.43,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.442600002628751,
-      "total_time": 29.319099994609132,
-      "size": 1409872,
-      "server_latency": 1.24,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.040899999788962,
-      "total_time": 7.096099987393245,
-      "size": 345144,
-      "server_latency": 1.21,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.50799999514129,
-      "total_time": 27.33849998912774,
-      "size": 1327608,
-      "server_latency": 1.3,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.956500005093403,
-      "total_time": 10966.312000004109,
-      "size": 30037692,
+      "ttfb": 6.36199998552911,
+      "total_time": 11647.381099988706,
+      "size": 31636428,
       "server_latency": 1.22,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 8.03260000247974,
-      "total_time": 73.49719999183435,
-      "size": 2140196,
-      "server_latency": 1.58,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 8.00280000839848,
-      "total_time": 12000.855000005686,
-      "size": 31636428,
-      "server_latency": 1.65,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 8.56660000863485,
-      "total_time": 244.41179999848828,
+      "ttfb": 6.423900020308793,
+      "total_time": 141.1229000077583,
       "size": 4050504,
-      "server_latency": 1.54,
+      "server_latency": 1.53,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 6.198599992785603,
-      "total_time": 6.714699993608519,
+      "ttfb": 6.042399996658787,
+      "total_time": 6.439899996621534,
       "size": 136688,
-      "server_latency": 1.34,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.299299992155284,
-      "total_time": 8913.867900002515,
-      "size": 27011536,
-      "server_latency": 1.35,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.496999998693354,
-      "total_time": 1258.8650999969104,
-      "size": 9469412,
-      "server_latency": 1.64,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.994499999564141,
-      "total_time": 4635.731000002124,
-      "size": 18445292,
-      "server_latency": 1.47,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.422500009648502,
-      "total_time": 6.767700004274957,
-      "size": 86732,
-      "server_latency": 1.47,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.045499995001592,
-      "total_time": 2838.3512000000337,
-      "size": 14331172,
-      "server_latency": 1.3,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.612299988977611,
-      "total_time": 2561.4957999932813,
-      "size": 13246000,
-      "server_latency": 1.64,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.668899997952394,
-      "total_time": 3757.7368000056595,
-      "size": 16477140,
-      "server_latency": 1.62,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.234100001165643,
-      "total_time": 6.352800002787262,
-      "size": 21556,
-      "server_latency": 1.56,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.891500001074746,
-      "total_time": 12048.408499991638,
-      "size": 31830796,
-      "server_latency": 1.26,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 7.399399997666478,
-      "total_time": 7.58139998652041,
-      "size": 41432,
-      "server_latency": 2.05,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.8395999987842515,
-      "total_time": 1248.9094999909867,
-      "size": 9505484,
-      "server_latency": 1.39,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.395599993993528,
-      "total_time": 7.488400005968288,
-      "size": 315220,
-      "server_latency": 1.42,
-      "cache_hit": false,
-      "source": "minio"
-    },
-    {
-      "ttfb": 6.31240000075195,
-      "total_time": 28.275400007260032,
-      "size": 1409872,
       "server_latency": 1.25,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 6.507800004328601,
-      "total_time": 7.616700007929467,
+      "ttfb": 5.874399997992441,
+      "total_time": 8899.554399977205,
+      "size": 27011536,
+      "server_latency": 1.21,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.870400015031919,
+      "total_time": 1089.136900001904,
+      "size": 9469412,
+      "server_latency": 1.57,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.393999996362254,
+      "total_time": 4434.550500009209,
+      "size": 18445292,
+      "server_latency": 1.46,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.5916999883484095,
+      "total_time": 6.918099999893457,
+      "size": 86732,
+      "server_latency": 1.55,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.128899985924363,
+      "total_time": 2688.9291999978013,
+      "size": 14331172,
+      "server_latency": 1.26,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.215499994345009,
+      "total_time": 2278.65149997524,
+      "size": 13246000,
+      "server_latency": 1.49,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.825499993283302,
+      "total_time": 3607.0372999820393,
+      "size": 16477140,
+      "server_latency": 1.5,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.015899998601526,
+      "total_time": 6.140200013760477,
+      "size": 21556,
+      "server_latency": 1.42,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.09229999827221,
+      "total_time": 11679.216999997152,
+      "size": 31830796,
+      "server_latency": 1.22,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.454299989854917,
+      "total_time": 6.637299986323342,
+      "size": 41432,
+      "server_latency": 1.5,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 5.9877999883610755,
+      "total_time": 1111.3903999794275,
+      "size": 9505484,
+      "server_latency": 1.2,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 5.876599985640496,
+      "total_time": 6.944599997950718,
+      "size": 315220,
+      "server_latency": 1.39,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.171200016979128,
+      "total_time": 13.520000007702038,
+      "size": 1409872,
+      "server_latency": 1.14,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 5.91899998835288,
+      "total_time": 6.847399985417724,
       "size": 345144,
-      "server_latency": 1.3,
+      "server_latency": 1.13,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 7.080900002620183,
-      "total_time": 26.182899993727915,
+      "ttfb": 5.993200000375509,
+      "total_time": 12.244399986229837,
       "size": 1327608,
-      "server_latency": 1.41,
+      "server_latency": 1.28,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 7.1373999962816015,
-      "total_time": 10824.541699999827,
+      "ttfb": 5.949100013822317,
+      "total_time": 10527.517000009539,
       "size": 30037692,
-      "server_latency": 1.35,
+      "server_latency": 1.29,
       "cache_hit": false,
       "source": "minio"
     },
     {
-      "ttfb": 7.072899999911897,
-      "total_time": 66.07650000660215,
+      "ttfb": 7.331100001465529,
+      "total_time": 28.510200005257502,
       "size": 2140196,
-      "server_latency": 1.54,
+      "server_latency": 2.09,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.240799993975088,
+      "total_time": 11671.997199999169,
+      "size": 31636428,
+      "server_latency": 1.24,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.661099982215092,
+      "total_time": 140.7251000055112,
+      "size": 4050504,
+      "server_latency": 2.37,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.246100005228072,
+      "total_time": 6.660799990640953,
+      "size": 136688,
+      "server_latency": 1.36,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.1790000181645155,
+      "total_time": 8920.298400014872,
+      "size": 27011536,
+      "server_latency": 1.31,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.875399994896725,
+      "total_time": 1170.0479999999516,
+      "size": 9469412,
+      "server_latency": 1.53,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.332599994493648,
+      "total_time": 4393.810300010955,
+      "size": 18445292,
+      "server_latency": 1.4,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.40640000347048,
+      "total_time": 6.727400003001094,
+      "size": 86732,
+      "server_latency": 1.59,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.176599999889731,
+      "total_time": 2720.301699999254,
+      "size": 14331172,
+      "server_latency": 1.18,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.677199999103323,
+      "total_time": 2280.164399999194,
+      "size": 13246000,
+      "server_latency": 1.34,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 7.263500010594726,
+      "total_time": 3629.1506999987178,
+      "size": 16477140,
+      "server_latency": 1.57,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 5.954199994448572,
+      "total_time": 6.086800014600158,
+      "size": 21556,
+      "server_latency": 1.48,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.522299983771518,
+      "total_time": 11761.497300001793,
+      "size": 31830796,
+      "server_latency": 1.25,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.205799989402294,
+      "total_time": 6.375500001013279,
+      "size": 41432,
+      "server_latency": 1.48,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.016200000885874,
+      "total_time": 1108.0523999989964,
+      "size": 9505484,
+      "server_latency": 1.13,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.397799996193498,
+      "total_time": 7.964799995534122,
+      "size": 315220,
+      "server_latency": 1.38,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.308000010903925,
+      "total_time": 13.566700014052913,
+      "size": 1409872,
+      "server_latency": 1.26,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.536000000778586,
+      "total_time": 7.513500022469088,
+      "size": 345144,
+      "server_latency": 1.38,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.788600003346801,
+      "total_time": 13.11359999817796,
+      "size": 1327608,
+      "server_latency": 1.32,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.495100009487942,
+      "total_time": 10531.13889999804,
+      "size": 30037692,
+      "server_latency": 1.29,
+      "cache_hit": false,
+      "source": "minio"
+    },
+    {
+      "ttfb": 6.422199978260323,
+      "total_time": 25.257399975089356,
+      "size": 2140196,
+      "server_latency": 1.43,
       "cache_hit": false,
       "source": "minio"
     }

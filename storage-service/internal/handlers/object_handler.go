@@ -210,8 +210,6 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 	idStr := c.Params("id")
 	optimizationMode := strings.ToLower(c.Get("X-Optimization-Mode"))
 
-	log.Printf("Downloading object %s, mode: %s", idStr, optimizationMode)
-
 	objectID, err := uuid.Parse(idStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -242,7 +240,7 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			latency = time.Since(cacheStartTime)
 			c.Context().Response.SetBodyStream(bytes.NewReader(data), len(data))
 
-			return nil
+			//return c.Send(data)
 
 		}
 	}
