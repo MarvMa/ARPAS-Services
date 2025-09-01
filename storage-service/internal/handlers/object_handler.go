@@ -228,6 +228,7 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 
 		if data, exists := h.CacheService.GetFromCache(objectID); exists {
 
+			latency = time.Since(cacheStartTime)
 			fromCache = true
 
 			c.Set(fiber.HeaderContentType, ContentType)
@@ -237,10 +238,9 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			c.Set(HeaderCacheHit, map[bool]string{true: "true", false: "false"}[fromCache])
 			c.Set("X-Latency-Ms", fmt.Sprintf("%.2f", float64(latency.Microseconds())/1000.0))
 			c.Set("X-Content-Size-Bytes", fmt.Sprintf("%d", clen))
-			latency = time.Since(cacheStartTime)
 			c.Context().Response.SetBodyStream(bytes.NewReader(data), len(data))
 
-			//return c.Send(data)
+			return nil
 
 		}
 	}
