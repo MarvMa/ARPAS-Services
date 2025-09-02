@@ -1,16 +1,21 @@
 package handlers
 
 import (
+	"context"
+	"fmt"
 	"log"
+	"runtime"
 	"storage-service/internal/models"
 	"storage-service/internal/services"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 )
 
-// CacheHandler handles cache-related endpoints
+// CacheHandler handles cache-related endpoints with high performance
 type CacheHandler struct {
 	cacheService  *services.CacheService
 	objectService *services.ObjectService
@@ -24,7 +29,7 @@ func NewCacheHandler(cacheService *services.CacheService, objectService *service
 	}
 }
 
-// PreloadObjects handles POST /cache/preload
+// PreloadObjects handles POST /cache/preload with location-based prediction
 func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
 	var request models.PredictionRequest
 	if err := c.BodyParser(&request); err != nil {
@@ -43,29 +48,49 @@ func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
 		})
 	}
 
-	c.Status(fiber.StatusOK)
-	err = c.JSON(predictedModelIDs)
-	if err != nil {
-		return err
+	// Prepare for parallel preloading
+	var objectIDs []uuid.UUID
+	var storageKeys []string
+	var skipped int
+
+	// Check which objects need preloading
+	for _, id := range predictedModelIDs {
+		// Quick cache check first
+		if h.cacheService.CheckCached(id) {
+			skipped++
+			continue
+		}
+
+		obj, err := h.objectService.GetObject(id)
+		if err != nil {
+			log.Printf("Object not found for preload: %s", id)
+			continue
+		}
+		objectIDs = append(objectIDs, id)
+		storageKeys = append(storageKeys, obj.StorageKey)
 	}
 
-	go func() {
-		if len(predictedModelIDs) > 0 {
-			objects, _ := h.objectService.GetObjectsBatch(predictedModelIDs)
+	if len(objectIDs) == 0 {
+		return c.Status(200).JSON(fiber.Map{
+			"message":     "All predicted objects are already cached",
+			"totalCount":  len(predictedModelIDs),
+			"cachedCount": skipped,
+		})
+	}
 
-			for _, obj := range objects {
-				h.cacheService.QueuePreload(obj.ID, obj.StorageKey, 0)
-			}
-		}
-	}()
+	// Create context with timeout for preloading
+	ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
+	defer cancel()
 
-	return nil
+	// Perform parallel preload
+	err = h.cacheService.PreloadObjects(ctx, objectIDs, storageKeys)
+
+	return c.JSON(objectIDs)
 }
 
+// PreloadAll handles POST /cache/preload-all with parallel loading
 func (h *CacheHandler) PreloadAll(c *fiber.Ctx) error {
-	startTime := time.Now()
-
-	log.Printf("Starting full cache preload of all objects")
+	log.Printf("Starting full cache preload (CPUs: %d)", runtime.NumCPU())
 
 	// Get all objects from database
 	objects, err := h.objectService.ListObjects()
@@ -84,56 +109,100 @@ func (h *CacheHandler) PreloadAll(c *fiber.Ctx) error {
 		})
 	}
 
-	log.Printf("Found %d objects to preload", len(objects))
+	log.Printf("Found %d total objects", len(objects))
 
+	// Parallel cache checking to determine what needs loading
+	var mu sync.Mutex
 	var objectIDs []uuid.UUID
 	var storageKeys []string
-	totalSize := int64(0)
+	var totalSize int64
+	var alreadyCached int32
 
-	for _, obj := range objects {
-		// Check if already cached
-		if h.cacheService.CheckCached(obj.ID) {
-			continue
-		}
-
-		objectIDs = append(objectIDs, obj.ID)
-		storageKeys = append(storageKeys, obj.StorageKey)
-		totalSize += obj.Size
+	// Use worker pool for cache checking
+	checkWorkers := runtime.NumCPU() * 2
+	if checkWorkers > len(objects) {
+		checkWorkers = len(objects)
 	}
+
+	work := make(chan models.Object, len(objects))
+	for _, obj := range objects {
+		work <- obj
+	}
+	close(work)
+
+	var wg sync.WaitGroup
+	for i := 0; i < checkWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for obj := range work {
+				if h.cacheService.CheckCached(obj.ID) {
+					atomic.AddInt32(&alreadyCached, 1)
+					continue
+				}
+
+				mu.Lock()
+				objectIDs = append(objectIDs, obj.ID)
+				storageKeys = append(storageKeys, obj.StorageKey)
+				totalSize += obj.Size
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	cached := int(atomic.LoadInt32(&alreadyCached))
 
 	if len(objectIDs) == 0 {
 		return c.JSON(fiber.Map{
 			"message":     "All objects already cached",
 			"totalCount":  len(objects),
 			"cachedCount": len(objects),
-			"duration":    time.Since(startTime).String(),
 		})
 	}
 
-	// Perform the preload
-	err = h.cacheService.PreloadObjects(c.Context(), objectIDs, storageKeys)
+	log.Printf("Preloading %d objects (%.2f MB), %d already cached",
+		len(objectIDs), float64(totalSize)/(1024*1024), cached)
 
-	duration := time.Since(startTime)
+	// Create context with reasonable timeout
+	timeout := time.Duration(len(objectIDs)) * time.Second
+	if timeout < 30*time.Second {
+		timeout = 30 * time.Second
+	}
+	if timeout > 5*time.Minute {
+		timeout = 5 * time.Minute
+	}
+
+	ctx, cancel := context.WithTimeout(c.Context(), timeout)
+	defer cancel()
+
+	// Perform the parallel preload
+	preloadStart := time.Now()
+	err = h.cacheService.PreloadObjects(ctx, objectIDs, storageKeys)
+	preloadDuration := time.Since(preloadStart)
+
+	// Calculate throughput
+	throughputMBps := float64(totalSize) / (1024 * 1024) / preloadDuration.Seconds()
 
 	// Prepare response
 	response := fiber.Map{
-		"totalObjects":   len(objects),
-		"preloadedCount": len(objectIDs),
-		"alreadyCached":  len(objects) - len(objectIDs),
-		"duration":       duration.String(),
-		"totalSizeMB":    float64(totalSize) / (1024 * 1024),
+		"totalObjects":    len(objects),
+		"preloadedCount":  len(objectIDs),
+		"alreadyCached":   cached,
+		"preloadDuration": preloadDuration.String(),
+		"throughputMBps":  throughputMBps,
 	}
 
+	// Set performance headers
+
 	if err != nil {
-		log.Printf("Preload all completed with errors after %v: %v", duration, err)
+		log.Printf("Preload all completed with errors %v: ", err)
 		response["error"] = err.Error()
 		response["status"] = "partial"
 		return c.Status(fiber.StatusMultiStatus).JSON(response)
 	}
 
-	log.Printf("Successfully preloaded all %d objects in %v", len(objectIDs), duration)
 	response["status"] = "success"
-
 	return c.JSON(response)
 }
 
@@ -147,7 +216,10 @@ func (h *CacheHandler) InvalidateObject(c *fiber.Ctx) error {
 		})
 	}
 
+	startTime := time.Now()
 	err = h.cacheService.InvalidateObject(objectID)
+	duration := time.Since(startTime)
+
 	if err != nil {
 		log.Printf("Error invalidating cache for object %s: %v", objectID, err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -155,8 +227,15 @@ func (h *CacheHandler) InvalidateObject(c *fiber.Ctx) error {
 		})
 	}
 
-	log.Printf("Successfully invalidated cache for object %s", objectID)
-	return c.SendStatus(fiber.StatusNoContent)
+	log.Printf("Successfully invalidated cache for object %s in %v", objectID, duration)
+
+	c.Set("X-Invalidation-Duration-Ms", fmt.Sprintf("%.2f", float64(duration.Microseconds())/1000.0))
+
+	return c.JSON(fiber.Map{
+		"message":    "Cache invalidated successfully",
+		"objectId":   objectID.String(),
+		"durationMs": float64(duration.Microseconds()) / 1000.0,
+	})
 }
 
 // ClearCache handles POST /cache/clear
@@ -168,8 +247,9 @@ func (h *CacheHandler) ClearCache(c *fiber.Ctx) error {
 		})
 	}
 
-	log.Printf("Cache cleared successfully")
-	return c.JSON(fiber.Map{
+	response := fiber.Map{
 		"message": "Cache cleared successfully",
-	})
+	}
+
+	return c.JSON(response)
 }

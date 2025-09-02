@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-JSON_FILE="points_with_glb_small.json"
-MODEL_DIR="./3d-models-small"
+JSON_FILE="points_with_glb_simulation.json"
+MODEL_DIR="./3d-models-simulation-bench"
 
 # JSON_FILE="points_with_glb.json"
 # MODEL_DIR="./3d-models"
