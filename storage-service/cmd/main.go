@@ -36,6 +36,12 @@ func main() {
 		cfg.CacheMaxSizeBytes,
 		cfg.CacheTTL,
 	)
+	// Defer cleanup of cache service
+	defer func() {
+		if err := cacheService.Close(); err != nil {
+			log.Printf("Error closing cache service: %v", err)
+		}
+	}()
 
 	// Initialize handlers
 	cacheHandler := handlers.NewCacheHandler(cacheService, objectService)

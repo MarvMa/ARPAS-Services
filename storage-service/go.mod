@@ -3,6 +3,7 @@ module storage-service
 go 1.24
 
 require (
+	github.com/dgraph-io/ristretto/v2 v2.3.0
 	github.com/gofiber/fiber/v2 v2.52.9
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7

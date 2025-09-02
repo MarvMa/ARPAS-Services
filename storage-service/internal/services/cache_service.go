@@ -45,7 +45,7 @@ func NewCacheService(minio *minio.Client, bucketName string, maxSizeBytes int64,
 		preloadQueue:     make(chan preloadTask, 20),
 		preloadSemaphore: make(chan struct{}, 1),
 	}
-	cs.memoryCache = caches.NewMemoryCache(maxSizeBytes, ttl)
+	cs.memoryCache = caches.NewRistrettoMemoryCache(maxSizeBytes, ttl)
 
 	for i := 0; i < 8; i++ {
 		go cs.preloadWorker()
@@ -123,4 +123,11 @@ func (cs *CacheService) ClearCache() error {
 func (cs *CacheService) CheckCached(objectID uuid.UUID) bool {
 	exists, _ := cs.memoryCache.Exists(objectID)
 	return exists
+}
+
+// Close gracefully shuts down the cache service
+func (cs *CacheService) Close() error {
+	close(cs.preloadQueue)
+
+	return cs.memoryCache.Close()
 }
