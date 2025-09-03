@@ -3,11 +3,14 @@ import {FastifyInstance, FastifyRequest} from "fastify";
 import {Predictor} from "./predictor";
 import fastifyWebsocket, {type WebSocket} from '@fastify/websocket'
 import {CacheClient} from "./clients/cacheClient";
+import {CacheTracker} from "./cache_tracker";
+import {db} from "./clients/database";
+import {config} from "./config";
 
 export default fp(async (app: FastifyInstance) => {
     const predictor: Predictor = new Predictor();
     const cacheClient: CacheClient = new CacheClient();
-
+    const cacheTracker: CacheTracker = CacheTracker.getInstance();
     await app.register(fastifyWebsocket);
 
     app.get('/ws/predict', {websocket: true}, (socket: WebSocket, _request: FastifyRequest) => {
@@ -18,21 +21,39 @@ export default fp(async (app: FastifyInstance) => {
                     const sensorData = JSON.parse(message.toString());
                     const predictionResult = predictor.predict(sensorData);
 
-                    let objectIds: number[] = [];
-                    // Only call cache if we have IDs
-                    if (predictionResult) {
-                        const ids = await cacheClient.preload(predictionResult).catch(console.error);
-                        if (Array.isArray(ids)) {
-                            objectIds = ids;
-                        }
+                    if (predictionResult == null) {
+                        throw new Error('Prediction result is null');
+                    }
+
+                    console.log("Prediction result:", predictionResult);
+                    const predictedLat = predictionResult?.position.latitude;
+                    const predictedLon = predictionResult?.position.longitude;
+                    console.log(`Predicted Location: lat=${predictedLat}, lon=${predictedLon}`);
+                    let uncachedIds: string[] = [];
+                    let foundObjectIds: string[] = [];
+                    if (predictedLat != null && predictedLon != null) {
+                        const nearbyObjects = await db.getObjectsInRadius(predictedLat, predictedLon, config.predictionRadius)
+                        foundObjectIds = nearbyObjects.map(obj => obj.id);
+                        uncachedIds = cacheTracker.getUncachedObjects(foundObjectIds);
+                    } else {
+                        throw new Error('Invalid prediction result');
                     }
 
 
+                    if (predictionResult) {
+                        const cachedIds = await cacheClient.preload(uncachedIds).catch(console.error);
+                        if (Array.isArray(cachedIds) && cachedIds.length > 0) {
+                            cacheTracker.updateCachedObjects(cachedIds);
+
+                        }
+                    }
                     socket.send(JSON.stringify({
                         status: 'success',
                         message: 'Prediction processed',
-                        objectIds: objectIds || []  // Ensure we always send an array
+                        objectIds: foundObjectIds || []
                     }));
+
+
                 } catch (error) {
                     console.error('Error processing message:', error);
                     socket.send(JSON.stringify({

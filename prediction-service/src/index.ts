@@ -1,6 +1,7 @@
 import fastify from "fastify";
 import wsPlugin from "./websocket.js";
 import {config} from "./config.js";
+import {CacheTracker} from "./cache_tracker";
 
 process.on('unhandledRejection', err => {
     console.error('UNHANDLED REJECTION:', err);
@@ -17,6 +18,7 @@ async function main() {
         ignoreTrailingSlash: true
     });
     app.register(wsPlugin);
+    CacheTracker.getInstance();
 
     try {
         await app.listen({port: config.port, host: '0.0.0.0'})

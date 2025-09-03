@@ -38,15 +38,11 @@ func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
 			"details": err.Error(),
 		})
 	}
-
-	// Get predicted models based on location
-	predictedModelIDs, err := h.objectService.GetPredictedModels(request)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to predict models",
-			"details": err.Error(),
-		})
+	if len(request.ObjectIDs) == 0 {
+		return c.SendStatus(403)
 	}
+
+	log.Printf("Received preload request for %d objects", len(request.ObjectIDs))
 
 	// Prepare for parallel preloading
 	var objectIDs []uuid.UUID
@@ -54,8 +50,7 @@ func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
 	var skipped int
 
 	// Check which objects need preloading
-	for _, id := range predictedModelIDs {
-		// Quick cache check first
+	for _, id := range request.ObjectIDs {
 		if h.cacheService.CheckCached(id) {
 			skipped++
 			continue
@@ -70,20 +65,21 @@ func (h *CacheHandler) PreloadObjects(c *fiber.Ctx) error {
 		storageKeys = append(storageKeys, obj.StorageKey)
 	}
 
-	if len(objectIDs) == 0 {
-		return c.Status(200).JSON(fiber.Map{
-			"message":     "All predicted objects are already cached",
-			"totalCount":  len(predictedModelIDs),
-			"cachedCount": skipped,
-		})
-	}
-
 	// Create context with timeout for preloading
 	ctx, cancel := context.WithTimeout(c.Context(), 30*time.Second)
 	defer cancel()
 
 	// Perform parallel preload
-	err = h.cacheService.PreloadObjects(ctx, objectIDs, storageKeys)
+	err := h.cacheService.PreloadObjects(ctx, objectIDs, storageKeys)
+	if err != nil {
+		log.Printf("Error during preload: %v", err)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "failed to preload objects",
+			"details": err.Error(),
+		})
+	}
+
+	log.Printf("Preload completed: %d preloaded, %d skipped (already cached)", len(objectIDs), skipped)
 
 	return c.JSON(objectIDs)
 }

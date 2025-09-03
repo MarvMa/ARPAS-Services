@@ -384,17 +384,15 @@ export class SimulationService {
             return this.activeDownloads.get(downloadKey)!;
         }
 
-        const profileDownloads = this.downloadedObjectsPerProfile.get(profileId);
-        if (!profileDownloads) {
+        if (!this.downloadedObjectsPerProfile.has(profileId)) {
             this.downloadedObjectsPerProfile.set(profileId, new Set<string>());
         }
-
-        const downloads = this.downloadedObjectsPerProfile.get(profileId)!;
-
-        // REDUNDANCY FIX: Double-check after potential async wait
-        if (downloads.has(objectId)) {
+        
+        const profileDownloads = this.downloadedObjectsPerProfile.get(profileId)!;
+        if (profileDownloads.has(objectId)) {
             return;
         }
+        
 
         // Create and track download promise
         const downloadPromise = this.executeDownload(objectId, profileId);
@@ -462,7 +460,7 @@ export class SimulationService {
 
 
             const downloadSource = extractHeaderString('x-download-source') || 'unknown';
-            const serverLatency = extractHeaderValue('x-latency-ms');
+            const serverLatency = extractHeaderValue('x-total-latency-ms');
             const cacheHit = extractHeaderString('x-cache-hit') === 'true';
             const contentLength = extractHeaderValue('content-length');
 
@@ -779,7 +777,7 @@ export class SimulationService {
                     downloadSource: metric.downloadSource || 'unknown',
                     optimizationMode: metric.simulationType,
                     sizeBytes: metric.sizeBytes,
-                    success: !metric.success,
+                    success: metric.success,
                 });
             });
         });
@@ -849,7 +847,6 @@ export class SimulationService {
                     : 0,
                 totalHits: successfulMetrics.filter(m => m.cacheHit).length,
                 totalMisses: successfulMetrics.filter(m => !m.cacheHit).length,
-                efficiency: 0
             },
             success: {
                 rate: allMetrics.length > 0 ? (successfulMetrics.length / allMetrics.length) * 100 : 0,

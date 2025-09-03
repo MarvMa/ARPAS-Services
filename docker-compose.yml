@@ -84,6 +84,12 @@ services:
       REDIS_HOST: ${REDIS_HOST}
       REDIS_PORT: ${REDIS_PORT}
       STORAGE_URL: ${STORAGE_URL}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      PREDICTION_RADIUS: ${PREDICTION_RADIUS}
     labels:
       sim.group: "prediction-service"
     deploy:

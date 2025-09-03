@@ -1,9 +1,7 @@
 package models
 
+import "github.com/google/uuid"
+
 type PredictionRequest struct {
-	Position struct {
-		Latitude  float64 `json:"latitude"`
-		Longitude float64 `json:"longitude"`
-		Altitude  float64 `json:"altitude"`
-	} `json:"position"`
+	ObjectIDs []uuid.UUID `json:"objectIds"`
 }

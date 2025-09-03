@@ -219,23 +219,14 @@ func (h *ObjectHandler) DownloadObject(c *fiber.Ctx) error {
 			rc = rcCache
 			contentLength = size
 			fromCache = true
-			cacheStrategy = "memory-direct"
+			cacheStrategy = "memory"
 			h.cacheHits.Add(1)
 
 			cacheLatency := time.Since(cacheStartTime)
 			log.Printf("Cache HIT for %s - Latency: %v, Size: %d bytes",
 				objectID, cacheLatency, contentLength)
-		} else {
-			// Cache miss
-			h.cacheMisses.Add(1)
-			fromCache = false
-			cacheStrategy = "memory-miss-loaded"
-			log.Printf("Cache MISS for %s (will be loaded): %v", objectID, err)
 		}
-	}
-
-	// Fallback to direct MinIO access if not using optimization
-	if rc == nil && optimizationMode != "optimized" {
+	} else {
 		minioStartTime := time.Now()
 
 		object, err := h.Service.Minio.GetObject(
@@ -309,15 +300,6 @@ func (h *ObjectHandler) setOptimizedHeaders(c *fiber.Ctx, obj *models.Object, si
 
 	if size > 0 {
 		c.Set(fiber.HeaderContentLength, fmt.Sprintf("%d", size))
-	}
-
-	// Performance metrics
-	if h.totalRequests.Load() > 0 {
-		hitRate := float64(h.cacheHits.Load()) / float64(h.totalRequests.Load()) * 100
-		avgLatency := float64(h.totalLatency.Load()) / float64(h.totalRequests.Load()) / 1000.0
-
-		c.Set("X-Cache-Hit-Rate", fmt.Sprintf("%.1f%%", hitRate))
-		c.Set("X-Avg-Latency-Ms", fmt.Sprintf("%.2f", avgLatency))
 	}
 
 	c.Status(fiber.StatusOK)

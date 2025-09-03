@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -16,7 +15,6 @@ import (
 	"storage-service/internal/config"
 	"storage-service/internal/models"
 	"storage-service/internal/repository"
-	"storage-service/internal/utils"
 )
 
 // ObjectService provides methods for managing 3D objects in storage.
@@ -99,46 +97,6 @@ func (s *ObjectService) CreateObject(fileHeader *multipart.FileHeader, latitude,
 // GetObject retrieves an object's metadata by ID.
 func (s *ObjectService) GetObject(id uuid.UUID) (*models.Object, error) {
 	return s.Repo.GetObject(id)
-}
-
-// GetPredictedModels returns a list of object IDs that are predicted to be visible based on the given prediction request.
-func (s *ObjectService) GetPredictedModels(req models.PredictionRequest) ([]uuid.UUID, error) {
-	radiusMeter := s.Config.PredictionRadius
-
-	objects, err := s.Repo.GetObjectsByLocation(
-		req.Position.Latitude,
-		req.Position.Longitude,
-		radiusMeter,
-	)
-	log.Printf("Found %d objects", len(objects))
-	if err != nil {
-		return nil, err
-	}
-
-	var filteredObjects []models.Object
-
-	// Apply distance filtering with exact calculation
-	for _, obj := range objects {
-		if obj.Latitude == nil || obj.Longitude == nil {
-			continue // Skip objects without location data
-		}
-
-		distance := utils.HaversineDistance(
-			req.Position.Latitude, req.Position.Longitude,
-			*obj.Latitude, *obj.Longitude,
-		)
-
-		if distance <= s.Config.PredictionRadius {
-			filteredObjects = append(filteredObjects, obj)
-		}
-	}
-
-	var objectIDs []uuid.UUID
-	for _, obj := range filteredObjects {
-		objectIDs = append(objectIDs, obj.ID)
-	}
-
-	return objectIDs, nil
 }
 
 // ListObjects returns all stored object metadata.

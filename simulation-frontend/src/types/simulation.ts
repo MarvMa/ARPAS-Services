@@ -184,7 +184,6 @@ export interface ScientificMetrics {
             hitRate: number;
             totalHits: number;
             totalMisses: number;
-            efficiency: number;
         };
         success: {
             rate: number;
