@@ -1,0 +1,551 @@
+================================================================================
+MULTI-CACHE IMPLEMENTATION PERFORMANCE ANALYSIS REPORT
+WITH RESOURCE UTILIZATION AND CACHE EFFICIENCY METRICS
+================================================================================
+
+Generated: 2025-09-05 13:58:50
+Output Directory: multi_cache_analysis
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+Overall Performance vs Unoptimized Baseline:
+(Positive values = improvement, Negative values = degradation)
+
+LRU-CACHE:
+  Total Latency: 50.46% DEGRADATION (slower)
+  TTFB: 65.05% DEGRADATION (slower)
+  Speedup Factor: 0.66x (1.50x slower than baseline)
+
+MEMORY-SHARDING:
+  Total Latency: 15.15% IMPROVEMENT (faster)
+  TTFB: 25.35% IMPROVEMENT (faster)
+  Speedup Factor: 1.18x faster than baseline
+
+RISTRETTO:
+  Total Latency: 66.59% DEGRADATION (slower)
+  TTFB: 77.03% DEGRADATION (slower)
+  Speedup Factor: 0.60x (1.67x slower than baseline)
+
+================================================================================
+CACHE EFFICIENCY ANALYSIS
+================================================================================
+
+UNOPTIMIZED:
+  Total Requests: 92
+  Cache Hits: 0 (0.00%)
+  Cache Misses: 92
+  By File Size:
+    1-5MB: 0.00% hit rate, 73.21 ms avg latency
+    5-10MB: 0.00% hit rate, 143.11 ms avg latency
+    >10MB: 0.00% hit rate, 146.26 ms avg latency
+
+LRU-CACHE:
+  Total Requests: 100
+  Cache Hits: 100 (100.00%)
+  Cache Misses: 0
+  By File Size:
+    1-5MB: 100.00% hit rate, 155.53 ms avg latency
+    5-10MB: 100.00% hit rate, 223.11 ms avg latency
+    >10MB: 100.00% hit rate, 130.84 ms avg latency
+
+MEMORY-SHARDING:
+  Total Requests: 100
+  Cache Hits: 100 (100.00%)
+  Cache Misses: 0
+  By File Size:
+    1-5MB: 100.00% hit rate, 70.73 ms avg latency
+    5-10MB: 100.00% hit rate, 126.34 ms avg latency
+    >10MB: 100.00% hit rate, 96.74 ms avg latency
+
+RISTRETTO:
+  Total Requests: 100
+  Cache Hits: 100 (100.00%)
+  Cache Misses: 0
+  By File Size:
+    1-5MB: 100.00% hit rate, 158.21 ms avg latency
+    5-10MB: 100.00% hit rate, 245.74 ms avg latency
+    >10MB: 100.00% hit rate, 166.51 ms avg latency
+
+================================================================================
+RESOURCE UTILIZATION ANALYSIS
+================================================================================
+
+STORAGE-SERVICE:
+----------------------------------------
+
+  UNOPTIMIZED:
+    CPU Usage:
+      Mean: 0.38%
+      Max: 2.29%
+      P95: 2.22%
+    Memory Usage:
+      Mean: 1.61%
+      Max: 1.61%
+      P95: 1.61%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+
+  LRU-CACHE:
+    CPU Usage:
+      Mean: 0.29%
+      Max: 4.65%
+      P95: 2.27%
+    Memory Usage:
+      Mean: 1.64%
+      Max: 1.65%
+      P95: 1.65%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.473 MB/s
+        Max: 10.839 MB/s
+        P95: 5.603 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 2.001 MB/s
+        Max: 24.087 MB/s
+        P95: 12.451 MB/s
+        Total: 0.00 MB
+
+  MEMORY-SHARDING:
+    CPU Usage:
+      Mean: 0.16%
+      Max: 2.96%
+      P95: 0.37%
+    Memory Usage:
+      Mean: 1.60%
+      Max: 1.64%
+      P95: 1.64%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+
+  RISTRETTO:
+    CPU Usage:
+      Mean: 0.14%
+      Max: 0.95%
+      P95: 0.87%
+    Memory Usage:
+      Mean: 1.64%
+      Max: 1.72%
+      P95: 1.72%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+
+PREDICTION-SERVICE:
+----------------------------------------
+
+  LRU-CACHE:
+    CPU Usage:
+      Mean: 0.32%
+      Max: 1.98%
+      P95: 1.71%
+    Memory Usage:
+      Mean: 1.64%
+      Max: 1.88%
+      P95: 1.88%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+
+  MEMORY-SHARDING:
+    CPU Usage:
+      Mean: 1.13%
+      Max: 2.54%
+      P95: 2.04%
+    Memory Usage:
+      Mean: 0.62%
+      Max: 0.68%
+      P95: 0.66%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.023 MB/s
+        Max: 0.037 MB/s
+        P95: 0.034 MB/s
+        Total: 0.02 MB
+      TX (Transmit):
+        Mean: 0.016 MB/s
+        Max: 0.022 MB/s
+        P95: 0.021 MB/s
+        Total: 0.01 MB
+
+  RISTRETTO:
+    CPU Usage:
+      Mean: 0.20%
+      Max: 1.29%
+      P95: 1.26%
+    Memory Usage:
+      Mean: 0.60%
+      Max: 0.61%
+      P95: 0.61%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.002 MB/s
+        Max: 0.013 MB/s
+        P95: 0.006 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 0.002 MB/s
+        Max: 0.011 MB/s
+        P95: 0.004 MB/s
+        Total: 0.00 MB
+
+MINIO:
+----------------------------------------
+
+  UNOPTIMIZED:
+    CPU Usage:
+      Mean: 0.35%
+      Max: 2.32%
+      P95: 2.12%
+    Memory Usage:
+      Mean: 0.00%
+      Max: 0.00%
+      P95: 0.00%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.001 MB/s
+        Max: 0.009 MB/s
+        P95: 0.009 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 1.393 MB/s
+        Max: 10.974 MB/s
+        P95: 9.224 MB/s
+        Total: 0.00 MB
+
+  LRU-CACHE:
+    CPU Usage:
+      Mean: 0.21%
+      Max: 2.48%
+      P95: 0.83%
+    Memory Usage:
+      Mean: 0.00%
+      Max: 0.00%
+      P95: 0.00%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.000 MB/s
+        Max: 0.006 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 0.239 MB/s
+        Max: 7.982 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+
+  MEMORY-SHARDING:
+    CPU Usage:
+      Mean: 0.19%
+      Max: 1.79%
+      P95: 0.77%
+    Memory Usage:
+      Mean: 0.00%
+      Max: 0.00%
+      P95: 0.00%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.000 MB/s
+        Max: 0.006 MB/s
+        P95: 0.002 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 0.395 MB/s
+        Max: 6.056 MB/s
+        P95: 3.592 MB/s
+        Total: 0.00 MB
+
+  RISTRETTO:
+    CPU Usage:
+      Mean: 0.09%
+      Max: 0.66%
+      P95: 0.35%
+    Memory Usage:
+      Mean: 0.00%
+      Max: 0.00%
+      P95: 0.00%
+    Network Throughput:
+      RX (Receive):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+      TX (Transmit):
+        Mean: 0.000 MB/s
+        Max: 0.000 MB/s
+        P95: 0.000 MB/s
+        Total: 0.00 MB
+
+================================================================================
+SYSTEM-WIDE RESOURCE IMPACT
+================================================================================
+
+UNOPTIMIZED:
+  Total Average CPU: 0.72%
+  Total Average Memory: 1.61%
+
+LRU-CACHE:
+  Total Average CPU: 0.82%
+  Total Average Memory: 3.28%
+  CPU Reduction vs Baseline: -13.26%
+  Memory Overhead vs Baseline: 103.69%
+
+MEMORY-SHARDING:
+  Total Average CPU: 1.48%
+  Total Average Memory: 2.21%
+  CPU Reduction vs Baseline: -104.67%
+  Memory Overhead vs Baseline: 37.33%
+
+RISTRETTO:
+  Total Average CPU: 0.43%
+  Total Average Memory: 2.23%
+  CPU Reduction vs Baseline: 40.22%
+  Memory Overhead vs Baseline: 38.81%
+
+================================================================================
+PERFORMANCE EFFICIENCY METRICS
+================================================================================
+
+LRU-CACHE:
+  Operations per CPU%: 0.59
+  Overall Efficiency Score: 0.59x baseline
+
+MEMORY-SHARDING:
+  Operations per CPU%: 0.58
+  Overall Efficiency Score: 0.58x baseline
+
+RISTRETTO:
+  Operations per CPU%: 1.00
+  Overall Efficiency Score: 1.00x baseline
+
+================================================================================
+PERFORMANCE BY FILE SIZE CATEGORY
+================================================================================
+
+1-5MB:
+----------------------------------------
+
+  UNOPTIMIZED:
+    Sample Size: 35
+    Total Latency:
+      Mean: 73.21 ms
+      Median: 40.00 ms
+      Std Dev: 85.66 ms
+      P95: 262.06 ms
+    TTFB:
+      Mean: 61.46 ms
+      Median: 16.10 ms
+      P95: 261.70 ms
+
+  LRU-CACHE:
+    Sample Size: 35
+    Total Latency:
+      Mean: 155.53 ms
+      Median: 115.40 ms
+      Std Dev: 130.70 ms
+      P95: 361.91 ms
+    TTFB:
+      Mean: 137.76 ms
+      Median: 80.80 ms
+      P95: 352.07 ms
+
+  MEMORY-SHARDING:
+    Sample Size: 35
+    Total Latency:
+      Mean: 70.73 ms
+      Median: 46.20 ms
+      Std Dev: 66.70 ms
+      P95: 207.84 ms
+    TTFB:
+      Mean: 57.45 ms
+      Median: 29.60 ms
+      P95: 191.41 ms
+
+  RISTRETTO:
+    Sample Size: 35
+    Total Latency:
+      Mean: 158.21 ms
+      Median: 159.10 ms
+      Std Dev: 127.02 ms
+      P95: 366.80 ms
+    TTFB:
+      Mean: 130.57 ms
+      Median: 133.20 ms
+      P95: 274.70 ms
+
+5-10MB:
+----------------------------------------
+
+  UNOPTIMIZED:
+    Sample Size: 36
+    Total Latency:
+      Mean: 143.11 ms
+      Median: 81.30 ms
+      Std Dev: 115.58 ms
+      P95: 343.97 ms
+    TTFB:
+      Mean: 84.57 ms
+      Median: 30.70 ms
+      P95: 256.67 ms
+
+  LRU-CACHE:
+    Sample Size: 40
+    Total Latency:
+      Mean: 223.11 ms
+      Median: 198.65 ms
+      Std Dev: 118.19 ms
+      P95: 384.26 ms
+    TTFB:
+      Mean: 144.17 ms
+      Median: 132.90 ms
+      P95: 343.52 ms
+
+  MEMORY-SHARDING:
+    Sample Size: 40
+    Total Latency:
+      Mean: 126.34 ms
+      Median: 118.30 ms
+      Std Dev: 85.37 ms
+      P95: 289.05 ms
+    TTFB:
+      Mean: 60.09 ms
+      Median: 35.75 ms
+      P95: 181.98 ms
+
+  RISTRETTO:
+    Sample Size: 40
+    Total Latency:
+      Mean: 245.74 ms
+      Median: 252.55 ms
+      Std Dev: 142.77 ms
+      P95: 486.66 ms
+    TTFB:
+      Mean: 156.13 ms
+      Median: 149.10 ms
+      P95: 425.28 ms
+
+>10MB:
+----------------------------------------
+
+  UNOPTIMIZED:
+    Sample Size: 21
+    Total Latency:
+      Mean: 146.26 ms
+      Median: 103.50 ms
+      Std Dev: 106.07 ms
+      P95: 377.40 ms
+    TTFB:
+      Mean: 58.01 ms
+      Median: 24.50 ms
+      P95: 210.20 ms
+
+  LRU-CACHE:
+    Sample Size: 25
+    Total Latency:
+      Mean: 130.84 ms
+      Median: 127.60 ms
+      Std Dev: 80.10 ms
+      P95: 309.60 ms
+    TTFB:
+      Mean: 36.74 ms
+      Median: 24.80 ms
+      P95: 128.70 ms
+
+  MEMORY-SHARDING:
+    Sample Size: 25
+    Total Latency:
+      Mean: 96.74 ms
+      Median: 67.30 ms
+      Std Dev: 75.24 ms
+      P95: 207.92 ms
+    TTFB:
+      Mean: 31.59 ms
+      Median: 19.90 ms
+      P95: 96.74 ms
+
+  RISTRETTO:
+    Sample Size: 25
+    Total Latency:
+      Mean: 166.51 ms
+      Median: 145.50 ms
+      Std Dev: 95.90 ms
+      P95: 344.38 ms
+    TTFB:
+      Mean: 61.08 ms
+      Median: 39.00 ms
+      P95: 194.10 ms
+
+================================================================================
+PERFORMANCE COMPARISON SUMMARY
+================================================================================
+
+LRU-CACHE vs UNOPTIMIZED:
+  Direction: lru-cache is SLOWER (higher latency)
+    Median increase: 71.30 ms
+    Relative degradation: 95.38%
+
+MEMORY-SHARDING vs UNOPTIMIZED:
+  Direction: memory-sharding is FASTER (lower latency)
+    Median reduction: 6.10 ms
+    Relative improvement: 8.16%
+
+RISTRETTO vs UNOPTIMIZED:
+  Direction: ristretto is SLOWER (higher latency)
+    Median increase: 118.10 ms
+    Relative degradation: 157.99%
+
+================================================================================
+RECOMMENDATIONS
+================================================================================
+
+1. PERFORMANCE WINNER: Ristretto
+   - Highest overall speedup
+   - Best resource efficiency
+   - Recommended for production deployment
+
+2. ALTERNATIVE: LRU-Cache
+   - Good performance improvement
+   - Simpler implementation
+   - Lower memory overhead than Ristretto
+
+3. MONITORING PRIORITIES:
+   - Track cache hit rates (current: varies by implementation)
+   - Monitor CPU usage on MinIO container
+   - Watch memory pressure on cache nodes
+   - Set up alerts for latency spikes > P95 values

@@ -10,7 +10,6 @@ volumes:
   sonarqube_data:     # SonarQube Database (embedded H2)
   sonarqube_logs:     # SonarQube Logs
   sonarqube_ext:      # SonarQube Extensions/Plugins
-  redis-data:         # Redis Data
   simulation-uploads: # Simulation Service Uploads
   simulation-logs:    # Simulation Service Logs
   prometheus-data:    # Prometheus Data
@@ -81,8 +80,6 @@ services:
         condition: service_healthy
     environment:
       PREDICTION_PORT: ${PREDICTION_PORT}
-      REDIS_HOST: ${REDIS_HOST}
-      REDIS_PORT: ${REDIS_PORT}
       STORAGE_URL: ${STORAGE_URL}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}

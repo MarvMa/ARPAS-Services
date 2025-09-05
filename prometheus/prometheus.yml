@@ -35,7 +35,7 @@ scrape_configs:
         replacement: '${1}'
       
       - source_labels: [sim_group]
-        regex: '(prediction_service|storage-service|redis|minio|frontend|database)'
+        regex: '(prediction-service|storage-service|minio)'
         action: keep
 
   - job_name: 'prometheus'
@@ -43,8 +43,3 @@ scrape_configs:
       - targets: ['localhost:9090']
     scrape_interval: 1s
 
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis:6379']
-    scrape_interval: 1s
-    scrape_timeout: 1s

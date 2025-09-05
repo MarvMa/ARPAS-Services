@@ -192,24 +192,3 @@ export function smoothPoints(points: InterpolatedPoint[], windowSize: number = 3
     return smoothed;
 }
 
-
-/**
- * Calculates distance between two points using Haversine formula
- */
-export function calculateDistance(point1: DataPoint, point2: DataPoint): number {
-    const R = 6371000; // Earth's radius in meters
-    const lat1Rad = (point1.lat * Math.PI) / 180;
-    const lat2Rad = (point2.lat * Math.PI) / 180;
-    const deltaLatRad = ((point2.lat - point1.lat) * Math.PI) / 180;
-    const deltaLngRad = ((point2.lng - point1.lng) * Math.PI) / 180;
-
-    const a =
-        Math.sin(deltaLatRad / 2) * Math.sin(deltaLatRad / 2) +
-        Math.cos(lat1Rad) * Math.cos(lat2Rad) *
-        Math.sin(deltaLngRad / 2) * Math.sin(deltaLngRad / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
-}
-

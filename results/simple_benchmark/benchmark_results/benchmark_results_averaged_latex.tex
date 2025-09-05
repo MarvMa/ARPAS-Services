@@ -1,0 +1,41 @@
+\chapter*{Tabellen}
+\begin{table}[htbp]
+\centering
+\caption{PoC-Benchmark-Ergebnisse (mit gemittelten unoptimierten Werten)}
+\label{app-tab:cache-poc-averaged}
+\begin{adjustbox}{width=\textwidth}
+\begin{tabular}{@{}llrrrrrrrr@{}}
+\toprule
+\multirow{2}{*}{Kategorie} & \multirow{2}{*}{Implementierung} & \multicolumn{3}{c}{TTFB (ms)} & \multicolumn{3}{c}{Total (ms)} & \multicolumn{2}{c}{Speedup} \\
+\cmidrule(lr){3-5} \cmidrule(lr){6-8} \cmidrule(lr){9-10}
+ & & Opt. & Unopt.\textsuperscript{*} & Diff. & Opt. & Unopt.\textsuperscript{*} & Diff. & TTFB & Total \\
+\midrule
+ \multirow{3}{*}{0-100KB} & LRU-Cache & 7.5 & 6.9 & \textcolor{red}{-0.6} & 9.0 & 7.8 & \textcolor{red}{-1.2} & \textcolor{red}{0.92×} & \textcolor{red}{0.87×} \\
+  & Memory Sharding & 6.8 & 6.9 & 0.1 & 8.1 & 7.8 & \textcolor{red}{-0.3} & 1.01× & \textcolor{red}{0.96×} \\
+  & Ristretto & 6.5 & 6.9 & 0.4 & 7.5 & 7.8 & 0.3 & 1.06× & 1.04× \\
+\midrule
+ \multirow{3}{*}{100-500KB} & LRU-Cache & 7.5 & 7.7 & 0.2 & 12.5 & 11.8 & \textcolor{red}{-0.7} & 1.03× & \textcolor{red}{0.94×} \\
+  & Memory Sharding & 6.4 & 7.7 & 1.3 & 10.5 & 11.8 & 1.3 & 1.20× & 1.12× \\
+  & Ristretto & 5.3 & 7.7 & 2.4 & 9.1 & 11.8 & 2.7 & 1.45× & \textbf{1.30×} \\
+\midrule
+ \multirow{3}{*}{1-5MB} & LRU-Cache & 7.8 & 11.4 & 3.6 & 38.4 & 39.5 & 1.1 & 1.46× & 1.03× \\
+  & Memory Sharding & 6.8 & 11.4 & 4.6 & 32.8 & 39.5 & 6.7 & 1.67× & 1.20× \\
+  & Ristretto & 6.8 & 11.4 & 4.6 & 33.0 & 39.5 & 6.5 & 1.67× & 1.20× \\
+\midrule
+ \multirow{3}{*}{5-10MB} & LRU-Cache & 10.0 & 16.4 & 6.4 & 131.2 & 139.7 & 8.5 & 1.64× & 1.06× \\
+  & Memory Sharding & 7.4 & 16.4 & 9.0 & 123.0 & 139.7 & 16.7 & 2.21× & 1.14× \\
+  & Ristretto & 7.4 & 16.4 & 9.0 & 120.4 & 139.7 & 19.3 & 2.21× & 1.16× \\
+\midrule
+ \multirow{3}{*}{>10MB} & LRU-Cache & 10.4 & 18.4 & 8.0 & 296.8 & 317.7 & 20.9 & 1.77× & 1.07× \\
+  & Memory Sharding & 7.4 & 18.4 & 11.0 & 300.5 & 317.7 & 17.2 & \textbf{2.49×} & 1.06× \\
+  & Ristretto & 9.6 & 18.4 & 8.8 & 281.5 & 317.7 & 36.2 & 1.92× & 1.13× \\
+\midrule
+\midrule
+ \multirow{3}{*}{\textbf{Gesamt}} & LRU-Cache & 9.0 & 13.5 & 4.5 & 142.7 & 151.9 & 9.2 & 1.50× & 1.06× \\
+  & Memory Sharding & 7.0 & 13.5 & 6.4 & 141.8 & 151.9 & 10.0 & 1.91× & 1.07× \\
+  & Ristretto & 7.7 & 13.5 & 5.8 & 133.7 & 151.9 & 18.2 & 1.75× & 1.14× \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\footnotesize{\textsuperscript{*}Unoptimierte Werte sind über alle drei Cache-Implementierungen gemittelt}
+\end{table}

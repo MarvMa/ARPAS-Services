@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import {config} from "../config";
+import {Predictor} from "../predictor";
 
 export interface Object3D {
     id: string;
@@ -12,7 +13,7 @@ export interface Object3D {
 
 class Database {
     private pool: Pool;
-
+    private predictor: Predictor = new Predictor();
     constructor() {
         
         this.pool = new Pool({
@@ -58,30 +59,13 @@ class Database {
             const result = await this.pool.query(query, [minLat, maxLat, minLng, maxLng]);
 
             return result.rows.filter(obj => {
-                const distance = this.haversineDistance(lat, lon, obj.latitude, obj.longitude);
+                const distance = this.predictor.calculateDistance(lat, lon, obj.latitude, obj.longitude);
                 return distance <= radiusMeters;
             });
         } catch (error) {
             console.error('Database query error:', error);
             return [];
         }
-    }
-
-    private haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-        const R = 6371000; // Earth radius in meters
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
-
-    async close() {
-        await this.pool.end();
     }
 }
 

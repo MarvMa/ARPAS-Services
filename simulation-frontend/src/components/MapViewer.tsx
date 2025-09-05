@@ -102,7 +102,7 @@ const MapViewer = forwardRef<any, MapViewerProps>(({
     }, [allProfileIds, smoothingEnabled]);
 
     /**
-     * Smooth real-time position updates during simulation - FIXED ANIMATION
+     * Smooth real-time position updates during simulation 
      */
     useEffect(() => {
         if (!simulationState?.isRunning) {

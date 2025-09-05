@@ -47,9 +47,8 @@ def get_historical_metrics():
         # Define service groups based on simulation type
         if simulation_type == "optimized":
             service_labels = [
-                "prediction_service",
+                "prediction-service",
                 "storage-service",
-                "redis",
                 "minio"
             ]
         else:  # unoptimized
