@@ -1,22 +1,60 @@
 # ARPAS-Services
+ARPAS-Services is a suite of containerized microservices designed to optimize data delivery for AR (Augmented Reality) based participation platforms in urban planning. It was developed in the context of the ARPAS project (German: AR-gestützte Partizipation in der Stadtentwicklung – Augmented Reality-based Participation in Urban Development) to address the high latency and bandwidth limitations of delivering 3D models to mobile AR applications. By leveraging predictive algorithms and in-memory caching on the server side (as an alternative to costly edge computing infrastructure), ARPAS-Services significantly reduces model load times in AR scenarios. In benchmarks, the system achieved notable performance improvements (e.g. ~17.5% average latency reduction using a sharded memory cache, with a 25% faster time-to-first-byte) compared to a baseline using direct object storage. 
+## Project Overview
+ARPAS-Services provides a benchmark environment with three different approaches for server sided predictive caching, enabling efficient storage and proactive delivery of 3D models for AR applications. The goal is to improve the user experience for participants (especially younger citizens) in city planning AR apps by minimizing delays in loading 3D content. The project implements a microservice architecture with specialized services and caching mechanisms to predict and preload 3D models ahead of user demand. Key components include:
+- a Storage-Service that manages 3D model data and employs multiple caching strategies,
+- a Prediction-Service that uses real-time device sensor data to forecast user movement and trigger cache preloading,
+- an API Gateway to route client requests, and supporting services like a simulation frontend for testing and standard storage solutions (PostgreSQL and MinIO object storage).
+This architecture was conceived and implemented as part of a master's thesis project, ensuring it meets the requirements of the ARPAS use-case through expert interviews and requirements engineering. It seamlessly integrates with existing ARPAS infrastructure (e.g. using the same MinIO storage for persistence) and is delivered as a set of Docker containers for easy deployment.
 
-## Storage Service
 
-## Interface Documentation
+## Features and Architecture
+The following diagram contains the High-level architecture of the ARPAS-Services environment, including the API Gateway, Storage-Service, Prediction-Service, and auxiliary components (PostgreSQL for metadata, MinIO for object storage, and monitoring/benchmarking containers).
 
-### Swagger UI
+<img width="711" height="437" alt="High-level architecture of the ARPAS-Services environment" src="https://github.com/user-attachments/assets/c04c142b-7386-41d6-905f-1525573be956" />
 
-#### Storage-Service
+### Storage Service (3D-Model Data RESTful API & In-Memory Caching implementations)
+he Storage-Service is a Go-based microservice (built with the Go Fiber web framework) responsible for managing 3D model files and their metadata. It interfaces with a PostgreSQL database to store model metadata and uses MinIO (an S3-compatible object storage) to persist the actual 3D model files (GLB format). The service exposes a RESTful API for basic data operations as well as optimized data retrieval:
+- Model Management Endpoints: CRUD operations to list, fetch, upload, and delete models. For example,
+  - `GET /api/storage/objects` – retrieve all stored 3D object metadata
+  - `GET /api/storage/objects/:id` – retrieve metadata for a specific object
+  - `POST /api/storage/objects/upload` – upload a new 3D model (GLB file)
+  - `DELETE /api/storage/objects/:id` – delete a model by id.
+These allow population and management of the model repository.
+- Download Endpoint: `GET /api/storage/objects/:id/download` – download the 3D model file content by ID. This endpoint streams the model file to the client and supports two modes:
+  - **Baseline Mode:** Retrieve the file directly from MinIO storage (no caching).
+  - **Optimized Mode:** Retrieve from the in-memory cache (if present).
+The mode is controlled via an HTTP header: sending `X-Optimization-Mode: optimized` with the request will attempt to serve from the in-memory cache, whereas omitting this header uses the baseline MinIO path. In both cases, streaming is used to send the file to the client for consistency in comparison. If the model is not yet cached in optimized mode, the service will fall back to MinIO (ensuring the system always returns the data).
+- **Proactive Caching Endpoint:** `POST /api/storage/predict` – used to proactively load a batch of models into the cache. The request payload is a list of model IDs that the Prediction-Service anticipates will be needed soon. Upon receiving this, the Storage-Service fetches those models from persistence (MinIO) and stores them in its in-memory cache. Subsequent download requests for those models can then be served directly from memory, bypassing disk or network latency. This mechanism is central to reducing latency by preloading content before the user actually requests it.
 
-Generate Swagger-Docs for the Storage Service.
+**In-Memory Caching Strategies:** The Storage-Service’s optimized mode supports three configurable caching strategies, chosen via environment variable:
+- **Sharded Memory Cache:** An in-memory cache partitioned into multiple independent shards (e.g. 256 shards) to minimize lock contention under concurrent access. Each shard stores a portion of the cached models, allowing parallel reads/writes to different shards without blocking each other. This strategy yielded the best multi-user performance in tests, eliminating cache lock conflicts and achieving 100% cache hit rates in certain scenarios.
+- **LRU Cache:** A classic Least Recently Used eviction policy cache, which keeps frequently accessed items by evicting the least recently used models first. This was implemented using the HashiCorp Golang LRU library. LRU prioritizes temporal locality (recently requested models stay cached).
+- **Ristretto Cache:** An advanced cache using the Ristretto library by Dgraph. Ristretto combines an LRU-like policy with a tiny LFU (Least Frequently Used) sketch to consider access frequency in its eviction decisions. It uses a probabilistic counter (Count-Min Sketch) to track access frequency with low overhead, and is designed for high concurrency (reads are lock-free). This strategy aims to cache not just recent items but also frequently requested models, potentially improving cache hit rates for popular objects.
+The caching layer can be toggled between these strategies by configuration, and it’s integrated such that all cached models are served from RAM to avoid network/disk latency whenever possible. (MinIO is still always available as a fallback, and in practice a hybrid approach can be used: e.g. cache large models and let small ones load from MinIO if needed.) The Storage-Service attaches custom response headers (like `X-Cache-Hit` and `X-Download-Source`) to indicate whether a cache was used for a given response and from which source, aiding in debugging and benchmarking.
 
-```shell+
-cd storage-service
-swag init --generalInfo cmd/main.go --output docs
-```
+### Prediction-Service (Trajectory Prediction & Cache-Preloading)
+The **Prediction-Service** is a Node.js (TypeScript) service focused on real-time trajectory prediction. It receives continuous position updates from AR clients (or the simulation frontend) and predicts which 3D models the user will need next, prompting the Storage-Service to preload those models into cache. Key aspects of the Prediction-Service include:
+- **WebSocket Interface**: The service uses a WebSocket endpoint (at /ws/predict) to communicate with clients in real time. AR applications or the simulation tool connect to this socket, streaming the device’s sensor data (GPS coordinates, etc.) to the service on a regular interval (e.g. every 1 second). This persistent connection allows low-latency, bidirectional communication – the client sends live position updates, and the server could send back any relevant info (though primarily the server uses it to receive data and act server-side).
+- **Kalman Filter for Smoothing**: Incoming location data is often noisy (GPS jitter, etc.), so the Prediction-Service first smooths the data using a Kalman filter. Separate Kalman filters are applied to each coordinate component (latitude, longitude, altitude) and to the computed velocity, reducing measurement noise and producing a clean state estimate for the user’s current position and motion. This filtering is tuned with process and measurement noise parameters suitable for typical smartphone GPS accuracy (e.g. ~5m accuracy translated to filter covariance settings).
+- **Trajectory Prediction**: After smoothing, the service forecasts the user’s future position over the next few seconds. It currently uses a simple linear extrapolation approach: projecting the user’s movement 5 seconds into the future based on the current velocity vector. The predicted future location is updated each time new data comes in.
+- **Proactive Cache Triggering**: Given the predicted future position, the Prediction-Service determines which 3D models lie nearby. Specifically, it queries the Storage-Service (via a REST call or perhaps an internal method) for all model IDs within a certain radius (e.g. 20 meters) of the predicted location. These are the models the user is likely to encounter next in the AR scene. The Prediction-Service then calls the Storage-Service’s /api/storage/predict endpoint, sending that list of IDs. This triggers the storage to load those models into memory cache before the user actually turns that way or requests them. By the time the user arrives at that location (within ~5 seconds), those 3D objects should be ready in RAM, resulting in a very fast response when the client does request them. This predictive prefetching bridges the gap between user movement and data delivery, hiding load times proactively.
 
-Open the Swagger UI in your browser:
+Overall, the Prediction-Service acts as the “brains” for the caching mechanism, turning real-time movement data into intelligent preloading of content. The separation of this logic into its own service means it can be scaled or modified (e.g. using more complex prediction algorithms or ML models in the future) without affecting the storage backend. In the ARPAS architecture, the Prediction-Service works in concert with the Storage-Service to implement a hybrid reactive + proactive content delivery model.
 
-```shell+
-http://localhost:8080/api/storage/swagger/index.html
-```
+### Simulation Frontend (Benchmark User Interface)
+For development and evaluation, ARPAS-Services includes a **Simulation Frontend** – a web-based application that simulates an AR guided tour with multiple users. This component is mainly for testing and demonstration purposes: it allowed the authors to generate realistic movement patterns and measure system performance under controlled conditions. The simulation frontend is not required in production, but it provides a useful way to visualize and verify the system’s behavior.
+
+<img width="1565" height="1183" alt="simulation_frontend_webui" src="https://github.com/user-attachments/assets/6fd7f11f-399f-415f-92db-06d60387d9a1" />
+
+Key capabilities of the simulation UI include:
+- Defining multiple **user profiles** with recorded movement trajectories (the thesis experiment used 5 participants’ GPS traces from a mock city tour) and playing them back simultaneously to simulate concurrent users.
+- **Toggling Optimized Mode** (which enables the Prediction-Service and caching) on or off for benchmarking comparisons between baseline vs. caching scenarios.
+- Real-time visualization of user paths on a map, along with the locations of 3D model placement (e.g., virtual objects at certain GPS coordinates) to see when each object would be loaded.
+- Displaying performance metrics in real-time, such as latency for each request, cache hits, and resource usage of each container (via integration with a monitoring stack).
+- Allowing configuration of simulation parameters (like the frequency of WebSocket position updates, e.g. 200ms, 500ms intervals) to test system responsiveness under different conditions.
+
+Under the hood, the simulation UI communicates with ARPAS-Services just like a real AR client would: it opens a WebSocket to the Prediction-Service for each active user (streaming that user’s GPS coordinates) and it requests model downloads from the Storage-Service as the simulated user “encounters” new 3D objects on their route. This setup was invaluable for benchmarking – for example, comparing the total latency users experienced with and without the caching system, and observing how each caching strategy performed under multi-user load. The results validated that the Sharded-Memory Cache with trajectory prediction can significantly improve latency for large 3D models, roughly 35% median latency reduction for models >10 MB in the simulation scenario.
+(Note: The Simulation Frontend and monitoring components like Prometheus/cAdvisor are primarily for development and research. They can be omitted in a production deployment of ARPAS-Services, where the focus would be on the Storage & Prediction services and the gateway.)
+
+
